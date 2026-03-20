@@ -1,0 +1,560 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:open_earable_flutter/open_earable_flutter.dart' hide logger;
+import 'package:open_wearable/models/device_name_formatter.dart';
+import 'package:open_wearable/models/wearable_display_group.dart';
+import 'package:open_wearable/models/wearable_status_cache.dart';
+import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
+
+import '../models/logger.dart';
+
+/// Event emitted when a newer firmware version is available for a wearable.
+class NewFirmwareAvailableEvent extends WearableEvent {
+  final String currentVersion;
+  final String latestVersion;
+
+  NewFirmwareAvailableEvent({
+    required super.wearable,
+    required this.currentVersion,
+    required this.latestVersion,
+  }) : super(
+          description:
+              'Firmware update available for ${formatWearableDisplayName(wearable.name)}: $currentVersion -> $latestVersion',
+        );
+
+  @override
+  String toString() =>
+      'NewFirmwareAvailableEvent for ${formatWearableDisplayName(wearable.name)}: $currentVersion -> $latestVersion';
+}
+
+/// Base event type for unsupported firmware checks.
+abstract class UnsupportedFirmwareEvent {
+  final Wearable wearable;
+  UnsupportedFirmwareEvent(this.wearable);
+}
+
+/// Emitted when firmware is unsupported but without specific age direction.
+class FirmwareUnsupportedEvent extends UnsupportedFirmwareEvent {
+  FirmwareUnsupportedEvent(super.wearable);
+}
+
+/// Emitted when wearable firmware is below the minimum supported version.
+class FirmwareTooOldEvent extends UnsupportedFirmwareEvent {
+  FirmwareTooOldEvent(super.wearable);
+}
+
+/// Emitted when wearable firmware is newer than the app supports.
+class FirmwareTooNewEvent extends UnsupportedFirmwareEvent {
+  FirmwareTooNewEvent(super.wearable);
+}
+
+/// Base event type used by [WearablesProvider.wearableEventStream].
+abstract class WearableEvent {
+  final Wearable wearable;
+  final String description;
+
+  WearableEvent({required this.wearable, required this.description});
+}
+
+/// Emitted after successful wearable time synchronization.
+class WearableTimeSynchronizedEvent extends WearableEvent {
+  WearableTimeSynchronizedEvent({
+    required super.wearable,
+    String? description,
+  }) : super(
+          description: description ??
+              'Time synchronized for ${formatWearableDisplayName(wearable.name)}',
+        );
+
+  @override
+  String toString() =>
+      'WearableTimeSynchronizedEvent for ${formatWearableDisplayName(wearable.name)}';
+}
+
+/// Emitted when wearable-side operations fail and should surface in UI.
+class WearableErrorEvent extends WearableEvent {
+  final String errorMessage;
+  WearableErrorEvent({
+    required super.wearable,
+    required this.errorMessage,
+    String? description,
+  }) : super(
+          description: description ??
+              'Error for ${formatWearableDisplayName(wearable.name)}: $errorMessage',
+        );
+
+  @override
+  String toString() =>
+      'WearableErrorEvent for ${formatWearableDisplayName(wearable.name)}: $errorMessage, description: $description';
+}
+
+/// Global wearable runtime state and orchestration provider.
+///
+/// Needs:
+/// - Connected `Wearable` instances from connect/auto-connect flows.
+///
+/// Does:
+/// - Stores connected wearables and per-device `SensorConfigurationProvider`s.
+/// - Emits wearable/firmware streams for global UI messaging.
+/// - Handles capability-driven side effects (time sync, firmware checks).
+/// - Tracks stereo pair combine/split UI preferences.
+///
+/// Provides:
+/// - Wearable list + config provider map for device/sensor/app pages.
+/// - Helper APIs for turning sensors off and resolving device config providers.
+class WearablesProvider with ChangeNotifier {
+  final List<Wearable> _wearables = [];
+  final Map<Wearable, SensorConfigurationProvider>
+      _sensorConfigurationProviders = {};
+  final Set<String> _splitStereoPairKeys = {};
+  bool _disposed = false;
+
+  List<Wearable> get wearables => _wearables;
+  Map<Wearable, SensorConfigurationProvider> get sensorConfigurationProviders =>
+      _sensorConfigurationProviders;
+  bool isStereoPairCombined({
+    required Wearable first,
+    required Wearable second,
+  }) {
+    final pairKey = WearableDisplayGroup.stereoPairKeyForDevices(first, second);
+    return !_splitStereoPairKeys.contains(pairKey);
+  }
+
+  bool isStereoPairKeyCombined(String pairKey) {
+    return !_splitStereoPairKeys.contains(pairKey);
+  }
+
+  void setStereoPairCombined({
+    required Wearable first,
+    required Wearable second,
+    required bool combined,
+  }) {
+    final pairKey = WearableDisplayGroup.stereoPairKeyForDevices(first, second);
+    setStereoPairKeyCombined(pairKey: pairKey, combined: combined);
+  }
+
+  void setStereoPairKeyCombined({
+    required String pairKey,
+    required bool combined,
+  }) {
+    final changed = combined
+        ? _splitStereoPairKeys.remove(pairKey)
+        : _splitStereoPairKeys.add(pairKey);
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  final _unsupportedFirmwareEventsController =
+      StreamController<UnsupportedFirmwareEvent>.broadcast();
+  Stream<UnsupportedFirmwareEvent> get unsupportedFirmwareStream =>
+      _unsupportedFirmwareEventsController.stream;
+
+  final _wearableEventController = StreamController<WearableEvent>.broadcast();
+  Stream<WearableEvent> get wearableEventStream =>
+      _wearableEventController.stream;
+
+  final Map<Wearable, StreamSubscription> _capabilitySubscriptions = {};
+
+  // MARK: Internal helpers
+
+  bool _isDuplicateDevice(Wearable wearable) =>
+      _wearables.any((w) => w.deviceId == wearable.deviceId);
+
+  void _emitWearableEvent(WearableEvent event) {
+    if (_disposed || _wearableEventController.isClosed) {
+      return;
+    }
+    _wearableEventController.add(event);
+  }
+
+  void _emitUnsupportedFirmwareEvent(UnsupportedFirmwareEvent event) {
+    if (_disposed || _unsupportedFirmwareEventsController.isClosed) {
+      return;
+    }
+    _unsupportedFirmwareEventsController.add(event);
+  }
+
+  void _emitWearableError({
+    required Wearable wearable,
+    required String errorMessage,
+    String? description,
+  }) {
+    _emitWearableEvent(
+      WearableErrorEvent(
+        wearable: wearable,
+        errorMessage: errorMessage,
+        description: description,
+      ),
+    );
+  }
+
+  void _scheduleMicrotask(FutureOr<void> Function() work) {
+    Future.microtask(() async {
+      if (_disposed) {
+        return;
+      }
+      try {
+        await work();
+      } catch (e, st) {
+        logger.w('WearablesProvider microtask failed: $e\n$st');
+      }
+    });
+  }
+
+  Future<String> _wearableNameWithSide(Wearable wearable) async {
+    final displayName = formatWearableDisplayName(wearable.name);
+
+    if (!wearable.hasCapability<StereoDevice>()) {
+      return displayName;
+    }
+
+    try {
+      final position =
+          await wearable.requireCapability<StereoDevice>().position;
+      return switch (position) {
+        DevicePosition.left => '$displayName (Left)',
+        DevicePosition.right => '$displayName (Right)',
+        _ => displayName,
+      };
+    } catch (_) {
+      return displayName;
+    }
+  }
+
+  Future<void> _syncTimeAndEmit({
+    required Wearable wearable,
+    required bool fromCapabilityChange,
+  }) async {
+    final wearableLabel = await _wearableNameWithSide(wearable);
+    final successDescription = fromCapabilityChange
+        ? 'Time synchronized for $wearableLabel after capability update'
+        : 'Time synchronized for $wearableLabel';
+    final failureDescription = fromCapabilityChange
+        ? 'Failed to synchronize time for $wearableLabel after capability update'
+        : 'Failed to synchronize time for $wearableLabel';
+
+    try {
+      logger.d('Synchronizing time for wearable ${wearable.name}');
+      await (wearable.requireCapability<TimeSynchronizable>())
+          .synchronizeTime();
+      logger.d('Time synchronized for wearable ${wearable.name}');
+      _emitWearableEvent(
+        WearableTimeSynchronizedEvent(
+          wearable: wearable,
+          description: successDescription,
+        ),
+      );
+    } catch (e, st) {
+      logger.w(
+        'Failed to synchronize time for wearable ${wearable.name}: $e\n$st',
+      );
+      _emitWearableError(
+        wearable: wearable,
+        errorMessage: 'Failed to synchronize time with $wearableLabel: $e',
+        description: failureDescription,
+      );
+    }
+  }
+
+  void addWearable(Wearable wearable) {
+    // 1) Fast path: ignore duplicates and push into lists/maps synchronously
+    if (_isDuplicateDevice(wearable)) return;
+
+    _wearables.add(wearable);
+
+    _capabilitySubscriptions[wearable] =
+        wearable.capabilityRegistered.listen((addedCapabilities) {
+      _handleCapabilitiesChanged(
+        wearable: wearable,
+        addedCapabilites: addedCapabilities,
+      );
+    });
+
+    // Init SensorConfigurationProvider synchronously (no awaits here)
+    _initializeSensorConfigurations(wearable);
+    if (wearable.hasCapability<TimeSynchronizable>()) {
+      _scheduleMicrotask(
+        () => _syncTimeAndEmit(
+          wearable: wearable,
+          fromCapabilityChange: false,
+        ),
+      );
+    }
+
+    // Disconnect listener (sync)
+    wearable.addDisconnectListener(() {
+      removeWearable(wearable);
+    });
+
+    // Notify ASAP so UI updates with the newly connected device
+    notifyListeners();
+
+    // 2) Slow/async work: run in microtasks so it doesn't block the add
+    // Stereo pairing (if applicable)
+    if (wearable.hasCapability<StereoDevice>()) {
+      _scheduleMicrotask(
+        () => _maybeAutoPairStereoAsync(
+          wearable.requireCapability<StereoDevice>(),
+        ),
+      );
+    }
+
+    // Firmware support check (if applicable)
+    if (wearable.hasCapability<DeviceFirmwareVersion>()) {
+      _scheduleMicrotask(
+        () => _maybeEmitUnsupportedFirmwareAsync(
+          wearable.requireCapability<DeviceFirmwareVersion>(),
+        ),
+      );
+    }
+
+    // Check for newer firmware (if applicable)
+    if (wearable.hasCapability<DeviceFirmwareVersion>()) {
+      _scheduleMicrotask(
+        () => _checkForNewerFirmwareAsync(
+          wearable.requireCapability<DeviceFirmwareVersion>(),
+        ),
+      );
+    }
+  }
+
+  // MARK: Helpers
+
+  void _ensureSensorConfigProvider(Wearable wearable) {
+    if (!_sensorConfigurationProviders.containsKey(wearable)) {
+      _sensorConfigurationProviders[wearable] = SensorConfigurationProvider(
+        sensorConfigurationManager:
+            wearable.requireCapability<SensorConfigurationManager>(),
+      );
+    }
+  }
+
+  void _initializeSensorConfigurations(Wearable wearable) {
+    if (!wearable.hasCapability<SensorConfigurationManager>()) {
+      return;
+    }
+
+    _ensureSensorConfigProvider(wearable);
+    final notifier = _sensorConfigurationProviders[wearable]!;
+    final manager = wearable.requireCapability<SensorConfigurationManager>();
+    for (final config in manager.sensorConfigurations) {
+      if (notifier.getSelectedConfigurationValue(config) == null &&
+          config.values.isNotEmpty) {
+        notifier.addSensorConfiguration(
+          config,
+          config.values.first,
+          markPending: false,
+        );
+      }
+    }
+  }
+
+  /// Attempts to pair a stereo device with a matching partner among the
+  /// already-known wearables. Runs asynchronously and logs results.
+  /// Non-blocking for the caller.
+  Future<void> _maybeAutoPairStereoAsync(StereoDevice stereo) async {
+    try {
+      final alreadyPaired = await stereo.pairedDevice;
+      if (alreadyPaired != null) return;
+
+      final stereoList = _wearables.whereType<StereoDevice>().toList();
+      final possiblePairs =
+          await WearableManager().findValidPairsFor(stereo, stereoList);
+
+      logger.d('possible pairs for ${stereo.toString()}: $possiblePairs');
+
+      if (possiblePairs.isNotEmpty) {
+        await stereo.pair(possiblePairs.first);
+        final partner = await stereo.pairedDevice;
+        logger.i('Paired ${(stereo as Wearable).name} with $partner');
+      }
+    } catch (e, st) {
+      logger.w('Auto-pair failed for ${(stereo as Wearable).name}: $e\n$st');
+    }
+  }
+
+  /// Checks firmware support and emits the event if unsupported.
+  /// Non-blocking for the caller.
+  Future<void> _maybeEmitUnsupportedFirmwareAsync(
+    DeviceFirmwareVersion dev,
+  ) async {
+    try {
+      final wearable = dev as Wearable;
+      // In your abstraction, isFirmwareSupported is a Future<bool> getter.
+      final supportStatus = await dev.checkFirmwareSupport();
+      switch (supportStatus) {
+        case FirmwareSupportStatus.supported:
+          // All good, nothing to do.
+          break;
+        case FirmwareSupportStatus.tooNew:
+          _emitUnsupportedFirmwareEvent(FirmwareTooNewEvent(wearable));
+          break;
+        case FirmwareSupportStatus.unsupported:
+          _emitUnsupportedFirmwareEvent(FirmwareUnsupportedEvent(wearable));
+          break;
+        case FirmwareSupportStatus.tooOld:
+          _emitUnsupportedFirmwareEvent(FirmwareTooOldEvent(wearable));
+          break;
+        case FirmwareSupportStatus.unknown:
+          logger.w('Firmware support unknown for ${wearable.name}');
+          break;
+      }
+    } catch (e, st) {
+      final wearable = dev as Wearable;
+      logger.w('Firmware check failed for ${wearable.name}: $e\n$st');
+    }
+  }
+
+  /// Checks if a newer firmware version is available and emits event if so.
+  /// Non-blocking for the caller.
+  Future<void> _checkForNewerFirmwareAsync(DeviceFirmwareVersion dev) async {
+    try {
+      logger.d('Checking for newer firmware for ${(dev as Wearable).name}');
+
+      final currentVersion = await dev.readDeviceFirmwareVersion();
+      if (currentVersion == null || currentVersion.isEmpty) {
+        logger
+            .d('Could not read firmware version for ${(dev as Wearable).name}');
+        return;
+      }
+
+      final firmwareImageRepository = FirmwareImageRepository();
+      final latestVersion = await firmwareImageRepository
+          .getLatestFirmwareVersion()
+          .then((version) => version.toString());
+
+      if (firmwareImageRepository.isNewerVersion(
+        latestVersion,
+        currentVersion,
+      )) {
+        logger.i(
+          'Newer firmware available for ${(dev as Wearable).name}: $currentVersion -> $latestVersion',
+        );
+        _emitWearableEvent(
+          NewFirmwareAvailableEvent(
+            wearable: dev as Wearable,
+            currentVersion: currentVersion,
+            latestVersion: latestVersion,
+          ),
+        );
+      } else {
+        logger.d(
+          'Firmware is up to date for ${(dev as Wearable).name}: $currentVersion',
+        );
+      }
+    } catch (e, st) {
+      logger.w(
+        'Firmware version check failed for ${(dev as Wearable).name}: $e\n$st',
+      );
+    }
+  }
+
+  Future<void> _turnOffSensorsForDeviceWithProvider({
+    required Wearable wearable,
+    required SensorConfigurationProvider provider,
+  }) async {
+    try {
+      await provider.turnOffAllSensors();
+    } catch (e, st) {
+      logger.w(
+        'Failed to turn off sensors for ${formatWearableDisplayName(wearable.name)}: $e\n$st',
+      );
+    }
+  }
+
+  Future<void> turnOffSensorsForDevice(Wearable wearable) async {
+    final provider = _sensorConfigurationProviders[wearable];
+    if (provider == null) {
+      return;
+    }
+    await _turnOffSensorsForDeviceWithProvider(
+      wearable: wearable,
+      provider: provider,
+    );
+  }
+
+  Future<void> turnOffSensorsForAllDevices() async {
+    final providersByWearable = Map<Wearable, SensorConfigurationProvider>.from(
+      _sensorConfigurationProviders,
+    );
+
+    for (final entry in providersByWearable.entries) {
+      await _turnOffSensorsForDeviceWithProvider(
+        wearable: entry.key,
+        provider: entry.value,
+      );
+    }
+  }
+
+  void removeWearable(Wearable wearable) {
+    WearableStatusCache.instance.clearDevice(wearable.deviceId);
+    _splitStereoPairKeys.removeWhere(
+      (key) => WearableDisplayGroup.stereoPairKeyContainsDevice(
+        key,
+        wearable.deviceId,
+      ),
+    );
+    _wearables.remove(wearable);
+    _sensorConfigurationProviders.remove(wearable)?.dispose();
+    _capabilitySubscriptions.remove(wearable)?.cancel();
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  SensorConfigurationProvider getSensorConfigurationProvider(
+    Wearable wearable,
+  ) {
+    if (!_sensorConfigurationProviders.containsKey(wearable)) {
+      throw Exception(
+        'No SensorConfigurationProvider found for the given wearable: ${wearable.name}',
+      );
+    }
+    return _sensorConfigurationProviders[wearable]!;
+  }
+
+  void _handleCapabilitiesChanged({
+    required Wearable wearable,
+    required List<Type> addedCapabilites,
+  }) {
+    if (addedCapabilites.contains(SensorConfigurationManager)) {
+      _initializeSensorConfigurations(wearable);
+    }
+    if (addedCapabilites.contains(TimeSynchronizable)) {
+      _scheduleMicrotask(
+        () => _syncTimeAndEmit(
+          wearable: wearable,
+          fromCapabilityChange: true,
+        ),
+      );
+    }
+    if (_disposed) {
+      return;
+    }
+    if (addedCapabilites.isNotEmpty) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    for (final sub in _capabilitySubscriptions.values) {
+      unawaited(sub.cancel());
+    }
+    _capabilitySubscriptions.clear();
+
+    for (final provider in _sensorConfigurationProviders.values) {
+      provider.dispose();
+    }
+    _sensorConfigurationProviders.clear();
+    _wearables.clear();
+    _splitStereoPairKeys.clear();
+
+    unawaited(_unsupportedFirmwareEventsController.close());
+    unawaited(_wearableEventController.close());
+    super.dispose();
+  }
+}
