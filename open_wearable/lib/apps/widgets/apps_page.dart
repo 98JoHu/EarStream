@@ -11,6 +11,7 @@ import 'package:open_wearable/apps/widgets/app_tile.dart';
 import 'package:open_wearable/view_models/wearables_provider.dart';
 import 'package:open_wearable/widgets/recording_activity_indicator.dart';
 import 'package:open_wearable/widgets/sensors/sensor_page_spacing.dart';
+import 'package:open_wearable/apps/meditation/view/meditation_view.dart';
 import 'package:provider/provider.dart';
 
 class AppInfo {
@@ -97,7 +98,8 @@ final List<AppInfo> _apps = [
             wearable.requireCapability<SensorManager>(),
             sensorConfigProvider,
             wearable.hasCapability<StereoDevice>() &&
-                await wearable.requireCapability<StereoDevice>().position == DevicePosition.left,
+                await wearable.requireCapability<StereoDevice>().position ==
+                    DevicePosition.left,
           ),
         );
       },
@@ -164,6 +166,53 @@ final List<AppInfo> _apps = [
             child: PlatformText("No PPG Sensor Found"),
           ),
         );
+      },
+    ),
+  ),
+  AppInfo(
+    logoPath: "lib/apps/meditation/assets/image.png",
+    // TODO: Change the supported devices
+    supportedDevices: _heartSupportedDevices,
+    accentColor: _appAccentColor,
+    title: "Meditation",
+    description: "Stress-adaptive meditation sessions",
+    widget: SelectEarableView(
+      // TODO: Change the supported devices
+      supportedDevicePrefixes: _heartSupportedDevices,
+      startApp: (wearable, sensorConfigProvider) async {
+        try {
+          Sensor? ppgSensor;
+          if (wearable.hasCapability<SensorManager>()) {
+            try {
+              ppgSensor = wearable
+                  .requireCapability<SensorManager>()
+                  .sensors
+                  .firstWhere(
+                    (s) =>
+                        s.sensorName.toLowerCase() ==
+                        "photoplethysmography".toLowerCase(),
+                  );
+            } catch (e) {
+              // No PPG sensor found, will use mock sensor
+            }
+          }
+          return MeditationView(
+            ppgSensor: ppgSensor,
+            sensorConfigProvider: sensorConfigProvider,
+            sensorManager: wearable.requireCapability<SensorManager>(),
+            wearable: wearable,
+          );
+        } catch (e) {
+          // Fallback if meditation view fails to load
+          return PlatformScaffold(
+            appBar: PlatformAppBar(
+              title: PlatformText("Meditation"),
+            ),
+            body: Center(
+              child: PlatformText("Meditation app is loading... Error: $e"),
+            ),
+          );
+        }
       },
     ),
   ),
