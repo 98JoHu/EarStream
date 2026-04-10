@@ -1,3 +1,5 @@
+// ignore_for_file: require_trailing_commas
+
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -24,25 +26,27 @@ class HrHrvChart extends StatefulWidget {
   State<HrHrvChart> createState() => _HrHrvChartState();
 }
 
-class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateMixin {
+class _HrHrvChartState extends State<HrHrvChart>
+    with SingleTickerProviderStateMixin {
   final List<double> _hrHistory = [];
   final List<double> _hrvRmssdHistory = [];
   final List<double> _hrvSdnnHistory = [];
-  final int _maxDataPoints = 3600; // Keep up to 1 hour of data (~1 data point per second)
-  
+  final int _maxDataPoints =
+      3600; // Keep up to 1 hour of data (~1 data point per second)
+
   double _currentHr = 75.0;
   double _currentHrvRmssd = -1.0; // -1 means no data yet
-  double _currentHrvSdnn = -1.0;  // -1 means no data yet
-  
+  double _currentHrvSdnn = -1.0; // -1 means no data yet
+
   StreamSubscription<double>? _hrSubscription;
   StreamSubscription<Map<String, double>>? _hrvSubscription;
-  
+
   late AnimationController _heartBeatController;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize history with provided data (RMSSD)
     if (widget.initialHrData.isNotEmpty) {
       _hrHistory.addAll(widget.initialHrData);
@@ -55,15 +59,15 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       _hrvSdnnHistory.addAll(widget.initialHrvData.map((rmssd) => rmssd / 2.7));
       _currentHrvSdnn = _hrvSdnnHistory.last;
     }
-    
+
     _heartBeatController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    
+
     // Start repeating animation
     _heartBeatController.repeat();
-    
+
     _hrSubscription = widget.hrStream.listen((hr) {
       setState(() {
         _currentHr = hr;
@@ -72,13 +76,13 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
           _hrHistory.removeAt(0);
         }
       });
-      
+
       // Update animation speed based on heart rate
       final bpm = hr.clamp(40.0, 200.0);
       final durationMs = (60000 / bpm).round();
       _heartBeatController.duration = Duration(milliseconds: durationMs);
     });
-    
+
     _hrvSubscription = widget.hrvStream.listen((hrv) {
       final rmssd = hrv['HRV_RMSSD'] ?? 120.0;
       final sdnn = hrv['HRV_SDNN'] ?? 44.0;
@@ -96,7 +100,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       });
     });
   }
-  
+
   @override
   void dispose() {
     _hrSubscription?.cancel();
@@ -104,7 +108,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
     _heartBeatController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return PlatformScaffold(
@@ -131,14 +135,14 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
               children: [
                 // Animated Heart with Current HR
                 _buildAnimatedHeartSection(),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Current Values Card
                 _buildCurrentValuesCard(),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // HR Chart
                 _buildChartCard(
                   title: 'Heart Rate (BPM)',
@@ -148,9 +152,9 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
                   maxValue: 120.0,
                   icon: Icons.favorite,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // HRV RMSSD Chart or Timer
                 _currentHrvRmssd < 0
                     ? _buildRmssdTimerCard()
@@ -162,9 +166,9 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
                         maxValue: 200.0,
                         icon: Icons.show_chart,
                       ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // HRV SDNN Chart or Timer
                 _currentHrvSdnn < 0
                     ? _buildSdnnTimerCard()
@@ -176,9 +180,9 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
                         maxValue: 80.0,
                         icon: Icons.timeline,
                       ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Close Button
                 SizedBox(
                   width: double.infinity,
@@ -203,7 +207,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       ),
     );
   }
-  
+
   Widget _buildAnimatedHeartSection() {
     return Card(
       elevation: 4,
@@ -252,7 +256,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       ),
     );
   }
-  
+
   Widget _buildCurrentValuesCard() {
     return Card(
       elevation: 4,
@@ -278,7 +282,9 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
               child: _buildStatItem(
                 icon: Icons.show_chart,
                 label: 'RMSSD',
-                value: _currentHrvRmssd < 0 ? 'Loading...' : '${_currentHrvRmssd.toStringAsFixed(1)} ms',
+                value: _currentHrvRmssd < 0
+                    ? 'Loading...'
+                    : '${_currentHrvRmssd.toStringAsFixed(1)} ms',
                 color: const Color(0xFF4ECDC4),
               ),
             ),
@@ -291,7 +297,9 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
               child: _buildStatItem(
                 icon: Icons.timeline,
                 label: 'SDNN',
-                value: _currentHrvSdnn < 0 ? 'Loading...' : '${_currentHrvSdnn.toStringAsFixed(1)} ms',
+                value: _currentHrvSdnn < 0
+                    ? 'Loading...'
+                    : '${_currentHrvSdnn.toStringAsFixed(1)} ms',
                 color: const Color(0xFF9C27B0),
               ),
             ),
@@ -300,7 +308,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       ),
     );
   }
-  
+
   Widget _buildStatItem({
     required IconData icon,
     required String label,
@@ -329,7 +337,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       ],
     );
   }
-  
+
   Widget _buildSdnnTimerCard() {
     return Card(
       elevation: 4,
@@ -372,7 +380,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       ),
     );
   }
-  
+
   Widget _buildRmssdTimerCard() {
     return Card(
       elevation: 4,
@@ -383,7 +391,8 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
           children: [
             Row(
               children: [
-                Icon(Icons.show_chart, color: const Color(0xFF4ECDC4), size: 24),
+                Icon(Icons.show_chart,
+                    color: const Color(0xFF4ECDC4), size: 24),
                 const SizedBox(width: 8),
                 const Text(
                   'HRV RMSSD (ms)',
@@ -415,7 +424,7 @@ class _HrHrvChartState extends State<HrHrvChart> with SingleTickerProviderStateM
       ),
     );
   }
-  
+
   Widget _buildChartCard({
     required String title,
     required List<double> data,
@@ -511,7 +520,7 @@ class LineChartPainter extends CustomPainter {
     if (data.isEmpty) return;
 
     final paint = Paint()
-      ..color = color.withOpacity(0.8)
+      ..color = color.withValues(alpha: 0.8)
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -522,8 +531,8 @@ class LineChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          color.withOpacity(0.3),
-          color.withOpacity(0.05),
+          color.withValues(alpha: 0.3),
+          color.withValues(alpha: 0.05),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
@@ -531,10 +540,11 @@ class LineChartPainter extends CustomPainter {
     final fillPath = Path();
 
     final stepX = size.width / (data.length - 1).clamp(1, double.infinity);
-    
+
     for (int i = 0; i < data.length; i++) {
       final x = i * stepX;
-      final normalizedValue = ((data[i] - minValue) / (maxValue - minValue)).clamp(0.0, 1.0);
+      final normalizedValue =
+          ((data[i] - minValue) / (maxValue - minValue)).clamp(0.0, 1.0);
       final y = size.height - (normalizedValue * size.height);
 
       if (i == 0) {
@@ -564,7 +574,8 @@ class LineChartPainter extends CustomPainter {
 
     for (int i = 0; i < data.length; i++) {
       final x = i * stepX;
-      final normalizedValue = ((data[i] - minValue) / (maxValue - minValue)).clamp(0.0, 1.0);
+      final normalizedValue =
+          ((data[i] - minValue) / (maxValue - minValue)).clamp(0.0, 1.0);
       final y = size.height - (normalizedValue * size.height);
 
       canvas.drawCircle(Offset(x, y), 3, dotPaint);
@@ -595,86 +606,87 @@ class DualAxisChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Draw grid lines
     final gridPaint = Paint()
-      ..color = Colors.grey.withOpacity(0.2)
+      ..color = Colors.grey.withValues(alpha: 0.2)
       ..strokeWidth = 0.5;
-    
+
     for (int i = 0; i <= 4; i++) {
       final y = (size.height / 4) * i;
       canvas.drawLine(Offset(40, y), Offset(size.width, y), gridPaint);
     }
-    
+
     final chartWidth = size.width - 80; // Leave space for Y-axis labels
     final maxDataPoints = max(hrData.length, hrvData.length);
     if (maxDataPoints == 0) return;
-    
+
     // Calculate ranges
     final hrMin = hrData.isEmpty ? 40.0 : hrData.reduce(min);
     final hrMax = hrData.isEmpty ? 120.0 : hrData.reduce(max);
     final hrRange = (hrMax - hrMin).clamp(10.0, double.infinity);
-    
+
     final hrvMin = hrvData.isEmpty ? 0.0 : hrvData.reduce(min);
     final hrvMax = hrvData.isEmpty ? 100.0 : hrvData.reduce(max);
     final hrvRange = (hrvMax - hrvMin).clamp(10.0, double.infinity);
-    
+
     // Draw HR line (left Y-axis)
     if (hrData.isNotEmpty) {
       final hrPaint = Paint()
-        ..color = hrColor.withOpacity(0.8)
+        ..color = hrColor.withValues(alpha: 0.8)
         ..strokeWidth = 2.5
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
-      
+
       final hrPath = Path();
       final stepX = chartWidth / (hrData.length - 1).clamp(1, double.infinity);
-      
+
       for (int i = 0; i < hrData.length; i++) {
         final x = 40 + (i * stepX);
         final normalizedValue = ((hrData[i] - hrMin) / hrRange).clamp(0.0, 1.0);
         final y = size.height - (normalizedValue * size.height);
-        
+
         if (i == 0) {
           hrPath.moveTo(x, y);
         } else {
           hrPath.lineTo(x, y);
         }
       }
-      
+
       canvas.drawPath(hrPath, hrPaint);
     }
-    
+
     // Draw HRV line (right Y-axis)
     if (hrvData.isNotEmpty) {
       final hrvPaint = Paint()
-        ..color = hrvColor.withOpacity(0.8)
+        ..color = hrvColor.withValues(alpha: 0.8)
         ..strokeWidth = 2.5
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
-      
+
       final hrvPath = Path();
       final stepX = chartWidth / (hrvData.length - 1).clamp(1, double.infinity);
-      
+
       for (int i = 0; i < hrvData.length; i++) {
         final x = 40 + (i * stepX);
-        final normalizedValue = ((hrvData[i] - hrvMin) / hrvRange).clamp(0.0, 1.0);
+        final normalizedValue =
+            ((hrvData[i] - hrvMin) / hrvRange).clamp(0.0, 1.0);
         final y = size.height - (normalizedValue * size.height);
-        
+
         if (i == 0) {
           hrvPath.moveTo(x, y);
         } else {
           hrvPath.lineTo(x, y);
         }
       }
-      
+
       canvas.drawPath(hrvPath, hrvPaint);
     }
-    
+
     // Draw Y-axis labels for HR (left)
     if (hrData.isNotEmpty) {
       final textPainter = TextPainter(
         textDirection: TextDirection.ltr,
         textAlign: TextAlign.right,
       );
-      
+
       for (int i = 0; i <= 4; i++) {
         final value = hrMin + (hrRange * i / 4);
         textPainter.text = TextSpan(
@@ -686,14 +698,14 @@ class DualAxisChartPainter extends CustomPainter {
         textPainter.paint(canvas, Offset(2, y));
       }
     }
-    
+
     // Draw Y-axis labels for HRV (right)
     if (hrvData.isNotEmpty) {
       final textPainter = TextPainter(
         textDirection: TextDirection.ltr,
         textAlign: TextAlign.left,
       );
-      
+
       for (int i = 0; i <= 4; i++) {
         final value = hrvMin + (hrvRange * i / 4);
         textPainter.text = TextSpan(

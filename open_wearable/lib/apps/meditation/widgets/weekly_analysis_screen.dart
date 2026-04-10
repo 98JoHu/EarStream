@@ -1,3 +1,5 @@
+// ignore_for_file: require_trailing_commas
+
 import 'package:flutter/material.dart';
 import '../model/mood_entry.dart';
 import 'package:intl/intl.dart';
@@ -57,10 +59,10 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
 
   Future<void> _clearAllData() async {
     setState(() => _isLoading = true);
-    
+
     try {
       await MoodHistory.clearAll();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -82,7 +84,6 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +129,7 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
             Icon(
               Icons.insights,
               size: 80,
-              color: Colors.indigo.withOpacity(0.3),
+              color: Colors.indigo.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -165,7 +166,8 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
       onRefresh: _loadData,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80), // Extra bottom padding
+        padding: const EdgeInsets.only(
+            left: 16, right: 16, top: 16, bottom: 80), // Extra bottom padding
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -201,7 +203,7 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
                       'Last 7 Days',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
@@ -261,7 +263,7 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ...entries.reversed.map((entry) => _buildEntryCard(entry)),
+            ...entries.reversed.map(_buildEntryCard),
 
             const SizedBox(height: 24),
 
@@ -357,7 +359,8 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
 
   Widget _buildEntryCard(MoodEntry entry) {
     final time = DateFormat('h:mm a').format(entry.timestamp);
-    final duration = '${entry.sessionDuration.inMinutes}m ${entry.sessionDuration.inSeconds % 60}s';
+    final duration =
+        '${entry.sessionDuration.inMinutes}m ${entry.sessionDuration.inSeconds % 60}s';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -372,7 +375,7 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
               width: 60,
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.indigo.withOpacity(0.1),
+                color: Colors.indigo.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -443,7 +446,8 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
     );
   }
 
-  Widget _buildInsights(List<MoodEntry> entries, double avgReduction, MoodRating? mostCommonMood) {
+  Widget _buildInsights(List<MoodEntry> entries, double avgReduction,
+      MoodRating? mostCommonMood) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -527,11 +531,11 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
 
   String _getConsistencyInsight(int sessionCount) {
     if (sessionCount >= 5) {
-      return 'Amazing consistency! ${sessionCount} sessions this week. Your mindfulness practice is strong.';
+      return 'Amazing consistency! $sessionCount sessions this week. Your mindfulness practice is strong.';
     } else if (sessionCount >= 3) {
-      return 'Good job! ${sessionCount} sessions this week. Try to maintain this rhythm.';
+      return 'Good job! $sessionCount sessions this week. Try to maintain this rhythm.';
     } else {
-      return '${sessionCount} session${sessionCount == 1 ? '' : 's'} this week. Try to meditate more regularly for best results.';
+      return '$sessionCount session${sessionCount == 1 ? '' : 's'} this week. Try to meditate more regularly for best results.';
     }
   }
 
@@ -561,5 +565,3 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
     }
   }
 }
-
-

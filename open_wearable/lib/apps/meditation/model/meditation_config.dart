@@ -1,4 +1,3 @@
-/// Configuration for meditation LLM and settings
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class MeditationConfig {

@@ -7,12 +7,12 @@ class SnoozeDialog extends StatelessWidget {
   final VoidCallback onSnoozeToday;
 
   const SnoozeDialog({
-    Key? key,
+    super.key,
     required this.onSnooze10Min,
     required this.onSnooze30Min,
     required this.onSnooze1Hour,
     required this.onSnoozeToday,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -86,11 +86,10 @@ class _SnoozeButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SnoozeButton({
-    Key? key,
     required this.label,
     required this.icon,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

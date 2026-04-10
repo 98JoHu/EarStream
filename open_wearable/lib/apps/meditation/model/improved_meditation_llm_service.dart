@@ -1,8 +1,9 @@
+// ignore_for_file: require_trailing_commas
+
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:logger/logger.dart';
 import 'meditation_config.dart';
 import 'user_account.dart';
-import 'meditation_cache.dart';
 
 final _logger = Logger();
 
@@ -334,9 +335,6 @@ Write a smooth, calming meditation using the technique above. Start directly wit
     required double endHrv,
   }) async {
     try {
-      final hrImprovement = ((startHr - endHr) / startHr * 100);
-      final hrvImprovement = ((endHrv - startHrv) / startHrv * 100);
-
       final userName = _userAccount?.name ?? '';
       final namePrefix = userName.isNotEmpty ? '$userName, ' : '';
 
@@ -348,14 +346,14 @@ Starting heart rate: ${startHr.toStringAsFixed(0)} beats per minute
 Ending heart rate: ${endHr.toStringAsFixed(0)} beats per minute
 
 REQUIREMENTS:
-1. Use their name once: "${userName}"
+1. Use their name once: "$userName"
 2. Mention the biomarker improvement explicitly (e.g., "from ${startHr.toStringAsFixed(0)} to ${endHr.toStringAsFixed(0)} beats per minute")
 3. Keep it to 2-3 SHORT sentences maximum (under 50 words)
 4. Be warm but concise
 5. Write numbers clearly for text-to-speech (avoid "BPM" abbreviation)
 
 EXAMPLE:
-"${userName}, wonderful work. Your heart rate has come down from ${startHr.toStringAsFixed(0)} to ${endHr.toStringAsFixed(0)} beats per minute. Carry this peace with you."
+"$userName, wonderful work. Your heart rate has come down from ${startHr.toStringAsFixed(0)} to ${endHr.toStringAsFixed(0)} beats per minute. Carry this peace with you."
 
 Generate a SHORT completion message like the example above.''';
 

@@ -8,10 +8,11 @@ class HrHrvDisplayNew extends StatelessWidget {
   final double? sdnn; // Optional SDNN value (comparable to Apple Health)
   final String stressLevel;
   final bool isHrvStable; // New: indicates if HRV measurement is reliable
-  final int? measurementDurationSeconds; // Timer for metrics requiring long measurement
+  final int?
+      measurementDurationSeconds; // Timer for metrics requiring long measurement
   final String? activityLevel; // Activity level from accelerometer/gyroscope
   final String? activityDescription; // Human-readable activity description
-  
+
   const HrHrvDisplayNew({
     super.key,
     required this.hr,
@@ -23,7 +24,7 @@ class HrHrvDisplayNew extends StatelessWidget {
     this.activityLevel,
     this.activityDescription,
   });
-  
+
   @override
   Widget build(BuildContext context) {
     final Map<String, Color> stressColors = {
@@ -31,30 +32,30 @@ class HrHrvDisplayNew extends StatelessWidget {
       'normal': const Color(0xFFFFA500),
       'stressed': const Color(0xFFFF6B6B),
     };
-    
+
     final Map<String, String> stressLabels = {
       'relaxed': 'Relaxed',
       'normal': 'Normal',
       'stressed': 'Stressed',
     };
-    
+
     final Map<String, IconData> stressIcons = {
       'relaxed': Icons.check_circle_rounded,
       'normal': Icons.info_rounded,
       'stressed': Icons.warning_rounded,
     };
-    
+
     final stressColor = stressColors[stressLevel] ?? const Color(0xFFFFA500);
     final stressText = stressLabels[stressLevel] ?? 'Normal';
     final stressIcon = stressIcons[stressLevel] ?? Icons.info_rounded;
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 15,
             offset: const Offset(0, 2),
           ),
@@ -86,8 +87,8 @@ class HrHrvDisplayNew extends StatelessWidget {
                   label: 'RMSSD',
                   value: hrv < 0
                       ? 'Loading...'
-                      : (isHrvStable 
-                          ? '${hrv.toStringAsFixed(1)} ms' 
+                      : (isHrvStable
+                          ? '${hrv.toStringAsFixed(1)} ms'
                           : 'Measuring...'),
                   iconBackground: const Color(0xFFE0F7F6),
                   isLoading: hrv < 0 || !isHrvStable,
@@ -100,9 +101,9 @@ class HrHrvDisplayNew extends StatelessWidget {
                   iconColor: const Color(0xFF9C27B0),
                   label: 'SDNN',
                   value: (sdnn == null || sdnn! < 0)
-                      ? '—'  // Em dash for pending
-                      : (isHrvStable 
-                          ? '${sdnn!.toStringAsFixed(1)} ms' 
+                      ? '—' // Em dash for pending
+                      : (isHrvStable
+                          ? '${sdnn!.toStringAsFixed(1)} ms'
                           : 'Measuring...'),
                   iconBackground: const Color(0xFFF3E5F5),
                   isLoading: (sdnn == null || sdnn! < 0) || !isHrvStable,
@@ -115,7 +116,7 @@ class HrHrvDisplayNew extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: stressColor.withOpacity(0.1),
+              color: stressColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -176,7 +177,7 @@ class HrHrvDisplayNew extends StatelessWidget {
       ),
     );
   }
-  
+
   IconData _getActivityIcon(String level) {
     switch (level) {
       case 'resting':
@@ -202,7 +203,7 @@ class _MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final bool isLoading; // New: shows loading indicator
-  
+
   const _MetricCard({
     required this.icon,
     required this.iconColor,
@@ -211,7 +212,7 @@ class _MetricCard extends StatelessWidget {
     required this.value,
     this.isLoading = false,
   });
-  
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -252,7 +253,8 @@ class _MetricCard extends StatelessWidget {
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(iconColor),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(iconColor),
                             ),
                           ),
                           const SizedBox(width: 6),

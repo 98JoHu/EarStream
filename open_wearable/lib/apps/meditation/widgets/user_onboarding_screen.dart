@@ -1,12 +1,14 @@
+// ignore_for_file: require_trailing_commas
+
 import 'package:flutter/material.dart';
 import '../model/user_account.dart';
 
 /// Beautiful onboarding screen for user account setup
 class UserOnboardingScreen extends StatefulWidget {
   final UserAccount? existingAccount;
-  
+
   const UserOnboardingScreen({super.key, this.existingAccount});
-  
+
   @override
   State<UserOnboardingScreen> createState() => _UserOnboardingScreenState();
 }
@@ -15,7 +17,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   late PageController _pageController;
   int _currentPage = 0;
-  
+
   // Form fields
   late TextEditingController _nameController;
   late TextEditingController _ageController;
@@ -25,12 +27,12 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   String _meditationStyle = 'calm and empathetic';
   String _environment = 'peaceful nature';
   bool _usePremiumVoice = false; // Premium voice toggle
-  
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    
+
     // Load existing data if available
     final account = widget.existingAccount;
     _nameController = TextEditingController(text: account?.name ?? '');
@@ -42,7 +44,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _environment = account?.preferredEnvironment ?? 'peaceful nature';
     _usePremiumVoice = account?.usePremiumVoice ?? false;
   }
-  
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -50,7 +52,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _ageController.dispose();
     super.dispose();
   }
-  
+
   void _nextPage() {
     if (_currentPage < 3) {
       _pageController.nextPage(
@@ -61,7 +63,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       _finish();
     }
   }
-  
+
   void _previousPage() {
     if (_currentPage > 0) {
       _pageController.previousPage(
@@ -70,7 +72,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       );
     }
   }
-  
+
   Future<void> _finish() async {
     // Validate form only if it's in the tree and has state
     if (_formKey.currentState != null && !_formKey.currentState!.validate()) {
@@ -82,14 +84,16 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       );
       return;
     }
-    
+
     // Use default values if fields are empty
-    final name = _nameController.text.trim().isEmpty ? 'User' : _nameController.text.trim();
+    final name = _nameController.text.trim().isEmpty
+        ? 'User'
+        : _nameController.text.trim();
     final age = int.tryParse(_ageController.text) ?? 30;
-    
+
     final account = UserAccount(
-      userId: widget.existingAccount?.userId ?? 
-             DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: widget.existingAccount?.userId ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       age: age,
       gender: _gender,
@@ -99,14 +103,14 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       preferredEnvironment: _environment,
       usePremiumVoice: _usePremiumVoice,
     );
-    
+
     await account.save();
-    
+
     if (mounted) {
       Navigator.pop(context, account);
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -133,7 +137,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                         decoration: BoxDecoration(
                           color: index <= _currentPage
                               ? Colors.white
-                              : Colors.white.withOpacity(0.3),
+                              : Colors.white.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -141,7 +145,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   }),
                 ),
               ),
-              
+
               // Pages
               Expanded(
                 child: PageView(
@@ -156,7 +160,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   ],
                 ),
               ),
-              
+
               // Navigation buttons
               Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -168,13 +172,15 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                           onPressed: _previousPage,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white, width: 2),
+                            side:
+                                const BorderSide(color: Colors.white, width: 2),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
                           ),
-                          child: const Text('Back', style: TextStyle(fontSize: 16)),
+                          child: const Text('Back',
+                              style: TextStyle(fontSize: 16)),
                         ),
                       ),
                     if (_currentPage > 0) const SizedBox(width: 16),
@@ -193,7 +199,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                         ),
                         child: Text(
                           _currentPage < 3 ? 'Continue' : 'Get Started',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -206,7 +213,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       ),
     );
   }
-  
+
   Widget _buildWelcomePage() {
     return Padding(
       padding: const EdgeInsets.all(32.0),
@@ -216,10 +223,11 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.self_improvement, size: 80, color: Colors.white),
+            child: const Icon(Icons.self_improvement,
+                size: 80, color: Colors.white),
           ),
           const SizedBox(height: 32),
           const Text(
@@ -238,7 +246,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 16,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               height: 1.5,
             ),
           ),
@@ -246,7 +254,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       ),
     );
   }
-  
+
   Widget _buildBasicInfoPage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32.0),
@@ -264,12 +272,12 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
               ),
             ),
             const SizedBox(height: 32),
-            
             _buildWhiteCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Your Name', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Your Name',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _nameController,
@@ -290,8 +298,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  
-                  const Text('Your Age', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Your Age',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _ageController,
@@ -314,8 +322,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
-                  
-                  const Text('Gender', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Gender',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -355,7 +363,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       ),
     );
   }
-  
+
   Widget _buildHealthInfoPage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32.0),
@@ -375,11 +383,10 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
             'This helps us personalize stress detection',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
           const SizedBox(height: 32),
-          
           _buildWhiteCard(
             child: Column(
               children: [
@@ -414,7 +421,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       ),
     );
   }
-  
+
   Widget _buildPreferencesPage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32.0),
@@ -430,17 +437,17 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          
           _buildWhiteCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 24),
-                
-                const Text('Meditation Style', style: TextStyle(fontWeight: FontWeight.w600)),
+
+                const Text('Meditation Style',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _meditationStyle,
+                  initialValue: _meditationStyle,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: Colors.grey[100],
@@ -451,30 +458,36 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   ),
                   items: const [
                     DropdownMenuItem(
-                      value: 'calm and empathetic', 
-                      child: Text('🌸 Calm & Empathetic', overflow: TextOverflow.ellipsis),
+                      value: 'calm and empathetic',
+                      child: Text('🌸 Calm & Empathetic',
+                          overflow: TextOverflow.ellipsis),
                     ),
                     DropdownMenuItem(
-                      value: 'gentle and soothing', 
-                      child: Text('🕊️ Gentle & Soothing', overflow: TextOverflow.ellipsis),
+                      value: 'gentle and soothing',
+                      child: Text('🕊️ Gentle & Soothing',
+                          overflow: TextOverflow.ellipsis),
                     ),
                     DropdownMenuItem(
-                      value: 'warm and compassionate', 
-                      child: Text('💝 Warm & Caring', overflow: TextOverflow.ellipsis),
+                      value: 'warm and compassionate',
+                      child: Text('💝 Warm & Caring',
+                          overflow: TextOverflow.ellipsis),
                     ),
                     DropdownMenuItem(
-                      value: 'peaceful and mindful', 
-                      child: Text('☮️ Peaceful & Mindful', overflow: TextOverflow.ellipsis),
+                      value: 'peaceful and mindful',
+                      child: Text('☮️ Peaceful & Mindful',
+                          overflow: TextOverflow.ellipsis),
                     ),
                   ],
-                  onChanged: (value) => setState(() => _meditationStyle = value!),
+                  onChanged: (value) =>
+                      setState(() => _meditationStyle = value!),
                 ),
                 const SizedBox(height: 24),
-                
-                const Text('Preferred Environment', style: TextStyle(fontWeight: FontWeight.w600)),
+
+                const Text('Preferred Environment',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _environment,
+                  initialValue: _environment,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: Colors.grey[100],
@@ -484,19 +497,26 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     ),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'peaceful nature', child: Text('🌳 Peaceful Nature')),
-                    DropdownMenuItem(value: 'calm ocean beach', child: Text('🌊 Ocean Beach')),
-                    DropdownMenuItem(value: 'quiet mountain', child: Text('⛰️ Mountain')),
-                    DropdownMenuItem(value: 'serene forest', child: Text('🌲 Forest')),
-                    DropdownMenuItem(value: 'gentle garden', child: Text('🌸 Garden')),
+                    DropdownMenuItem(
+                        value: 'peaceful nature',
+                        child: Text('🌳 Peaceful Nature')),
+                    DropdownMenuItem(
+                        value: 'calm ocean beach',
+                        child: Text('🌊 Ocean Beach')),
+                    DropdownMenuItem(
+                        value: 'quiet mountain', child: Text('⛰️ Mountain')),
+                    DropdownMenuItem(
+                        value: 'serene forest', child: Text('🌲 Forest')),
+                    DropdownMenuItem(
+                        value: 'gentle garden', child: Text('🌸 Garden')),
                   ],
                   onChanged: (value) => setState(() => _environment = value!),
                 ),
-                
+
                 const SizedBox(height: 32),
                 const Divider(),
                 const SizedBox(height: 16),
-                
+
                 // Premium Voice Toggle
                 Row(
                   children: [
@@ -514,7 +534,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                                 ),
                               ),
                               SizedBox(width: 8),
-                              Icon(Icons.auto_awesome, size: 18, color: Colors.amber),
+                              Icon(Icons.auto_awesome,
+                                  size: 18, color: Colors.amber),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -535,20 +556,18 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              value 
-                                ? '✨ Premium voice enabled!'
-                                : '✅ Free voice selected',
+                              value
+                                  ? '✨ Premium voice enabled!'
+                                  : '✅ Free voice selected',
                             ),
                             duration: const Duration(seconds: 2),
                           ),
                         );
                       },
-                      activeColor: Colors.amber,
+                      activeThumbColor: Colors.amber,
                     ),
                   ],
                 ),
-                
-
               ],
             ),
           ),
@@ -556,7 +575,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       ),
     );
   }
-  
+
   Widget _buildWhiteCard({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -565,7 +584,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -574,7 +593,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       child: child,
     );
   }
-  
+
   Widget _buildOptionButton({
     required String label,
     required IconData icon,
@@ -606,7 +625,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       ),
     );
   }
-  
+
   Widget _buildFitnessOption({
     required String title,
     required String subtitle,
@@ -614,14 +633,16 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     required IconData icon,
   }) {
     final selected = _fitnessLevel == value;
-    
+
     return GestureDetector(
       onTap: () => setState(() => _fitnessLevel = value),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF6366F1).withOpacity(0.1) : Colors.grey[50],
+          color: selected
+              ? const Color(0xFF6366F1).withValues(alpha: 0.1)
+              : Colors.grey[50],
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? const Color(0xFF6366F1) : Colors.grey[200]!,
@@ -636,7 +657,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                 color: selected ? const Color(0xFF6366F1) : Colors.grey[200],
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: selected ? Colors.white : Colors.grey[600], size: 24),
+              child: Icon(icon,
+                  color: selected ? Colors.white : Colors.grey[600], size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -648,7 +670,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: selected ? const Color(0xFF6366F1) : Colors.grey[800],
+                      color:
+                          selected ? const Color(0xFF6366F1) : Colors.grey[800],
                     ),
                   ),
                   Text(
@@ -669,4 +692,3 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     );
   }
 }
-

@@ -1,17 +1,19 @@
+// ignore_for_file: require_trailing_commas
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 
 /// Breathing animation widget - like Apple Watch breathe app
-/// 
+///
 /// Shows expanding/contracting circles with smooth transitions
 class BreathingAnimation extends StatefulWidget {
   final bool isActive;
-  
+
   const BreathingAnimation({
     super.key,
     required this.isActive,
   });
-  
+
   @override
   State<BreathingAnimation> createState() => _BreathingAnimationState();
 }
@@ -21,16 +23,16 @@ class _BreathingAnimationState extends State<BreathingAnimation>
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _opacityAnimation;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     _controller = AnimationController(
       duration: const Duration(seconds: 8),
       vsync: this,
     );
-    
+
     _scaleAnimation = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(begin: 0.5, end: 1.0)
@@ -43,7 +45,7 @@ class _BreathingAnimationState extends State<BreathingAnimation>
         weight: 50,
       ),
     ]).animate(_controller);
-    
+
     _opacityAnimation = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(begin: 0.3, end: 0.8),
@@ -54,12 +56,12 @@ class _BreathingAnimationState extends State<BreathingAnimation>
         weight: 50,
       ),
     ]).animate(_controller);
-    
+
     if (widget.isActive) {
       _controller.repeat();
     }
   }
-  
+
   @override
   void didUpdateWidget(BreathingAnimation oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -69,7 +71,7 @@ class _BreathingAnimationState extends State<BreathingAnimation>
       _controller.stop();
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -85,13 +87,18 @@ class _BreathingAnimationState extends State<BreathingAnimation>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  _buildPetal(0, _scaleAnimation.value, _opacityAnimation.value),
-                  _buildPetal(60, _scaleAnimation.value, _opacityAnimation.value),
-                  _buildPetal(120, _scaleAnimation.value, _opacityAnimation.value),
-                  _buildPetal(180, _scaleAnimation.value, _opacityAnimation.value),
-                  _buildPetal(240, _scaleAnimation.value, _opacityAnimation.value),
-                  _buildPetal(300, _scaleAnimation.value, _opacityAnimation.value),
-                  
+                  _buildPetal(
+                      0, _scaleAnimation.value, _opacityAnimation.value),
+                  _buildPetal(
+                      60, _scaleAnimation.value, _opacityAnimation.value),
+                  _buildPetal(
+                      120, _scaleAnimation.value, _opacityAnimation.value),
+                  _buildPetal(
+                      180, _scaleAnimation.value, _opacityAnimation.value),
+                  _buildPetal(
+                      240, _scaleAnimation.value, _opacityAnimation.value),
+                  _buildPetal(
+                      300, _scaleAnimation.value, _opacityAnimation.value),
                   Container(
                     width: 50 * _scaleAnimation.value,
                     height: 50 * _scaleAnimation.value,
@@ -99,8 +106,8 @@ class _BreathingAnimationState extends State<BreathingAnimation>
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Colors.blue.withOpacity(0.6),
-                          Colors.purple.withOpacity(0.3),
+                          Colors.blue.withValues(alpha: 0.6),
+                          Colors.purple.withValues(alpha: 0.3),
                         ],
                       ),
                     ),
@@ -114,11 +121,11 @@ class _BreathingAnimationState extends State<BreathingAnimation>
       },
     );
   }
-  
+
   Widget _buildPetal(double angle, double scale, double opacity) {
     final radians = angle * pi / 180;
     final distance = 50.0 * scale;
-    
+
     return Transform.translate(
       offset: Offset(
         cos(radians) * distance,
@@ -133,8 +140,8 @@ class _BreathingAnimationState extends State<BreathingAnimation>
             shape: BoxShape.circle,
             gradient: RadialGradient(
               colors: [
-                Colors.blue.withOpacity(opacity * 0.6),
-                Colors.purple.withOpacity(opacity * 0.2),
+                Colors.blue.withValues(alpha: opacity * 0.6),
+                Colors.purple.withValues(alpha: opacity * 0.2),
               ],
             ),
           ),
@@ -142,7 +149,7 @@ class _BreathingAnimationState extends State<BreathingAnimation>
       ),
     );
   }
-  
+
   @override
   void dispose() {
     _controller.dispose();

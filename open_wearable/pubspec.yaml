@@ -60,6 +60,7 @@ dependencies:
   google_generative_ai: ^0.4.7
   flutter_dotenv: ^6.0.0
   flutter_tts: ^4.2.5
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:

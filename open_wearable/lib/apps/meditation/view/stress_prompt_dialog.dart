@@ -7,12 +7,12 @@ class StressPromptDialog extends StatelessWidget {
   final VoidCallback onNo;
 
   const StressPromptDialog({
-    Key? key,
+    super.key,
     required this.currentHr,
     required this.currentHrv,
     required this.onYes,
     required this.onNo,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +29,7 @@ class StressPromptDialog extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
+                // ignore: deprecated_member_use
                 color: const Color(0xFF6366F1).withOpacity(0.15),
                 shape: BoxShape.circle,
               ),

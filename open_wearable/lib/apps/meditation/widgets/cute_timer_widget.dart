@@ -5,14 +5,14 @@ class CuteTimerWidget extends StatefulWidget {
   final int currentSeconds;
   final int totalSeconds;
   final String label;
-  
+
   const CuteTimerWidget({
     super.key,
     required this.currentSeconds,
     required this.totalSeconds,
     this.label = 'Collecting data',
   });
-  
+
   @override
   State<CuteTimerWidget> createState() => _CuteTimerWidgetState();
 }
@@ -23,34 +23,35 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
   late AnimationController _waveController;
   late AnimationController _messageController;
   late Animation<double> _pulseAnimation;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // Pulsing heart animation
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     // Wave animation for background
     _waveController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     )..repeat();
-    
+
     // Message rotation animation (slower - every 5 seconds)
     _messageController = AnimationController(
-      duration: const Duration(seconds: 20), // 5 seconds per message x 4 messages
+      duration:
+          const Duration(seconds: 20), // 5 seconds per message x 4 messages
       vsync: this,
     )..repeat();
   }
-  
+
   @override
   void dispose() {
     _pulseController.dispose();
@@ -58,13 +59,14 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
     _messageController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final progress = widget.currentSeconds / widget.totalSeconds;
-    final remainingMinutes = ((widget.totalSeconds - widget.currentSeconds) / 60).floor();
+    final remainingMinutes =
+        ((widget.totalSeconds - widget.currentSeconds) / 60).floor();
     final remainingSeconds = (widget.totalSeconds - widget.currentSeconds) % 60;
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -72,13 +74,13 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFFF3E5F5).withOpacity(0.3),
-            const Color(0xFFE1BEE7).withOpacity(0.3),
+            const Color(0xFFF3E5F5).withValues(alpha: 0.3),
+            const Color(0xFFE1BEE7).withValues(alpha: 0.3),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF9C27B0).withOpacity(0.2),
+          color: const Color(0xFF9C27B0).withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -103,7 +105,7 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
             },
           ),
           const SizedBox(height: 8),
-          
+
           // Progress bar with wave animation
           Stack(
             children: [
@@ -151,7 +153,7 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
             ],
           ),
           const SizedBox(height: 8),
-          
+
           // Time remaining
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -168,7 +170,7 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
                 duration: const Duration(milliseconds: 300),
                 child: Text(
                   key: ValueKey('$remainingMinutes:$remainingSeconds'),
-                  '${remainingMinutes}:${remainingSeconds.toString().padLeft(2, '0')}',
+                  '$remainingMinutes:${remainingSeconds.toString().padLeft(2, '0')}',
                   style: TextStyle(
                     fontSize: 11,
                     color: const Color(0xFF9C27B0),
@@ -178,7 +180,7 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
               ),
             ],
           ),
-          
+
           // Cute encouraging text
           const SizedBox(height: 4),
           AnimatedBuilder(
@@ -190,8 +192,9 @@ class _CuteTimerWidgetState extends State<CuteTimerWidget>
                 '🌟 Stay calm...',
                 '💫 You\'re doing great!',
               ];
-              final index = (_messageController.value * 4).floor() % texts.length;
-              
+              final index =
+                  (_messageController.value * 4).floor() % texts.length;
+
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
                 transitionBuilder: (Widget child, Animation<double> animation) {

@@ -1,3 +1,5 @@
+// ignore_for_file: require_trailing_commas
+
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
@@ -56,8 +58,8 @@ class ImprovedMeditationController {
   // Calibration state
   bool _isCalibrating = true;
   DateTime? _calibrationStartTime;
-  List<double> _hrMeasurements = [];
-  List<double> _hrvMeasurements = [];
+  final List<double> _hrMeasurements = [];
+  final List<double> _hrvMeasurements = [];
   static const int _calibrationDurationSeconds =
       30; // 30 seconds for initial calibration
 
@@ -582,41 +584,41 @@ class ImprovedMeditationController {
   }
 
   /// Get personalized congratulatory message when user becomes relaxed
-  String _getCongratulatoryMessage() {
-    final name = userAccount.name;
+  // String _getCongratulatoryMessage() {
+  //   final name = userAccount.name;
 
-    // Personalized messages based on user's meditation style
-    final messages = {
-      'calm and empathetic': [
-        '$name, you did it! I\'m so proud of you. You\'ve found your peace.',
-        'Wonderful, $name! You\'ve reached a beautiful state of calm. Well done.',
-        '$name, this is amazing! You\'re completely relaxed now. You should be proud.',
-      ],
-      'gentle and soothing': [
-        'Beautiful work, $name. You\'re peaceful now. Rest in this lovely calm.',
-        '$name, you\'ve done so well. Feel how relaxed you are. Just perfect.',
-        'Oh, $name, you\'ve found it. This beautiful peace. Well done, dear.',
-      ],
-      'warm and compassionate': [
-        '$name, I\'m really proud of you! You\'ve worked hard and found your calm.',
-        'You did it, $name! You\'ve reached such a peaceful state. Excellent work.',
-        'Wonderful, $name! You should feel proud. You\'ve achieved real relaxation.',
-      ],
-      'peaceful and mindful': [
-        'Well done, $name. You\'ve arrived at a place of deep calm. Notice how peaceful you feel.',
-        '$name, you\'ve done it. Observe this state of relaxation you\'ve created.',
-        'Excellent, $name. You\'re now in a truly relaxed state. Acknowledge this achievement.',
-      ],
-    };
+  //   // Personalized messages based on user's meditation style
+  //   final messages = {
+  //     'calm and empathetic': [
+  //       '$name, you did it! I\'m so proud of you. You\'ve found your peace.',
+  //       'Wonderful, $name! You\'ve reached a beautiful state of calm. Well done.',
+  //       '$name, this is amazing! You\'re completely relaxed now. You should be proud.',
+  //     ],
+  //     'gentle and soothing': [
+  //       'Beautiful work, $name. You\'re peaceful now. Rest in this lovely calm.',
+  //       '$name, you\'ve done so well. Feel how relaxed you are. Just perfect.',
+  //       'Oh, $name, you\'ve found it. This beautiful peace. Well done, dear.',
+  //     ],
+  //     'warm and compassionate': [
+  //       '$name, I\'m really proud of you! You\'ve worked hard and found your calm.',
+  //       'You did it, $name! You\'ve reached such a peaceful state. Excellent work.',
+  //       'Wonderful, $name! You should feel proud. You\'ve achieved real relaxation.',
+  //     ],
+  //     'peaceful and mindful': [
+  //       'Well done, $name. You\'ve arrived at a place of deep calm. Notice how peaceful you feel.',
+  //       '$name, you\'ve done it. Observe this state of relaxation you\'ve created.',
+  //       'Excellent, $name. You\'re now in a truly relaxed state. Acknowledge this achievement.',
+  //     ],
+  //   };
 
-    // Get messages for user's style, or use default
-    final styleMessages = messages[userAccount.meditationStyle] ??
-        messages['warm and compassionate']!;
+  //   // Get messages for user's style, or use default
+  //   final styleMessages = messages[userAccount.meditationStyle] ??
+  //       messages['warm and compassionate']!;
 
-    // Rotate through messages
-    final index = _iterationCount % styleMessages.length;
-    return styleMessages[index];
-  }
+  //   // Rotate through messages
+  //   final index = _iterationCount % styleMessages.length;
+  //   return styleMessages[index];
+  // }
 
   /// Pause session - PROPERLY
   Future<void> pauseSession() async {

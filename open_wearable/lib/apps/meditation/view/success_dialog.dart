@@ -1,3 +1,5 @@
+// ignore_for_file: require_trailing_commas
+
 import 'package:flutter/material.dart';
 
 class SuccessDialog extends StatelessWidget {
@@ -9,21 +11,21 @@ class SuccessDialog extends StatelessWidget {
   final double hrvSdnnAfter;
 
   const SuccessDialog({
-    Key? key,
+    super.key,
     required this.hrBefore,
     required this.hrvRmssdBefore,
     required this.hrvSdnnBefore,
     required this.hrAfter,
     required this.hrvRmssdAfter,
     required this.hrvSdnnAfter,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     final hrImprovement = hrBefore - hrAfter;
     final hrvRmssdImprovement = hrvRmssdAfter - hrvRmssdBefore;
     final hrvSdnnImprovement = hrvSdnnAfter - hrvSdnnBefore;
-    
+
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(28),
@@ -38,7 +40,7 @@ class SuccessDialog extends StatelessWidget {
                 width: 70,
                 height: 70,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF51CF66).withOpacity(0.15),
+                  color: const Color(0xFF51CF66).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -151,7 +153,6 @@ class _MetricComparison extends StatelessWidget {
   final bool improvementIsPositive;
 
   const _MetricComparison({
-    Key? key,
     required this.icon,
     required this.iconColor,
     required this.label,
@@ -160,13 +161,13 @@ class _MetricComparison extends StatelessWidget {
     required this.unit,
     required this.improvement,
     required this.improvementIsPositive,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     // Determine if this is an HRV metric (RMSSD or SDNN)
     final isHrvMetric = label == 'RMSSD' || label == 'SDNN';
-    
+
     return Column(
       children: [
         Row(
@@ -249,7 +250,8 @@ class _MetricComparison extends StatelessWidget {
                       ),
                       if (improvement.abs() > 0.1)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: improvementIsPositive
                                 ? const Color(0xFF51CF66)

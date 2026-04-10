@@ -1,3 +1,5 @@
+// ignore_for_file: require_trailing_commas
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -10,7 +12,7 @@ class UserAccount {
   String fitnessLevel; // 'sedentary', 'moderate', 'active', 'athlete'
   double? restingHr; // Measured resting heart rate
   double? baselineHrv; // Measured baseline HRV
-  
+
   // Meditation preferences
   String voiceGender; // 'male' or 'female'
   String meditationStyle; // Calm, energetic, etc.
@@ -19,11 +21,11 @@ class UserAccount {
   List<String> stressTriggers;
   List<String> relaxationTechniques;
   String favoriteActivity;
-  
+
   // Account metadata
   DateTime createdAt;
   DateTime lastUpdated;
-  
+
   UserAccount({
     required this.userId,
     this.name = '',
@@ -37,14 +39,16 @@ class UserAccount {
     this.preferredEnvironment = 'peaceful nature',
     this.usePremiumVoice = false, // Default to FREE voice
     this.stressTriggers = const [],
-    this.relaxationTechniques = const ['deep breathing', 'progressive relaxation'],
+    this.relaxationTechniques = const [
+      'deep breathing',
+      'progressive relaxation'
+    ],
     this.favoriteActivity = '',
     DateTime? createdAt,
     DateTime? lastUpdated,
-  }) : 
-    createdAt = createdAt ?? DateTime.now(),
-    lastUpdated = lastUpdated ?? DateTime.now();
-  
+  })  : createdAt = createdAt ?? DateTime.now(),
+        lastUpdated = lastUpdated ?? DateTime.now();
+
   /// Get personalized stress thresholds based on demographics
   Map<String, double> getPersonalizedThresholds() {
     // Base thresholds
@@ -52,7 +56,7 @@ class UserAccount {
     double stressHrvThreshold = 20.0;
     double relaxHrThreshold = 75.0;
     double relaxHrvThreshold = 35.0;
-    
+
     // Adjust for age (older = generally lower HR, lower HRV)
     if (age < 25) {
       stressHrThreshold = 100.0;
@@ -75,7 +79,7 @@ class UserAccount {
       relaxHrThreshold = 78.0;
       relaxHrvThreshold = 25.0;
     }
-    
+
     // Adjust for gender (males typically have lower resting HR)
     if (gender == 'male') {
       stressHrThreshold -= 5.0;
@@ -86,7 +90,7 @@ class UserAccount {
       relaxHrThreshold += 3.0;
       relaxHrvThreshold -= 5.0;
     }
-    
+
     // Adjust for fitness level
     switch (fitnessLevel) {
       case 'sedentary':
@@ -111,18 +115,19 @@ class UserAccount {
         relaxHrvThreshold += 20.0;
         break;
     }
-    
+
     // Use measured baseline if available
     if (restingHr != null) {
       relaxHrThreshold = restingHr!;
       stressHrThreshold = restingHr! * 1.25; // 25% above resting
     }
-    
+
     if (baselineHrv != null) {
       relaxHrvThreshold = baselineHrv!;
-      stressHrvThreshold = baselineHrv! * 0.6; // 40% below baseline indicates stress
+      stressHrvThreshold =
+          baselineHrv! * 0.6; // 40% below baseline indicates stress
     }
-    
+
     return {
       'stressHrThreshold': stressHrThreshold,
       'stressHrvThreshold': stressHrvThreshold,
@@ -130,36 +135,36 @@ class UserAccount {
       'relaxHrvThreshold': relaxHrvThreshold,
     };
   }
-  
+
   /// Get expected max heart rate for age
   double get maxHeartRate => 220 - age.toDouble();
-  
+
   /// Get target heart rate zone for exercise (60-80% of max)
   Map<String, double> get targetHeartRateZone => {
-    'lower': maxHeartRate * 0.6,
-    'upper': maxHeartRate * 0.8,
-  };
-  
+        'lower': maxHeartRate * 0.6,
+        'upper': maxHeartRate * 0.8,
+      };
+
   /// Convert to JSON for storage
   Map<String, dynamic> toJson() => {
-    'userId': userId,
-    'name': name,
-    'age': age,
-    'gender': gender,
-    'fitnessLevel': fitnessLevel,
-    'restingHr': restingHr,
-    'baselineHrv': baselineHrv,
-    'voiceGender': voiceGender,
-    'meditationStyle': meditationStyle,
-    'preferredEnvironment': preferredEnvironment,
-    'usePremiumVoice': usePremiumVoice,
-    'stressTriggers': stressTriggers,
-    'relaxationTechniques': relaxationTechniques,
-    'favoriteActivity': favoriteActivity,
-    'createdAt': createdAt.toIso8601String(),
-    'lastUpdated': lastUpdated.toIso8601String(),
-  };
-  
+        'userId': userId,
+        'name': name,
+        'age': age,
+        'gender': gender,
+        'fitnessLevel': fitnessLevel,
+        'restingHr': restingHr,
+        'baselineHrv': baselineHrv,
+        'voiceGender': voiceGender,
+        'meditationStyle': meditationStyle,
+        'preferredEnvironment': preferredEnvironment,
+        'usePremiumVoice': usePremiumVoice,
+        'stressTriggers': stressTriggers,
+        'relaxationTechniques': relaxationTechniques,
+        'favoriteActivity': favoriteActivity,
+        'createdAt': createdAt.toIso8601String(),
+        'lastUpdated': lastUpdated.toIso8601String(),
+      };
+
   /// Create from JSON
   factory UserAccount.fromJson(Map<String, dynamic> json) {
     return UserAccount(
@@ -175,28 +180,32 @@ class UserAccount {
       preferredEnvironment: json['preferredEnvironment'] ?? 'peaceful nature',
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
       stressTriggers: List<String>.from(json['stressTriggers'] ?? []),
-      relaxationTechniques: List<String>.from(json['relaxationTechniques'] ?? ['deep breathing', 'progressive relaxation']),
+      relaxationTechniques: List<String>.from(json['relaxationTechniques'] ??
+          ['deep breathing', 'progressive relaxation']),
       favoriteActivity: json['favoriteActivity'] ?? '',
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      lastUpdated: DateTime.parse(json['lastUpdated'] ?? DateTime.now().toIso8601String()),
+      createdAt:
+          DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
+      lastUpdated: DateTime.parse(
+          json['lastUpdated'] ?? DateTime.now().toIso8601String()),
     );
   }
-  
+
   /// Save account to local storage
   Future<void> save() async {
     lastUpdated = DateTime.now();
     final prefs = await SharedPreferences.getInstance();
     final jsonData = toJson();
-    print('SAVING ACCOUNT: voiceGender=${jsonData['voiceGender']}, meditationStyle=${jsonData['meditationStyle']}');
+    print(
+        'SAVING ACCOUNT: voiceGender=${jsonData['voiceGender']}, meditationStyle=${jsonData['meditationStyle']}');
     await prefs.setString('user_account', jsonEncode(jsonData));
     print('Account saved successfully');
   }
-  
+
   /// Load account from local storage
   static Future<UserAccount> load() async {
     final prefs = await SharedPreferences.getInstance();
     final String? jsonString = prefs.getString('user_account');
-    
+
     if (jsonString != null) {
       try {
         return UserAccount.fromJson(jsonDecode(jsonString));
@@ -204,19 +213,19 @@ class UserAccount {
         print('Error loading user account: $e');
       }
     }
-    
+
     // Return default account
     return UserAccount(
       userId: DateTime.now().millisecondsSinceEpoch.toString(),
     );
   }
-  
+
   /// Check if account is set up (has basic info)
   bool get isSetup => name.isNotEmpty && age > 0;
-  
+
   /// Get greeting text
   String get greeting => name.isNotEmpty ? 'Hello $name' : 'Hello';
-  
+
   /// Get description for LLM context
   String getLLMContext() {
     return '''User Profile:
@@ -233,4 +242,3 @@ ${restingHr != null ? '- Resting Heart Rate: ${restingHr!.toStringAsFixed(0)} BP
 ${baselineHrv != null ? '- Baseline HRV: ${baselineHrv!.toStringAsFixed(0)} ms' : ''}''';
   }
 }
-

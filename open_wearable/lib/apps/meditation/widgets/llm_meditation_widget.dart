@@ -1,16 +1,15 @@
+// ignore_for_file: require_trailing_commas
+
 import 'package:flutter/material.dart';
 import '../model/improved_meditation_controller.dart';
 import '../model/improved_meditation_llm_service.dart';
 import '../model/meditation_voice_service.dart';
 import '../model/meditation_config.dart';
 import '../model/user_account.dart';
-import '../model/user_meditation_profile.dart';
 import '../model/hr_sensor_interface.dart';
 import '../model/mood_entry.dart';
-import '../model/meditation_cache.dart';
 import '../widgets/user_onboarding_screen.dart';
 import '../widgets/weekly_analysis_screen.dart';
-import '../widgets/api_debug_widget.dart';
 import 'breathing_animation.dart';
 
 /// Improved meditation widget with natural voice and personalization
@@ -231,8 +230,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           if (isStressed) {
             print('✗ Stress detected but NOT showing prompt because:');
             if (_stressDetected) print('  - _stressDetected is already true');
-            if (_currentState != MeditationState.idle)
+            if (_currentState != MeditationState.idle) {
               print('  - state is $_currentState (not idle)');
+            }
           }
 
           if (!isStressed && _stressDetected) {
@@ -524,8 +524,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           if (isStressed) {
             print('✗ Stress detected but NOT showing prompt because:');
             if (_stressDetected) print('  - _stressDetected is already true');
-            if (_currentState != MeditationState.idle)
+            if (_currentState != MeditationState.idle) {
               print('  - state is $_currentState (not idle)');
+            }
           }
 
           if (!isStressed && _stressDetected) {
@@ -773,6 +774,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         );
         await MoodHistory.saveMood(entry);
 
+        if (!mounted) return;
+
         Navigator.pop(context);
 
         // Show completion message with option to view analysis
@@ -912,20 +915,20 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                               // Timer
                               Icon(Icons.timer,
                                   size: 16,
-                                  color: Colors.white.withOpacity(0.9)),
+                                  color: Colors.white.withValues(alpha: 0.9)),
                               const SizedBox(width: 4),
                               Text(
                                 _formatDuration(_sessionElapsed),
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: Colors.white.withOpacity(0.9),
+                                  color: Colors.white.withValues(alpha: 0.9),
                                 ),
                               ),
                               const SizedBox(width: 16),
                               // Segment counter
                               Icon(Icons.layers,
                                   size: 16,
-                                  color: Colors.white.withOpacity(0.9)),
+                                  color: Colors.white.withValues(alpha: 0.9)),
                               const SizedBox(width: 4),
                               Text(
                                 _currentSegment > 0
@@ -933,7 +936,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                                     : 'Preparing...',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: Colors.white.withOpacity(0.9),
+                                  color: Colors.white.withValues(alpha: 0.9),
                                 ),
                               ),
                             ],
@@ -1152,6 +1155,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
-    return '${minutes}:${seconds.toString().padLeft(2, '0')}';
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
