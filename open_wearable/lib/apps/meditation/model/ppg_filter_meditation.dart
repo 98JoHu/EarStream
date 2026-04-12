@@ -18,15 +18,16 @@ class PpgFilterMeditation {
 
   double _hrEstimate = 75.0;
   double _p = 1.0;
-  final double _q = 0.01;  // process noise
+  final double _q = 0.01; // process noise
   final double _r = 4.0;
-  
-  int timestampExponent;   // measurement noise
+
+  int timestampExponent; // measurement noise
 
   Stream<(int, double)>? _filteredStream;
-  
+
   // Stream controller for RR intervals (inter-beat intervals)
-  final StreamController<List<double>> _rrIntervalController = StreamController<List<double>>.broadcast();
+  final StreamController<List<double>> _rrIntervalController =
+      StreamController<List<double>>.broadcast();
 
   PpgFilterMeditation({
     required this.inputStream,
@@ -40,7 +41,7 @@ class PpgFilterMeditation {
       lowCut: 0.5,
       highCut: 4,
     );
-    
+
     if (_filteredStream == null) {
       _logger.d("Creating filtered stream");
       _filteredStream = inputStream.map((event) {
@@ -54,7 +55,7 @@ class PpgFilterMeditation {
 
     return _filteredStream!;
   }
-  
+
   /// Stream of RR intervals (inter-beat intervals) in milliseconds
   /// These are the actual time differences between detected heart beats
   Stream<List<double>> get rrIntervalStream => _rrIntervalController.stream;
@@ -74,7 +75,9 @@ class PpgFilterMeditation {
     for (int i = 0; i < raw.length; i++) {
       int start = max(0, i - radius);
       int end = min(raw.length - 1, i + radius);
-      final avg = raw.sublist(start, end + 1).map((e) => e.$2).reduce((a, b) => a + b) / (end - start + 1);
+      final avg =
+          raw.sublist(start, end + 1).map((e) => e.$2).reduce((a, b) => a + b) /
+              (end - start + 1);
       smoothed.add((raw[i].$1, avg));
     }
     return smoothed;
@@ -94,7 +97,8 @@ class PpgFilterMeditation {
       if (tCurr - lastPeak < _minPeakDistanceMs) continue;
 
       // Simple 3-point peak
-      if (vCurr > vPrev && vCurr > vNext &&
+      if (vCurr > vPrev &&
+          vCurr > vNext &&
           (vCurr - vPrev) > _minProminence &&
           (vCurr - vNext) > _minProminence) {
         peakTimestamps.add(tCurr);
@@ -132,16 +136,18 @@ class PpgFilterMeditation {
       for (int i = 1; i < peakTimestamps.length; i++) {
         // Peak timestamps are in microseconds (timestampExponent=-6)
         // Convert to milliseconds: divide by 1000
-        final ibiInMicroseconds = (peakTimestamps[i] - peakTimestamps[i - 1]).toDouble();
+        final ibiInMicroseconds =
+            (peakTimestamps[i] - peakTimestamps[i - 1]).toDouble();
         final ibiInMs = ibiInMicroseconds / 1000.0;
         ibiList.add(ibiInMs);
       }
-      
+
       // Debug logging for first few intervals
       if (ibiList.isNotEmpty && (ibiList.first > 5000 || ibiList.first < 300)) {
-        _logger.w('Suspicious RR intervals detected: ${ibiList.take(3).toList()}ms, timestampFactor=$timestampFactor, timestampExponent=$timestampExponent');
+        _logger.w(
+            'Suspicious RR intervals detected: ${ibiList.take(3).toList()}ms, timestampFactor=$timestampFactor, timestampExponent=$timestampExponent');
       }
-      
+
       // Publish RR intervals for HRV analysis (in milliseconds)
       if (ibiList.isNotEmpty) {
         _rrIntervalController.add(ibiList);

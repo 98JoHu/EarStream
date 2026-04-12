@@ -54,14 +54,16 @@ Future<List<Directory>> listRecordingDirectories() async {
       .where((entity) => entity.path.contains('OpenWearable_Recording'))
       .toList();
 
-  recordings.sort((a, b) => b.statSync().changed.compareTo(a.statSync().changed));
+  recordings
+      .sort((a, b) => b.statSync().changed.compareTo(a.statSync().changed));
   return recordings;
 }
 
 List<File> listFilesInRecordingFolder(Directory folder) {
   try {
     return folder.listSync(recursive: false).whereType<File>().toList()
-      ..sort((a, b) => localRecorderBasename(a.path).compareTo(localRecorderBasename(b.path)));
+      ..sort((a, b) => localRecorderBasename(a.path)
+          .compareTo(localRecorderBasename(b.path)));
   } catch (_) {
     return <File>[];
   }

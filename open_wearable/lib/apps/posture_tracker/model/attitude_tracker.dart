@@ -52,7 +52,9 @@ abstract class AttitudeTracker with ChangeNotifier {
 
   void calibrateToCurrentAttitude() async {
     _referenceAttitude = _rawAttitude;
-    _logger.d("calibrated to {roll: ${_referenceAttitude.roll}, pitch: ${_referenceAttitude.pitch}, yaw: ${_referenceAttitude.yaw}}",);
+    _logger.d(
+      "calibrated to {roll: ${_referenceAttitude.roll}, pitch: ${_referenceAttitude.pitch}, yaw: ${_referenceAttitude.yaw}}",
+    );
   }
 
   /// Cancle the stream and close the stream controller.
@@ -63,10 +65,16 @@ abstract class AttitudeTracker with ChangeNotifier {
     this._attitudeStreamController.close();
   }
 
-  void updateAttitude({double? roll, double? pitch, double? yaw, Attitude? attitude,}) {
+  void updateAttitude({
+    double? roll,
+    double? pitch,
+    double? yaw,
+    Attitude? attitude,
+  }) {
     if (roll == null && pitch == null && yaw == null && attitude == null) {
       throw ArgumentError(
-          "Either roll, pitch and yaw or attitude must be provided",);
+        "Either roll, pitch and yaw or attitude must be provided",
+      );
     }
     // Check if attitude is not null, otherwise use the angles
     attitude ??= Attitude(roll: -(roll ?? 0), pitch: pitch ?? 0, yaw: yaw ?? 0);

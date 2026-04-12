@@ -21,12 +21,21 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   // Form fields
   late TextEditingController _nameController;
   late TextEditingController _ageController;
+  late TextEditingController _geminiApiKeyController;
+  late TextEditingController _elevenLabsApiKeyController;
+  late TextEditingController _microsoftGraphTokenController;
   String _gender = 'other';
   String _fitnessLevel = 'moderate';
   String _voiceGender = 'female';
   String _meditationStyle = 'calm and empathetic';
   String _environment = 'peaceful nature';
   bool _usePremiumVoice = false; // Premium voice toggle
+  String _selectedElevenLabsVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
+
+  static const List<Map<String, String>> _elevenLabsStandardVoices = [
+    {'id': 'hpp4J3VqNfWAUOO0d1Us', 'name': 'Bella (Female, Bright, Warm)'},
+    {'id': 'CwhRBWXzGAHq8TQ4Fs17', 'name': 'Roger (Male, Laid-Back, Resonant)'},
+  ];
 
   @override
   void initState() {
@@ -37,12 +46,24 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     final account = widget.existingAccount;
     _nameController = TextEditingController(text: account?.name ?? '');
     _ageController = TextEditingController(text: account?.age.toString() ?? '');
+    _geminiApiKeyController =
+        TextEditingController(text: account?.geminiApiKey ?? '');
+    _elevenLabsApiKeyController =
+        TextEditingController(text: account?.elevenLabsApiKey ?? '');
+    _microsoftGraphTokenController =
+        TextEditingController(text: account?.microsoftGraphAccessToken ?? '');
     _gender = account?.gender ?? 'other';
     _fitnessLevel = account?.fitnessLevel ?? 'moderate';
     _voiceGender = account?.voiceGender ?? 'female';
     _meditationStyle = account?.meditationStyle ?? 'calm and empathetic';
     _environment = account?.preferredEnvironment ?? 'peaceful nature';
     _usePremiumVoice = account?.usePremiumVoice ?? false;
+
+    final savedVoiceId = account?.elevenLabsVoiceId ?? '';
+    final hasSavedVoice =
+        _elevenLabsStandardVoices.any((voice) => voice['id'] == savedVoiceId);
+    _selectedElevenLabsVoiceId =
+        hasSavedVoice ? savedVoiceId : 'hpp4J3VqNfWAUOO0d1Us';
   }
 
   @override
@@ -50,6 +71,9 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _pageController.dispose();
     _nameController.dispose();
     _ageController.dispose();
+    _geminiApiKeyController.dispose();
+    _elevenLabsApiKeyController.dispose();
+    _microsoftGraphTokenController.dispose();
     super.dispose();
   }
 
@@ -102,6 +126,10 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       meditationStyle: _meditationStyle,
       preferredEnvironment: _environment,
       usePremiumVoice: _usePremiumVoice,
+      geminiApiKey: _geminiApiKeyController.text.trim(),
+      elevenLabsApiKey: _elevenLabsApiKeyController.text.trim(),
+      elevenLabsVoiceId: _selectedElevenLabsVoiceId,
+      microsoftGraphAccessToken: _microsoftGraphTokenController.text.trim(),
     );
 
     await account.save();
@@ -448,6 +476,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: _meditationStyle,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: Colors.grey[100],
@@ -488,6 +517,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: _environment,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: Colors.grey[100],
@@ -540,7 +570,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'High-quality Google Cloud TTS voice\n(Standard rates apply)',
+                            'High-quality ElevenLabs voice\n(Standard rates apply)',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -568,6 +598,97 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 16),
+                if (_usePremiumVoice) ...[
+                  const Text(
+                    'Premium Voice Configuration',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'These fields are used only for premium voice generation and are stored locally on this device.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildCredentialField(
+                    label: 'Gemini API Key',
+                    controller: _geminiApiKeyController,
+                    hintText: 'Enter your Gemini API key',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildCredentialField(
+                    label: 'ElevenLabs API Key',
+                    controller: _elevenLabsApiKeyController,
+                    hintText: 'Enter your ElevenLabs API key',
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'ElevenLabs Voice',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedElevenLabsVoiceId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    items: _elevenLabsStandardVoices
+                        .map(
+                          (voice) => DropdownMenuItem<String>(
+                            value: voice['id'],
+                            child: Text(
+                              voice['name']!,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedElevenLabsVoiceId = value);
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                ],
+                const Text(
+                  'Calendar Integration',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Used for Outlook meeting suppression and stored locally on this device.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildCredentialField(
+                  label: 'Microsoft Graph Access Token',
+                  controller: _microsoftGraphTokenController,
+                  hintText: 'OAuth access token for Outlook calendar',
+                ),
               ],
             ),
           ),
@@ -591,6 +712,37 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
         ],
       ),
       child: child,
+    );
+  }
+
+  Widget _buildCredentialField({
+    required String label,
+    required TextEditingController controller,
+    required String hintText,
+    bool isSecret = true,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          obscureText: isSecret,
+          autocorrect: false,
+          enableSuggestions: false,
+          keyboardType: TextInputType.visiblePassword,
+          decoration: InputDecoration(
+            hintText: hintText,
+            filled: true,
+            fillColor: Colors.grey[100],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

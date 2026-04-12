@@ -5,6 +5,7 @@ import '../model/improved_meditation_controller.dart';
 import '../model/improved_meditation_llm_service.dart';
 import '../model/meditation_voice_service.dart';
 import '../model/meditation_config.dart';
+import '../model/outlook_meeting_blocker.dart';
 import '../model/user_account.dart';
 import '../model/hr_sensor_interface.dart';
 import '../model/mood_entry.dart';
@@ -17,12 +18,14 @@ class LlmMeditationWidget extends StatefulWidget {
   final HrSensorInterface sensor;
   final VoidCallback? onReset;
   final void Function(String stressLevel)? onStressLevelChanged;
+  final bool stressDetectionEnabled;
 
   const LlmMeditationWidget({
     super.key,
     required this.sensor,
     this.onReset,
     this.onStressLevelChanged,
+    this.stressDetectionEnabled = true,
   });
 
   @override
@@ -52,6 +55,16 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   // Services owned by this widget
   MeditationVoiceService? _voiceService;
   ImprovedMeditationLLMService? _llmService;
+  OutlookMeetingBlocker? _meetingBlocker;
+
+  bool get isIdle => _currentState == MeditationState.idle;
+
+  void startMeditationNowFromExternal() {
+    if (_currentState != MeditationState.idle) {
+      return;
+    }
+    _startMeditation();
+  }
 
   @override
   void initState() {
@@ -119,12 +132,21 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       voiceGender: _userAccount!.voiceGender,
       meditationStyle: _userAccount!.meditationStyle,
       usePremiumVoice: _userAccount!.usePremiumVoice,
+      elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
+      elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
     );
     print(
         '✅ Voice service initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, style=${_userAccount!.meditationStyle}, premium=${_userAccount!.usePremiumVoice}');
 
     _llmService = ImprovedMeditationLLMService();
     _llmService!.setUserAccount(_userAccount!);
+
+    _meetingBlocker?.dispose();
+    _meetingBlocker = OutlookMeetingBlocker(
+      accessToken: _userAccount!.microsoftGraphAccessToken,
+    );
+    await _meetingBlocker!.refreshNow();
+    _meetingBlocker!.startMonitoring();
 
     // Create controller
     print(
@@ -186,69 +208,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           });
         }
       },
-      onStressDetected: (isStressed) {
-        // Check if we're in cooldown period (2 minutes after last meditation)
-        final now = DateTime.now();
-
-        // Check if meditation is scheduled - don't prompt before scheduled time
-        final beforeScheduledTime = _scheduledMeditationTime != null &&
-            now.isBefore(_scheduledMeditationTime!);
-
-        // Check if we're in cooldown period (2 minutes after last meditation)
-        final inCooldown = _lastMeditationCompletionTime != null &&
-            now.difference(_lastMeditationCompletionTime!).inMinutes < 2;
-
-        print('\n=== STRESS CALLBACK ===');
-        print('isStressed: $isStressed');
-        print('_stressDetected: $_stressDetected');
-        print('_currentState: $_currentState');
-        print('inCooldown: $inCooldown');
-        print('beforeScheduledTime: $beforeScheduledTime');
-        print('_lastMeditationCompletionTime: $_lastMeditationCompletionTime');
-        print('_scheduledMeditationTime: $_scheduledMeditationTime');
-        print('=====================\n');
-
-        // Always update stress state, but only auto-prompt if appropriate
-        if (isStressed &&
-            !_stressDetected &&
-            _currentState == MeditationState.idle) {
-          setState(() {
-            _stressDetected = true;
-          });
-          // Notify parent of stress level change
-          widget.onStressLevelChanged?.call('stressed');
-          print('✓ Set _stressDetected=true');
-          // Only show prompt if not in cooldown AND not before scheduled time
-          if (!inCooldown && !beforeScheduledTime) {
-            print('✓✓✓ SHOWING STRESS PROMPT!');
-            _showStressPrompt();
-          } else {
-            print(
-                '✗ Not showing prompt - inCooldown=$inCooldown, beforeScheduledTime=$beforeScheduledTime');
-          }
-        } else {
-          if (isStressed) {
-            print('✗ Stress detected but NOT showing prompt because:');
-            if (_stressDetected) print('  - _stressDetected is already true');
-            if (_currentState != MeditationState.idle) {
-              print('  - state is $_currentState (not idle)');
-            }
-          }
-
-          if (!isStressed && _stressDetected) {
-            print(
-                'Stress cleared - resetting _stressDetected only (keeping schedule)');
-            setState(() {
-              _stressDetected = false;
-              // DON'T clear _scheduledMeditationTime here!
-              // If user said "Later (30 min)", that schedule should persist
-              // even if stress goes away temporarily
-            });
-            // Notify parent that stress cleared
-            widget.onStressLevelChanged?.call('normal');
-          }
-        }
-      },
+      onStressDetected: _handleStressDetected,
     );
 
     setState(() {
@@ -262,6 +222,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
   @override
   void dispose() {
+    _meetingBlocker?.dispose();
     _controller?.dispose();
     _voiceService?.dispose();
     _llmService?.dispose();
@@ -303,12 +264,19 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         voiceGender: _userAccount!.voiceGender,
         meditationStyle: _userAccount!.meditationStyle,
         usePremiumVoice: _userAccount!.usePremiumVoice,
+        elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
+        elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
       );
       print(
           '✅ Voice service reinitialized after reset: premium=${_userAccount!.usePremiumVoice}');
 
       _llmService = ImprovedMeditationLLMService();
       _llmService!.setUserAccount(_userAccount!);
+
+      _meetingBlocker?.dispose();
+      _meetingBlocker = OutlookMeetingBlocker(
+        accessToken: _userAccount!.microsoftGraphAccessToken,
+      );
 
       // Create fresh controller
       _controller = ImprovedMeditationController(
@@ -364,37 +332,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
             });
           }
         },
-        onStressDetected: (isStressed) {
-          final now = DateTime.now();
-          final beforeScheduledTime = _scheduledMeditationTime != null &&
-              now.isBefore(_scheduledMeditationTime!);
-
-          if (beforeScheduledTime) {
-            return;
-          }
-
-          final inCooldown = _lastMeditationCompletionTime != null &&
-              now.difference(_lastMeditationCompletionTime!).inMinutes < 2;
-
-          if (inCooldown) {
-            return;
-          }
-
-          if (isStressed &&
-              !_stressDetected &&
-              _currentState == MeditationState.idle) {
-            setState(() {
-              _stressDetected = true;
-            });
-          }
-
-          if (!isStressed && _stressDetected) {
-            setState(() {
-              _stressDetected = false;
-              // DON'T clear _scheduledMeditationTime - keep the schedule!
-            });
-          }
-        },
+        onStressDetected: _handleStressDetected,
       );
 
       print('✅ Controller recreated successfully after reset');
@@ -425,6 +363,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // Dispose old services
     await _voiceService?.dispose();
     _llmService?.dispose();
+    _meetingBlocker?.dispose();
 
     // Initialize new services with updated account
     _voiceService = MeditationVoiceService();
@@ -432,12 +371,18 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       voiceGender: _userAccount!.voiceGender,
       meditationStyle: _userAccount!.meditationStyle,
       usePremiumVoice: _userAccount!.usePremiumVoice,
+      elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
+      elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
     );
     print(
         '✅ Voice service RE-initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, style=${_userAccount!.meditationStyle}, premium=${_userAccount!.usePremiumVoice}');
 
     _llmService = ImprovedMeditationLLMService();
     _llmService!.setUserAccount(_userAccount!);
+
+    _meetingBlocker = OutlookMeetingBlocker(
+      accessToken: _userAccount!.microsoftGraphAccessToken,
+    );
 
     // Create new controller with updated services
     _controller = ImprovedMeditationController(
@@ -1098,6 +1043,83 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       _scheduledMeditationTime = null;
     });
     _controller?.startSession();
+  }
+
+  void _handleStressDetected(bool isStressed) {
+    if (!widget.stressDetectionEnabled) {
+      if (_stressDetected) {
+        setState(() {
+          _stressDetected = false;
+        });
+      }
+      return;
+    }
+
+    final now = DateTime.now();
+    final inBusinessMeeting = _meetingBlocker?.isInMeeting ?? false;
+
+    if (inBusinessMeeting) {
+      if (_stressDetected) {
+        setState(() {
+          _stressDetected = false;
+        });
+        widget.onStressLevelChanged?.call('normal');
+      }
+      return;
+    }
+
+    final beforeScheduledTime = _scheduledMeditationTime != null &&
+        now.isBefore(_scheduledMeditationTime!);
+    final inCooldown = _lastMeditationCompletionTime != null &&
+        now.difference(_lastMeditationCompletionTime!).inMinutes < 2;
+
+    print('\n=== STRESS CALLBACK ===');
+    print('isStressed: $isStressed');
+    print('_stressDetected: $_stressDetected');
+    print('_currentState: $_currentState');
+    print('inCooldown: $inCooldown');
+    print('beforeScheduledTime: $beforeScheduledTime');
+    print('inBusinessMeeting: $inBusinessMeeting');
+    print('_lastMeditationCompletionTime: $_lastMeditationCompletionTime');
+    print('_scheduledMeditationTime: $_scheduledMeditationTime');
+    print('=====================\n');
+
+    if (isStressed &&
+        !_stressDetected &&
+        _currentState == MeditationState.idle) {
+      setState(() {
+        _stressDetected = true;
+      });
+      widget.onStressLevelChanged?.call('stressed');
+      print('✓ Set _stressDetected=true');
+      if (!inCooldown && !beforeScheduledTime) {
+        print('✓✓✓ SHOWING STRESS PROMPT!');
+        _showStressPrompt();
+      } else {
+        print(
+            '✗ Not showing prompt - inCooldown=$inCooldown, beforeScheduledTime=$beforeScheduledTime');
+      }
+    } else {
+      if (isStressed) {
+        print('✗ Stress detected but NOT showing prompt because:');
+        if (_stressDetected) print('  - _stressDetected is already true');
+        if (_currentState != MeditationState.idle) {
+          print('  - state is $_currentState (not idle)');
+        }
+      }
+
+      if (!isStressed && _stressDetected) {
+        print(
+            'Stress cleared - resetting _stressDetected only (keeping schedule)');
+        setState(() {
+          _stressDetected = false;
+          // DON'T clear _scheduledMeditationTime here!
+          // If user said "Later (30 min)", that schedule should persist
+          // even if stress goes away temporarily
+        });
+        widget.onStressLevelChanged?.call('normal');
+      }
+    }
   }
 
   void _pauseMeditation() {

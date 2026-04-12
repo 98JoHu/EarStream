@@ -350,9 +350,8 @@ class _OptionToggleTile extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: selected
-            ? accentColor.withValues(alpha: 0.06)
-            : Colors.transparent,
+        color:
+            selected ? accentColor.withValues(alpha: 0.06) : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: (selected ? accentColor : colorScheme.outlineVariant)

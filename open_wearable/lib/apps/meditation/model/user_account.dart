@@ -17,7 +17,11 @@ class UserAccount {
   String voiceGender; // 'male' or 'female'
   String meditationStyle; // Calm, energetic, etc.
   String preferredEnvironment; // Nature, ocean, etc.
-  bool usePremiumVoice; // Toggle for Google Cloud TTS ($$$)
+  bool usePremiumVoice; // Toggle for ElevenLabs TTS ($$$)
+  String geminiApiKey;
+  String elevenLabsApiKey;
+  String elevenLabsVoiceId;
+  String microsoftGraphAccessToken;
   List<String> stressTriggers;
   List<String> relaxationTechniques;
   String favoriteActivity;
@@ -38,6 +42,10 @@ class UserAccount {
     this.meditationStyle = 'calm and empathetic',
     this.preferredEnvironment = 'peaceful nature',
     this.usePremiumVoice = false, // Default to FREE voice
+    this.geminiApiKey = '',
+    this.elevenLabsApiKey = '',
+    this.elevenLabsVoiceId = '',
+    this.microsoftGraphAccessToken = '',
     this.stressTriggers = const [],
     this.relaxationTechniques = const [
       'deep breathing',
@@ -158,6 +166,10 @@ class UserAccount {
         'meditationStyle': meditationStyle,
         'preferredEnvironment': preferredEnvironment,
         'usePremiumVoice': usePremiumVoice,
+        'geminiApiKey': geminiApiKey,
+        'elevenLabsApiKey': elevenLabsApiKey,
+        'elevenLabsVoiceId': elevenLabsVoiceId,
+        'microsoftGraphAccessToken': microsoftGraphAccessToken,
         'stressTriggers': stressTriggers,
         'relaxationTechniques': relaxationTechniques,
         'favoriteActivity': favoriteActivity,
@@ -179,6 +191,10 @@ class UserAccount {
       meditationStyle: json['meditationStyle'] ?? 'calm and empathetic',
       preferredEnvironment: json['preferredEnvironment'] ?? 'peaceful nature',
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
+      geminiApiKey: json['geminiApiKey'] ?? '',
+      elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',
+      elevenLabsVoiceId: json['elevenLabsVoiceId'] ?? '',
+      microsoftGraphAccessToken: json['microsoftGraphAccessToken'] ?? '',
       stressTriggers: List<String>.from(json['stressTriggers'] ?? []),
       relaxationTechniques: List<String>.from(json['relaxationTechniques'] ??
           ['deep breathing', 'progressive relaxation']),

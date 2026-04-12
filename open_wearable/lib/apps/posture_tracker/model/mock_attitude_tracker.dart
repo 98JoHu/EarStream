@@ -16,9 +16,10 @@ class MockAttitudeTracker extends AttitudeTracker {
       : super() {
     _attitudeStream = Stream.periodic(Duration(milliseconds: 100), (count) {
       return Attitude(
-          roll: sin(count / 10) * pi / 4,
-          pitch: sin(count / 20) * pi / 4,
-          yaw: sin(count / 30) * pi / 4,);
+        roll: sin(count / 10) * pi / 4,
+        pitch: sin(count / 20) * pi / 4,
+        yaw: sin(count / 30) * pi / 4,
+      );
     });
     didChangeAvailability = didChangeAvailability ?? (_) {};
 

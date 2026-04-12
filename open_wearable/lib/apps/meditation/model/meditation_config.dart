@@ -22,11 +22,13 @@ class MeditationConfig {
     return key;
   }
 
-  static String get googleCloudTtsApiKey {
-    final key = _readEnv('GOOGLE_CLOUD_TTS_API_KEY');
+  static String get elevenLabsApiKey {
+    final key = _readEnv('ELEVENLABS_API_KEY') != 'NONE'
+        ? _readEnv('ELEVENLABS_API_KEY')
+        : _readEnv('ELEVEN_LABS_API_KEY');
     // Validate that it's not a placeholder
     if (key == 'NONE' ||
-        key == 'YOUR_GOOGLE_CLOUD_TTS_API_KEY_HERE' ||
+        key == 'YOUR_ELEVENLABS_API_KEY_HERE' ||
         key.contains('YOUR_') ||
         key.contains('your_')) {
       return 'NONE';
@@ -34,11 +36,42 @@ class MeditationConfig {
     return key;
   }
 
+  static String get elevenLabsVoiceId {
+    final voiceId = _readEnv('ELEVENLABS_VOICE_ID');
+    if (voiceId == 'NONE' ||
+        voiceId == 'YOUR_ELEVENLABS_VOICE_ID_HERE' ||
+        voiceId.contains('YOUR_') ||
+        voiceId.contains('your_')) {
+      // Bella (female) default voice ID
+      return 'EXAVITQu4vr4xnSDxMaL';
+    }
+    return voiceId;
+  }
+
+  // Backward-compatible alias to avoid touching all callsites at once.
+  static String get googleCloudTtsApiKey => elevenLabsApiKey;
+
+  static String get microsoftGraphAccessToken {
+    final token = _readEnv('MICROSOFT_GRAPH_ACCESS_TOKEN') != 'NONE'
+        ? _readEnv('MICROSOFT_GRAPH_ACCESS_TOKEN')
+        : _readEnv('MICROSOFT_OUTLOOK_ACCESS_TOKEN');
+    if (token == 'NONE' ||
+        token == 'YOUR_MICROSOFT_GRAPH_ACCESS_TOKEN_HERE' ||
+        token.contains('YOUR_') ||
+        token.contains('your_')) {
+      return 'NONE';
+    }
+    return token;
+  }
+
   // Debug helper to check if APIs are configured
   static bool get hasValidGeminiKey =>
       geminiApiKey != 'NONE' && geminiApiKey.startsWith('AIza');
   static bool get hasValidTtsKey =>
-      googleCloudTtsApiKey != 'NONE' && googleCloudTtsApiKey.startsWith('AIza');
+      elevenLabsApiKey != 'NONE' && elevenLabsApiKey.length > 20;
+  static bool get hasValidMicrosoftGraphToken =>
+      microsoftGraphAccessToken != 'NONE' &&
+      microsoftGraphAccessToken.length > 20;
 
   // Meditation Settings
   static const int targetWordCount = 280;

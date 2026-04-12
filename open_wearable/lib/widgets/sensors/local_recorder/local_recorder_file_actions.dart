@@ -16,7 +16,8 @@ Future<void> localRecorderShareFile(File file) async {
 
 Future<void> localRecorderShareFolder(Directory folder) async {
   final tempDir = await getTemporaryDirectory();
-  final zipPath = '${tempDir.path}/${folder.path.split(RegExp(r"[\\\\/]+")).last}.zip';
+  final zipPath =
+      '${tempDir.path}/${folder.path.split(RegExp(r"[\\\\/]+")).last}.zip';
   final zipFile = File(zipPath);
 
   await ZipFile.createFromDirectory(

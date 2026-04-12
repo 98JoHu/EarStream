@@ -22,7 +22,7 @@ final _logger = Logger();
 ///
 /// Uses Gemini 2.0 Flash with custom system prompts for meditation guidance.
 class ImprovedMeditationLLMService {
-  late final GenerativeModel _model;
+  late GenerativeModel _model;
   ChatSession? _chatSession;
   int _iterationCount = 0;
   UserAccount? _userAccount;
@@ -35,7 +35,7 @@ class ImprovedMeditationLLMService {
     try {
       _model = GenerativeModel(
         model: 'gemini-2.5-flash', // Using newest Gemini model (2026)
-        apiKey: MeditationConfig.geminiApiKey,
+        apiKey: _effectiveGeminiApiKey,
         systemInstruction: Content.system(_getSystemPrompt()),
         generationConfig: GenerationConfig(
           temperature: 0.9,
@@ -53,6 +53,24 @@ class ImprovedMeditationLLMService {
   void setUserAccount(UserAccount? account) {
     _userAccount = account;
     _logger.i('User account set: ${_userAccount?.name ?? "default"}');
+    _initializeModel();
+  }
+
+  String get _effectiveGeminiApiKey {
+    final accountKey = _sanitizeApiKey(_userAccount?.geminiApiKey);
+    return accountKey ?? MeditationConfig.geminiApiKey;
+  }
+
+  String? _sanitizeApiKey(String? key) {
+    final value = key?.trim();
+    if (value == null || value.isEmpty) return null;
+    if (value == 'NONE' ||
+        value == 'YOUR_GEMINI_API_KEY_HERE' ||
+        value.contains('YOUR_') ||
+        value.contains('your_')) {
+      return null;
+    }
+    return value;
   }
 
   /// Get style-specific guidance for LLM

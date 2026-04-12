@@ -9,7 +9,7 @@ A real-time, AI-powered meditation application that combines physiological sensi
 - **Personalized Baselines**: Demographic-informed stress thresholds (age, gender, fitness level)
 - **AI-Generated Content**: Dynamic meditation segments using Gemini 2.5 Flash
 - **Adaptive Session Control**: Automatic termination when relaxation targets are met
-- **Multi-Modal Feedback**: Premium (Google Cloud TTS) and free (Flutter TTS) voice synthesis
+- **Multi-Modal Feedback**: Premium (ElevenLabs TTS) and free (Flutter TTS) voice synthesis
 - **Session Analytics**: Weekly progress tracking with mood ratings
 - **Robust Fallback Mechanisms**: Offline operation with pre-defined scripts
 

@@ -207,7 +207,8 @@ class MsptdFastV2Detector {
     final toleranceSeconds = workingSampleFreqHz < 10
         ? 0.2
         : (workingSampleFreqHz < 20 ? 0.1 : 0.05);
-    final toleranceSamples = max(1, (originalSampleFreqHz * toleranceSeconds).round());
+    final toleranceSamples =
+        max(1, (originalSampleFreqHz * toleranceSeconds).round());
     final refined = <int>[];
 
     for (final candidate in candidates) {
@@ -217,7 +218,8 @@ class MsptdFastV2Detector {
       }
 
       final start = max(0, approxIndex - toleranceSamples);
-      final end = min(originalSignal.length - 1, approxIndex + toleranceSamples);
+      final end =
+          min(originalSignal.length - 1, approxIndex + toleranceSamples);
       var maxIndex = start;
       var maxValue = originalSignal[start];
       for (var i = start + 1; i <= end; i++) {

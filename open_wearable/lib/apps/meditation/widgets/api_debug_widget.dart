@@ -137,7 +137,7 @@ class _ApiDebugWidgetState extends State<ApiDebugWidget> {
   @override
   Widget build(BuildContext context) {
     final geminiKey = MeditationConfig.geminiApiKey;
-    final ttsKey = MeditationConfig.googleCloudTtsApiKey;
+    final ttsKey = MeditationConfig.elevenLabsApiKey;
 
     final hasValidGemini = MeditationConfig.hasValidGeminiKey;
     final hasValidTts = MeditationConfig.hasValidTtsKey;
@@ -212,9 +212,9 @@ class _ApiDebugWidgetState extends State<ApiDebugWidget> {
 
             const SizedBox(height: 20),
 
-            // Google Cloud TTS API Key Card
+            // ElevenLabs TTS API Key Card
             _buildApiCard(
-              title: '🎤 Google Cloud TTS API',
+              title: '🎤 ElevenLabs TTS API',
               keyValue: ttsKey,
               isValid: hasValidTts,
               description: 'Used for high-quality voice synthesis (optional)',
@@ -250,10 +250,12 @@ class _ApiDebugWidgetState extends State<ApiDebugWidget> {
                       '   /open_wearable/.env\n\n'
                       '2. Replace placeholder values with real API keys:\n'
                       '   GEMINI_API_KEY=AIzaSy...\n\n'
+                      '   ELEVENLABS_API_KEY=...\n'
+                      '   ELEVENLABS_VOICE_ID=EXAVITQu4vr4xnSDxMaL\n\n'
                       '3. Restart the app (hot reload won\'t work for .env changes)\n\n'
                       '4. Get free API keys from:\n'
                       '   • Gemini: https://aistudio.google.com/apikey\n'
-                      '   • Cloud TTS: https://console.cloud.google.com',
+                      '   • ElevenLabs: https://elevenlabs.io',
                       style: TextStyle(fontSize: 14, height: 1.5),
                     ),
                     const SizedBox(height: 16),

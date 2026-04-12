@@ -25,7 +25,10 @@ class PostureTrackerViewModel with ChangeNotifier {
 
     _attitudeTracker.listen((attitude) {
       _attitude = Attitude(
-          roll: attitude.roll, pitch: attitude.pitch, yaw: attitude.yaw,);
+        roll: attitude.roll,
+        pitch: attitude.pitch,
+        yaw: attitude.yaw,
+      );
       if (!_isDisposed) {
         notifyListeners();
       }

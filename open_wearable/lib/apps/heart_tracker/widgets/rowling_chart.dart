@@ -77,9 +77,8 @@ class _RollingChartState extends State<RollingChart> {
       return;
     }
 
-    final finiteRawData = _rawData
-        .where((point) => point.value.isFinite)
-        .toList(growable: false);
+    final finiteRawData =
+        _rawData.where((point) => point.value.isFinite).toList(growable: false);
     if (finiteRawData.length < 2) {
       _normalizedData = [];
       _seriesList = [];

@@ -153,8 +153,7 @@ class LocalRecorderRecordingCard extends StatelessWidget {
                         backgroundColor:
                             colorScheme.errorContainer.withValues(alpha: 0.45),
                       ),
-                      onPressed:
-                          isHandlingStopAction ? null : onStopAndTurnOff,
+                      onPressed: isHandlingStopAction ? null : onStopAndTurnOff,
                       icon: const Icon(Icons.power_settings_new),
                       label: const Text('Stop + Off'),
                     ),

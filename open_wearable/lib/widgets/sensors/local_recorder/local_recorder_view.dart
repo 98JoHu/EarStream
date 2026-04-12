@@ -311,7 +311,8 @@ class _LocalRecorderViewState extends State<LocalRecorderView> {
                     ),
                   ),
                   const SizedBox(height: SensorPageSpacing.sectionGap),
-                  Text("Recordings", style: Theme.of(context).textTheme.titleMedium),
+                  Text("Recordings",
+                      style: Theme.of(context).textTheme.titleMedium),
                   if (!hasRecordings) const LocalRecorderEmptyStateCard(),
                   if (latestRecording != null)
                     LocalRecorderRecordingFolderCard(
@@ -335,14 +336,14 @@ class _LocalRecorderViewState extends State<LocalRecorderView> {
                         });
                       },
                       onShareFolder: () => _shareFolder(latestRecording),
-                        onDeleteFolder: () async {
-                          final deleted =
-                              await _confirmAndDeleteRecording(latestRecording);
-                          if (!deleted) return;
-                          setState(() {
-                            _expandedFolders.remove(latestRecording.path);
-                          });
-                        },
+                      onDeleteFolder: () async {
+                        final deleted =
+                            await _confirmAndDeleteRecording(latestRecording);
+                        if (!deleted) return;
+                        setState(() {
+                          _expandedFolders.remove(latestRecording.path);
+                        });
+                      },
                       onShareFile: _shareFile,
                       onOpenFile: _openRecordingFile,
                       formatFileSize: localRecorderFormatFileSize,
