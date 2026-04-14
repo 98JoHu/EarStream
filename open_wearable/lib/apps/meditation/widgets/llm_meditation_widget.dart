@@ -693,10 +693,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                 onPressed: () => Navigator.pop(context, true),
                 icon: const Icon(Icons.insights),
                 label: const Text('View Analysis'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                ),
               ),
             ],
           ),
@@ -738,6 +734,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (_isInitializing || _controller == null) {
       return Center(
         child: Column(
@@ -767,7 +766,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                     _currentState == MeditationState.generatingContent)
                 ? Card(
                     key: const ValueKey('session_info_card'),
-                    color: Colors.indigo,
+                    color: colorScheme.primary,
                     child: Padding(
                       padding: const EdgeInsets.all(12.0),
                       child: Column(
@@ -779,17 +778,16 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                                 _currentState == MeditationState.paused
                                     ? Icons.pause
                                     : Icons.spa,
-                                color: Colors.white,
+                                color: colorScheme.onPrimary,
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 _currentState == MeditationState.paused
                                     ? 'Paused'
                                     : 'Meditating...',
-                                style: const TextStyle(
-                                  fontSize: 16,
+                                style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: colorScheme.onPrimary,
                                 ),
                               ),
                             ],
@@ -806,20 +804,23 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                               // Timer
                               Icon(Icons.timer,
                                   size: 16,
-                                  color: Colors.white.withValues(alpha: 0.9)),
+                                  color:
+                                      colorScheme.onPrimary.withValues(alpha: 0.9)),
                               const SizedBox(width: 4),
                               Text(
                                 _formatDuration(_sessionElapsed),
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: Colors.white.withValues(alpha: 0.9),
+                                  color: colorScheme.onPrimary
+                                      .withValues(alpha: 0.9),
                                 ),
                               ),
                               const SizedBox(width: 16),
                               // Segment counter
                               Icon(Icons.layers,
                                   size: 16,
-                                  color: Colors.white.withValues(alpha: 0.9)),
+                                  color:
+                                      colorScheme.onPrimary.withValues(alpha: 0.9)),
                               const SizedBox(width: 4),
                               Text(
                                 _currentSegment > 0
@@ -827,7 +828,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                                     : 'Preparing...',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: Colors.white.withValues(alpha: 0.9),
+                                  color: colorScheme.onPrimary
+                                      .withValues(alpha: 0.9),
                                 ),
                               ),
                             ],
@@ -903,8 +905,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                     icon: const Icon(Icons.stop),
                     label: const Text('Stop'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
+                      backgroundColor: colorScheme.errorContainer,
+                      foregroundColor: colorScheme.onErrorContainer,
                     ),
                   ),
                 ),
@@ -918,13 +920,15 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.shade100,
+                color: colorScheme.secondaryContainer.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange, width: 2),
+                border: Border.all(
+                  color: colorScheme.outline.withValues(alpha: 0.2),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber, color: Colors.orange[800]),
+                  Icon(Icons.info_outline_rounded, color: colorScheme.primary),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -932,15 +936,17 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                       children: [
                         Text(
                           'API Not Configured',
-                          style: TextStyle(
+                          style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: Colors.orange[900],
+                            color: colorScheme.onSecondaryContainer,
                           ),
                         ),
                         Text(
                           'Using fallback mode. Open API Keys from the menu to add a runtime key.',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.orange[800]),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSecondaryContainer
+                                .withValues(alpha: 0.85),
+                          ),
                         ),
                       ],
                     ),

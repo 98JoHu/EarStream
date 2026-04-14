@@ -14,6 +14,7 @@ import '../widgets/weekly_analysis_screen.dart';
 import '../model/user_account.dart';
 import 'earstream_settings_pages.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
+import 'package:open_wearable/widgets/sensors/sensor_page_spacing.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;
@@ -176,15 +177,18 @@ class _MeditationViewState extends State<MeditationView> {
     required MeditationAppMode selectedMode,
     required ValueChanged<MeditationAppMode> onModeSelected,
   }) {
+    final theme = Theme.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Meditation Mode',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -192,17 +196,17 @@ class _MeditationViewState extends State<MeditationView> {
               runSpacing: 8,
               children: [
                 ChoiceChip(
-                  label: const Text('Normal'),
+                  label: const Text('Biosignal-Adaptive'),
                   selected: selectedMode == MeditationAppMode.normal,
                   onSelected: (_) => onModeSelected(MeditationAppMode.normal),
                 ),
                 ChoiceChip(
-                  label: const Text('Timer'),
+                  label: const Text('Timed'),
                   selected: selectedMode == MeditationAppMode.timer,
                   onSelected: (_) => onModeSelected(MeditationAppMode.timer),
                 ),
                 ChoiceChip(
-                  label: const Text('Test'),
+                  label: const Text('Demo'),
                   selected: selectedMode == MeditationAppMode.test,
                   onSelected: (_) => onModeSelected(MeditationAppMode.test),
                 ),
@@ -220,16 +224,19 @@ class _MeditationViewState extends State<MeditationView> {
     required Future<void> Function() onPickTime,
     required VoidCallback onCancelSchedule,
   }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Card(
-      color: Colors.blue.shade50,
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Timer Mode',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              'Timed meditation',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -263,7 +270,7 @@ class _MeditationViewState extends State<MeditationView> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Icon(Icons.timer_outlined, color: Colors.blue.shade700),
+                  Icon(Icons.timer_outlined, color: colorScheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -287,20 +294,22 @@ class _MeditationViewState extends State<MeditationView> {
   Widget _buildTestModePlaceholder({
     required VoidCallback onRunPlaceholderAction,
   }) {
+    final theme = Theme.of(context);
     return Card(
-      color: Colors.amber.shade50,
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Test Mode',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              'Demo mode',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Placeholder mode: this area can later host sensor simulations, scripted scenarios, or QA workflows.',
+              'This area can host scripted scenarios, placeholder actions, or QA checks without showing the meditation playback UI.',
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
@@ -320,6 +329,9 @@ class _MeditationViewState extends State<MeditationView> {
     _initializeSensor();
   }
 
+  bool get _hasEarableSensorAvailable =>
+      widget.ppgSensor != null && widget.wearable != null;
+
   Future<void> _initializeSensor() async {
     // Don't reinitialize if sensor is already set
     // (e.g., after switching to earable sensor)
@@ -329,8 +341,16 @@ class _MeditationViewState extends State<MeditationView> {
       return;
     }
 
-    // Always start with mock sensor
-    // User can manually switch to earable by pressing "Use Earable" button
+    if (_hasEarableSensorAvailable) {
+      print('Starting with earable sensor');
+      final initialized = await _switchToEarableSensor(showFeedback: false);
+      if (initialized) {
+        return;
+      }
+      print('Earable init failed, falling back to mock sensor');
+    }
+
+    // Fallback to mock sensor when no earable is available.
     print('Starting with mock sensor');
     _sensor = MockHrSensor();
     _useMockSensor = true;
@@ -405,11 +425,13 @@ class _MeditationViewState extends State<MeditationView> {
     }
   }
 
-  Future<void> _switchToEarableSensor() async {
+  Future<bool> _switchToEarableSensor({bool showFeedback = true}) async {
     if (widget.ppgSensor == null) {
-      _showErrorDialog(
-          'No earable device connected. Please connect an OpenEarable device first.');
-      return;
+      if (showFeedback) {
+        _showErrorDialog(
+            'No earable device connected. Please connect an OpenEarable device first.');
+      }
+      return false;
     }
 
     print('Switching to earable sensor...');
@@ -439,8 +461,10 @@ class _MeditationViewState extends State<MeditationView> {
 
     // Create real sensor
     if (widget.wearable == null) {
-      _showErrorDialog('Internal Error: Wearable instance not found.');
-      return;
+      if (showFeedback) {
+        _showErrorDialog('Internal Error: Wearable instance not found.');
+      }
+      return false;
     }
 
     print('=== CREATING EARABLE SENSOR ===');
@@ -483,18 +507,23 @@ class _MeditationViewState extends State<MeditationView> {
     } catch (e, stackTrace) {
       print('❌ ERROR creating or starting EarableHrSensor: $e');
       print('Stack trace: $stackTrace');
-      _showErrorDialog('Failed to start earable sensor: $e');
-      return;
+      if (showFeedback) {
+        _showErrorDialog('Failed to start earable sensor: $e');
+      }
+      _sensor = null;
+      _useMockSensor = true;
+      return false;
     }
 
     // Show success message only if widget is still mounted
-    if (mounted) {
+    if (mounted && showFeedback) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _showSuccessSnackbar('Now using real earable data!');
         }
       });
     }
+    return true;
   }
 
   void _showErrorDialog(String message) {
@@ -713,6 +742,31 @@ class _MeditationViewState extends State<MeditationView> {
         'Reset to baseline (HR: 75, HRV: 120) and cleared all timers');
   }
 
+  Future<void> _resetSession() async {
+    print('Resetting meditation session...');
+    await _meditationWidgetKey.currentState?.resetMeditation();
+
+    setState(() {
+      _stressLevel = 'normal';
+      _clearTimerModeSchedule();
+      _hrvMeasurementCount = 0;
+      _measurementDurationSeconds = 0;
+      _hrvIsStable = _useMockSensor;
+    });
+
+    if (_sensor is MockHrSensor) {
+      (_sensor as MockHrSensor).reset();
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('meditation_snooze_until');
+    await prefs.remove('meditation_last_completion');
+    await prefs.remove('meditation_scheduled_time');
+
+    print('Session reset complete. _useMockSensor = $_useMockSensor');
+    _showSuccessSnackbar('Session reset and timers cleared.');
+  }
+
   String _getActivityDescription(ActivityLevel level) {
     // Basic description
     String desc;
@@ -740,11 +794,11 @@ class _MeditationViewState extends State<MeditationView> {
   String _getModeLabel(MeditationAppMode mode) {
     switch (mode) {
       case MeditationAppMode.normal:
-        return 'Normal';
+        return 'Biosignal-Adaptive';
       case MeditationAppMode.timer:
-        return 'Timer';
+        return 'Timed';
       case MeditationAppMode.test:
-        return 'Test';
+        return 'Demo';
     }
   }
 
@@ -754,48 +808,29 @@ class _MeditationViewState extends State<MeditationView> {
         return 'Stress-adaptive meditation is active and can respond to live biomarkers.';
       case MeditationAppMode.timer:
         return _timerModeScheduledTime == null
-            ? 'Stress prompts are muted. Schedule meditation starts from the Demo Mode page.'
+            ? 'Stress prompts are muted. Schedule meditation starts from the Meditation Mode page.'
             : 'Next timer meditation is scheduled for ${_formatScheduledTime(_timerModeScheduledTime!)}.';
       case MeditationAppMode.test:
-        return 'Meditation playback is hidden so the page can focus on QA and placeholder actions.';
+        return 'Meditation playback is hidden so the page can focus on demo and QA actions.';
     }
   }
 
   Widget _buildSelectedModeSummary() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Text.rich(
+        TextSpan(
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onSurface,
+          ),
           children: [
-            const Text(
-              'Demo Mode',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    _getModeLabel(_selectedMode),
-                    style: const TextStyle(
-                      color: Color(0xFF4F46E5),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _getModeDescription(_selectedMode),
-              style: TextStyle(color: Colors.grey[700], height: 1.4),
+            const TextSpan(text: 'Meditation Mode: '),
+            TextSpan(
+              text: _getModeLabel(_selectedMode),
+              style: TextStyle(color: colorScheme.primary),
             ),
           ],
         ),
@@ -846,11 +881,7 @@ class _MeditationViewState extends State<MeditationView> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ApiDebugWidget(
-          currentModeLabel: _getModeLabel(_selectedMode),
-          sensorSourceLabel: _useMockSensor ? 'Mock sensor' : 'Earable sensor',
-          scheduledMeditationTime: _timerModeScheduledTime,
-        ),
+        builder: (context) => const ApiDebugWidget(),
       ),
     );
   }
@@ -920,25 +951,11 @@ class _MeditationViewState extends State<MeditationView> {
 
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text('Demo Mode'),
-                  backgroundColor: const Color(0xFF6366F1),
-                  foregroundColor: Colors.white,
+                  title: const Text('Meditation Mode'),
                 ),
-                body: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFFF5F3FF),
-                        Color(0xFFEDE9FE),
-                        Color(0xFFDDD6FE),
-                      ],
-                    ),
-                  ),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
+                body: ListView(
+                  padding: SensorPageSpacing.pagePaddingWithBottomInset(context),
+                  children: [
                       _buildModeSelector(
                         selectedMode: localSelectedMode,
                         onModeSelected: changeMode,
@@ -967,8 +984,7 @@ class _MeditationViewState extends State<MeditationView> {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content:
-                                      Text('Test mode placeholder is active.'),
+                                  content: Text('Demo mode placeholder is active.'),
                                 ),
                               );
                             }
@@ -980,15 +996,16 @@ class _MeditationViewState extends State<MeditationView> {
                             padding: const EdgeInsets.all(16),
                             child: Text(
                               _getModeDescription(MeditationAppMode.normal),
-                              style: TextStyle(
-                                color: Colors.grey[700],
-                                height: 1.4,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    height: 1.4,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                             ),
                           ),
                         ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },
@@ -1067,9 +1084,7 @@ class _MeditationViewState extends State<MeditationView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meditation'),
-        backgroundColor: const Color(0xFF6366F1),
-        foregroundColor: Colors.white,
+        title: const Text('EarStreAM'),
       ),
       drawer: Drawer(
         child: SafeArea(
@@ -1077,36 +1092,37 @@ class _MeditationViewState extends State<MeditationView> {
             padding: EdgeInsets.zero,
             children: [
               DrawerHeader(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                  ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Text(
-                      'EarStream Menu',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Text(
+                      'EarStreAM',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Current mode: ${_getModeLabel(_selectedMode)}',
-                      style: const TextStyle(color: Colors.white),
+                      'Meditation Mode: ${_getModeLabel(_selectedMode)}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                          ),
                     ),
                   ],
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.tune),
-                title: const Text('Demo Mode'),
+                title: const Text('Meditation Mode'),
                 onTap: () => _closeDrawerAnd(_openDemoModePage),
               ),
               ListTile(
@@ -1157,28 +1173,21 @@ class _MeditationViewState extends State<MeditationView> {
           ),
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF5F3FF), Color(0xFFEDE9FE), Color(0xFFDDD6FE)],
-          ),
-        ),
-        child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight,
-                  ),
-                  child: IntrinsicHeight(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
+                ),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding:
+                        SensorPageSpacing.pagePaddingWithBottomInset(context),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                           _buildSelectedModeSummary(),
                           const SizedBox(height: 12),
 
@@ -1212,7 +1221,9 @@ class _MeditationViewState extends State<MeditationView> {
                                   _ensureMeditationCanStart,
                               stressDetectionEnabled:
                                   _selectedMode == MeditationAppMode.normal,
-                              onReset: _resetToBaseline,
+                              onReset: () {
+                                unawaited(_resetSession());
+                              },
                               onStressLevelChanged: (level) {
                                 if (mounted) {
                                   setState(() {
@@ -1224,7 +1235,30 @@ class _MeditationViewState extends State<MeditationView> {
 
                           const SizedBox(height: 16),
 
-                          // Development/Testing Controls (always visible for testing)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed:
+                                      _useMockSensor && _sensor is MockHrSensor
+                                          ? _simulateStress
+                                          : null,
+                                  child: const Text('Simulate Stress'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {
+                                    unawaited(_resetSession());
+                                  },
+                                  child: const Text('Reset'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          /*
+                          Legacy controls retained temporarily for rollback safety
                           Column(
                             children: [
                               SizedBox(
@@ -1340,14 +1374,14 @@ class _MeditationViewState extends State<MeditationView> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                        ],
-                      ),
+                          */
+                      ],
                     ),
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

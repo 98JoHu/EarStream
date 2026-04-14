@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:open_wearable/widgets/sensors/sensor_page_spacing.dart';
 
 import '../model/meditation_config.dart';
 import '../model/outlook_meeting_blocker.dart';
@@ -236,6 +237,7 @@ class _EarStreamAccountSectionPageState
     required String description,
     required Color color,
   }) {
+    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(14),
@@ -251,7 +253,9 @@ class _EarStreamAccountSectionPageState
             children: [
               Text(
                 title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const Spacer(),
               Text(
@@ -266,8 +270,8 @@ class _EarStreamAccountSectionPageState
           const SizedBox(height: 6),
           Text(
             description,
-            style: TextStyle(
-              color: Colors.grey[700],
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
               height: 1.4,
             ),
           ),
@@ -283,12 +287,15 @@ class _EarStreamAccountSectionPageState
     required bool isVisible,
     required VoidCallback onToggleVisibility,
   }) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 8),
         TextFormField(
@@ -299,12 +306,6 @@ class _EarStreamAccountSectionPageState
           keyboardType: TextInputType.visiblePassword,
           decoration: InputDecoration(
             hintText: hintText,
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
             suffixIcon: IconButton(
               tooltip: isVisible ? 'Hide value' : 'Show value',
               onPressed: onToggleVisibility,
@@ -319,20 +320,11 @@ class _EarStreamAccountSectionPageState
   }
 
   Widget _buildWhiteCard({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: child,
       ),
-      child: child,
     );
   }
 
@@ -342,24 +334,38 @@ class _EarStreamAccountSectionPageState
     required bool selected,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF6366F1) : Colors.grey[200],
+          color: selected
+              ? colorScheme.primary
+              : colorScheme.surface.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? colorScheme.primary
+                : colorScheme.outline.withValues(alpha: 0.2),
+          ),
         ),
         child: Column(
           children: [
-            Icon(icon, color: selected ? Colors.white : Colors.grey[700]),
+            Icon(
+              icon,
+              color:
+                  selected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : Colors.grey[700],
+                color:
+                    selected ? colorScheme.onPrimary : colorScheme.onSurface,
               ),
             ),
           ],
@@ -375,6 +381,8 @@ class _EarStreamAccountSectionPageState
     required IconData icon,
   }) {
     final selected = _fitnessLevel == value;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return GestureDetector(
       onTap: () => setState(() => _fitnessLevel = value),
@@ -383,11 +391,13 @@ class _EarStreamAccountSectionPageState
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF6366F1).withValues(alpha: 0.1)
-              : Colors.grey[50],
+              ? colorScheme.primaryContainer.withValues(alpha: 0.45)
+              : colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? const Color(0xFF6366F1) : Colors.grey[200]!,
+            color: selected
+                ? colorScheme.primary
+                : colorScheme.outline.withValues(alpha: 0.2),
             width: 2,
           ),
         ),
@@ -396,12 +406,16 @@ class _EarStreamAccountSectionPageState
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFF6366F1) : Colors.grey[200],
+                color: selected
+                    ? colorScheme.primary
+                    : colorScheme.surface.withValues(alpha: 0.92),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                color: selected ? Colors.white : Colors.grey[600],
+                color: selected
+                    ? colorScheme.onPrimary
+                    : colorScheme.onSurfaceVariant,
                 size: 24,
               ),
             ),
@@ -415,22 +429,23 @@ class _EarStreamAccountSectionPageState
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color:
-                          selected ? const Color(0xFF6366F1) : Colors.grey[800],
+                      color: selected
+                          ? colorScheme.primary
+                          : colorScheme.onSurface,
                     ),
                   ),
                   Text(
                     subtitle,
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey[600],
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
             if (selected)
-              const Icon(Icons.check_circle, color: Color(0xFF6366F1)),
+              Icon(Icons.check_circle, color: colorScheme.primary),
           ],
         ),
       ),
@@ -922,23 +937,13 @@ class _EarStreamAccountSectionPageState
     return Scaffold(
       appBar: AppBar(
         title: Text(_title),
-        backgroundColor: const Color(0xFF6366F1),
-        foregroundColor: Colors.white,
       ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
           child: ElevatedButton.icon(
             onPressed: _isSaving ? null : _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6366F1),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
             icon: _isSaving
                 ? const SizedBox(
                     width: 18,
@@ -953,33 +958,24 @@ class _EarStreamAccountSectionPageState
           ),
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFF5F3FF), Color(0xFFEDE9FE), Color(0xFFDDD6FE)],
-          ),
-        ),
-        child: SafeArea(
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    _subtitle,
-                    style: TextStyle(
-                      color: Colors.grey[800],
-                      height: 1.4,
-                    ),
-                  ),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: SensorPageSpacing.pagePaddingWithBottomInset(context),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.4,
+                      ),
                 ),
-                _buildSectionBody(),
-              ],
-            ),
+              ),
+              _buildSectionBody(),
+            ],
           ),
         ),
       ),

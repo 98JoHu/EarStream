@@ -174,7 +174,7 @@ final List<AppInfo> _apps = [
     // TODO: Change the supported devices
     supportedDevices: _heartSupportedDevices,
     accentColor: _appAccentColor,
-    title: "Meditation",
+    title: "EarStreAM",
     description: "Stress-adaptive meditation sessions",
     widget: SelectEarableView(
       // TODO: Change the supported devices
@@ -206,10 +206,10 @@ final List<AppInfo> _apps = [
           // Fallback if meditation view fails to load
           return PlatformScaffold(
             appBar: PlatformAppBar(
-              title: PlatformText("Meditation"),
+              title: PlatformText("EarStreAM"),
             ),
             body: Center(
-              child: PlatformText("Meditation app is loading... Error: $e"),
+              child: PlatformText("EarStreAM is loading... Error: $e"),
             ),
           );
         }
