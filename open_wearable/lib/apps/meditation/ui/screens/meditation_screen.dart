@@ -10,6 +10,7 @@ import '../../core/biosignals/sensors/mock_hr_sensor.dart';
 import '../../core/biosignals/sensors/earable_hr_sensor.dart';
 import '../../core/biosignals/sensors/hr_sensor_interface.dart';
 import '../../core/biosignals/activity_detector.dart';
+import '../../config/biosignal_config.dart';
 import '../components/biosignal_display/hr_hrv_display_new.dart';
 import '../components/meditation_session/llm_meditation_widget.dart';
 import '../components/debug/api_debug_widget.dart';
@@ -49,8 +50,8 @@ class _MeditationViewState extends State<MeditationView> {
 
   double _currentHr = 75.0;
   double _currentHrv = -1.0; // -1 means no data yet (RMSSD)
-  double _currentSdnn =
-      -1.0; // -1 means no data yet (SDNN - comparable to Apple Health)
+  List<HrDataPoint> _hrHistory = []; // HR values for the last 5 minutes
+  bool _hrIsStable = false; // Track if HR measurements have 30+ seconds of data
   bool _hrvIsStable = false; // Track if HRV measurements are reliable
   int _hrvMeasurementCount = 0; // Count HRV measurements received
   int _measurementDurationSeconds = 0; // Track how long we've been measuring
@@ -61,7 +62,7 @@ class _MeditationViewState extends State<MeditationView> {
   StreamSubscription<bool>? _connectionSubscription; // Monitor connection state
 
   String _stressLevel =
-      'normal'; // Track stress level: 'relaxed', 'normal', or 'stressed'
+      'relaxed'; // Track stress level: 'relaxed' or 'stressed'
 
   void _recreateMeditationWidgetKey() {
     _meditationWidgetKey = GlobalKey<LlmMeditationWidgetState>();
@@ -101,8 +102,9 @@ class _MeditationViewState extends State<MeditationView> {
       // Reset monitoring state
       _currentHr = 0.0;
       _currentHrv = -1.0;
-      _currentSdnn = -1.0;
-      _stressLevel = 'normal';
+      _hrHistory.clear();
+      _hrIsStable = false;
+      _stressLevel = 'relaxed';
       _hrvIsStable = false;
       _hrvMeasurementCount = 0;
     });
@@ -522,16 +524,30 @@ class _MeditationViewState extends State<MeditationView> {
     await _configurePpgSensor();
 
     // Get sample frequency from sensor configuration
-    double sampleFreq = 84.0; // Default to 84 Hz for PPG
+    // Target: 200 Hz for accurate HRV (research standard)
+    // Fallback: Use highest available if 200 Hz not supported
+    double sampleFreq = BiosignalConfig.ppgSamplingFrequency; // Target 200 Hz
+    bool found200Hz = false;
+    
     if (widget.sensorConfigProvider != null) {
       for (final config in widget.ppgSensor!.relatedConfigurations) {
         final value =
             widget.sensorConfigProvider!.getSelectedConfigurationValue(config);
         if (value is SensorFrequencyConfigurationValue) {
           sampleFreq = value.frequencyHz;
-          print('Using sample frequency: $sampleFreq Hz');
+          if (sampleFreq >= 200.0) {
+            found200Hz = true;
+            print('Using sample frequency: $sampleFreq Hz (≥200 Hz target achieved)');
+          } else {
+            print('Using sample frequency: $sampleFreq Hz (below 200 Hz target)');
+          }
           break;
         }
+      }
+      
+      if (!found200Hz) {
+        print('WARNING: 200 Hz PPG sampling not available. Using $sampleFreq Hz.');
+        print('HRV accuracy may be reduced. Recommend configuring sensor for ≥200 Hz.');
       }
     }
 
@@ -663,13 +679,26 @@ class _MeditationViewState extends State<MeditationView> {
     _hrSubscription = _sensor!.hrStream.listen((hr) {
       setState(() {
         _currentHr = hr;
+        
+        // Add to HR history with timestamp
+        final now = DateTime.now();
+        _hrHistory.add(HrDataPoint(timestamp: now, hr: hr));
+        
+        // Keep only last 5 minutes of data (300 seconds)
+        final cutoffTime = now.subtract(const Duration(seconds: 300));
+        _hrHistory.removeWhere((point) => point.timestamp.isBefore(cutoffTime));
+        
+        // HR becomes stable after 30 seconds of measurements
+        if (!_hrIsStable && _measurementDurationSeconds >= 30) {
+          _hrIsStable = true;
+          print('✅ HR measurements now stable (30+ seconds of data)');
+        }
       });
     });
 
     _hrvSubscription = _sensor!.hrvStream.listen((hrv) {
       setState(() {
         _currentHrv = hrv['HRV_RMSSD'] ?? 40.0;
-        _currentSdnn = hrv['HRV_SDNN'] ?? 40.0;
         _hrvMeasurementCount++;
 
         // HRV becomes stable after receiving 3 measurements
@@ -679,13 +708,13 @@ class _MeditationViewState extends State<MeditationView> {
           print(
               '✅ HRV measurements now stable ($_hrvMeasurementCount measurements received)');
           print(
-              '   RMSSD: ${_currentHrv.toStringAsFixed(1)} ms, SDNN: ${_currentSdnn >= 0 ? _currentSdnn.toStringAsFixed(1) : "pending"} ms');
+              '   RMSSD: ${_currentHrv.toStringAsFixed(1)} ms');
         }
 
         // Log HRV updates for debugging
         if (_hrvMeasurementCount % 5 == 0) {
           print(
-              '📊 HRV Update #$_hrvMeasurementCount: RMSSD=${_currentHrv.toStringAsFixed(1)}ms, SDNN=${_currentSdnn >= 0 ? _currentSdnn.toStringAsFixed(1) : "pending"}ms, stable=$_hrvIsStable');
+              '📊 HRV Update #$_hrvMeasurementCount: RMSSD=${_currentHrv.toStringAsFixed(1)}ms, stable=$_hrvIsStable');
         }
       });
     });
@@ -698,7 +727,7 @@ class _MeditationViewState extends State<MeditationView> {
         setState(() {
           _currentHr = 0.0;
           _currentHrv = -1.0;
-          _currentSdnn = -1.0;
+          _hrHistory.clear();
           // _activityLevel cannot be set here as it's pulled from sensor directly
         });
 
@@ -742,7 +771,7 @@ class _MeditationViewState extends State<MeditationView> {
 
       // Reset stress level display immediately
       setState(() {
-        _stressLevel = 'normal';
+        _stressLevel = 'relaxed';
       });
 
       // Wait for values to normalize - 3 seconds should be enough
@@ -775,7 +804,7 @@ class _MeditationViewState extends State<MeditationView> {
 
     // Update stress level display immediately
     setState(() {
-      _stressLevel = 'normal';
+      _stressLevel = 'relaxed';
       // Reset key to force full widget rebuild and clear state (schedule/detection flags)
       _recreateMeditationWidgetKey();
       _clearTimerModeSchedule();
@@ -823,7 +852,7 @@ class _MeditationViewState extends State<MeditationView> {
     await _meditationWidgetKey.currentState?.resetMeditation();
 
     setState(() {
-      _stressLevel = 'normal';
+      _stressLevel = 'relaxed';
       _clearTimerModeSchedule();
       _hrvMeasurementCount = 0;
       _measurementDurationSeconds = 0;
@@ -1384,7 +1413,8 @@ class _MeditationViewState extends State<MeditationView> {
                           HrHrvDisplayNew(
                             hr: _currentHr,
                             hrv: _currentHrv,
-                            sdnn: _currentSdnn,
+                            hrHistory: _hrHistory,
+                            isHrStable: _hrIsStable,
                             stressLevel: _stressLevel,
                             isHrvStable: _hrvIsStable,
                             measurementDurationSeconds:

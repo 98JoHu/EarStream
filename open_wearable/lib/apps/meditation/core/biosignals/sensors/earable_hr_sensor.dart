@@ -7,6 +7,7 @@ import 'hr_sensor_interface.dart';
 import '../ppg_filter_meditation.dart';
 import '../hrv_calculator.dart';
 import '../activity_detector.dart';
+import '../../../config/biosignal_config.dart';
 
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
@@ -41,11 +42,13 @@ class EarableHrSensor implements HrSensorInterface {
   final ActivityDetector activityDetector = ActivityDetector();
 
   final List<double> _rrIntervals = [];
-  final int _maxRrIntervals = 50;
-  final int _minRrIntervalsForStableHrv = 10;
-  final int _minRrIntervalsForSdnn = 30;
-  final int _maxLongTermRrIntervals = 300;
-  final List<double> _longTermRrIntervals = [];
+  // RMSSD calculation window: 5 minutes (~300-400 beats depending on HR)
+  final int _maxRrIntervals = BiosignalConfig.maxShortTermRrIntervals; // 400 beats
+  final int _minRrIntervalsForStableHrv = BiosignalConfig.minRrIntervalsForInitialRmssd; // 10 beats
+  
+  // Track measurement duration for RMSSD stability
+  DateTime? _measurementStartTime;
+  bool _rmssdIsStable = false;
 
   // History for charts
   final List<double> _hrHistory = [];
@@ -59,7 +62,7 @@ class EarableHrSensor implements HrSensorInterface {
   @override
   Stream<double> get hrStream => _hrController.stream;
 
-  /// Stream of HRV metrics (SDNN, RMSSD, pNN50)
+  /// Stream of HRV metrics (RMSSD)
   @override
   Stream<Map<String, double>> get hrvStream => _hrvController.stream;
 
@@ -228,17 +231,12 @@ class EarableHrSensor implements HrSensorInterface {
             ' RR INTERVAL STREAM STARTED! Received ${rrIntervals.length} intervals',
           );
           rrStreamStarted = true;
+          // Mark measurement start time for RMSSD stability tracking
+          _measurementStartTime = DateTime.now();
         }
 
-        // Add to short-term buffer for RMSSD
+        // Add to short-term buffer for RMSSD (5-minute window)
         _rrIntervals.addAll(rrIntervals);
-
-        // Add to long-term buffer for SDNN (keep max 5 minutes)
-        _longTermRrIntervals.addAll(rrIntervals);
-        if (_longTermRrIntervals.length > _maxLongTermRrIntervals) {
-          final excess = _longTermRrIntervals.length - _maxLongTermRrIntervals;
-          _longTermRrIntervals.removeRange(0, excess);
-        }
 
         // Keep only the last N intervals in short-term buffer (efficient approach)
         if (_rrIntervals.length > _maxRrIntervals) {
@@ -247,14 +245,32 @@ class EarableHrSensor implements HrSensorInterface {
           _rrIntervals.removeRange(0, excess);
         }
 
-        // Wait for stable HRV measurements
+        // Check RMSSD stability based on measurement duration
+        // Calculate initial RMSSD after 10 beats, but mark stable only after 1 minute
         if (_rrIntervals.length >= _minRrIntervalsForStableHrv) {
-          if (!_hrvIsStable) {
-            _hrvIsStable = true;
+          // Check if we've been measuring long enough (1 minute minimum)
+          final measurementDuration = _measurementStartTime != null
+              ? DateTime.now().difference(_measurementStartTime!)
+              : Duration.zero;
+          
+          final wasStable = _rmssdIsStable;
+          _rmssdIsStable = BiosignalConfig.isRmssdStable(measurementDuration);
+          
+          if (_rmssdIsStable && !wasStable) {
             _logger.i(
-              'HRV measurements now stable (${_rrIntervals.length} intervals collected)',
+              'RMSSD now STABLE after ${measurementDuration.inSeconds}s (${_rrIntervals.length} intervals).',
             );
+            _logger.i(
+              '   Stress detection now reliable. Early RMSSD values were preliminary.',
+            );
+          } else if (!_rmssdIsStable && _rrIntervals.length >= _minRrIntervalsForStableHrv) {
+            if (_rrIntervals.length % 20 == 0) { // Log every 20 intervals to avoid spam
+              _logger.d(
+                'Collecting RR intervals for STABLE HRV (${measurementDuration.inSeconds}s / ${BiosignalConfig.rmssdMinimumStableTime.inSeconds}s)',
+              );
+            }
           }
+          
           _calculateAndEmitHrv();
         } else {
           _logger.d(
@@ -293,30 +309,12 @@ class EarableHrSensor implements HrSensorInterface {
     // Calculate RMSSD (always available with short-term data)
     final hrvMetrics = _hrvCalculator.computeTimeHrv(cleanedRR);
 
-    // Calculate SDNN if we have enough long-term data (60+ seconds)
-    double? sdnnValue;
-    if (_longTermRrIntervals.length >= _minRrIntervalsForSdnn) {
-      final cleanedLongTerm = _filterArtifacts(_longTermRrIntervals);
-      if (cleanedLongTerm.length >= _minRrIntervalsForSdnn) {
-        final longTermMetrics = _hrvCalculator.computeTimeHrv(cleanedLongTerm);
-        sdnnValue = longTermMetrics['HRV_SDNN'];
-        _logger.d(
-          'SDNN calculated from ${cleanedLongTerm.length} intervals (${(_longTermRrIntervals.length).toStringAsFixed(0)}s): ${sdnnValue?.toStringAsFixed(1)}ms',
-        );
-      }
-    } else {
-      _logger.d(
-        'SDNN pending: ${_longTermRrIntervals.length}/$_minRrIntervalsForSdnn intervals (~${_longTermRrIntervals.length}s / need 60s)',
-      );
-    }
-
-    // Emit HRV metrics with SDNN only if available
+    // Emit HRV metrics
+    // IMPORTANT: RMSSD is used for stress detection
     final metricsToEmit = Map<String, double>.from(hrvMetrics);
-    if (sdnnValue != null && sdnnValue.isFinite) {
-      metricsToEmit['HRV_SDNN'] = sdnnValue;
-    } else {
-      metricsToEmit['HRV_SDNN'] = -1.0; // Signal that SDNN is not yet available
-    }
+    
+    // Add RMSSD stability flag (0 = unstable, 1 = stable after 1 minute)
+    metricsToEmit['RMSSD_Stable'] = _rmssdIsStable ? 1.0 : 0.0;
 
     if (hrvMetrics['HRV_RMSSD']!.isFinite) {
       _hrvController.add(metricsToEmit);
@@ -331,7 +329,6 @@ class EarableHrSensor implements HrSensorInterface {
       _logger.d(
           'HRV calculated from ${cleanedRR.length} clean RR intervals ($artifactsRemoved artifacts removed): '
           'RMSSD=${hrvMetrics['HRV_RMSSD']?.toStringAsFixed(1)}ms, '
-          'SDNN=${sdnnValue?.toStringAsFixed(1) ?? "pending"}ms, '
           'Mean=${hrvMetrics['HRV_MEAN']?.toStringAsFixed(1)}ms');
 
       // DEBUG: Print buffer state to verify rotation
@@ -342,24 +339,38 @@ class EarableHrSensor implements HrSensorInterface {
     }
   }
 
-  /// Filter artifacts from RR intervals
-  /// Removes physiologically impossible values and statistical outliers
+  /// Filter artifacts from RR intervals using three-stage validation
+  ///
+  /// Stage 1: Physiological plausibility (30-200 BPM = 300-2000ms)
+  /// Stage 2: Successive difference check (<300ms between beats prevents motion artifacts)
+  /// Stage 3: Statistical outlier removal (>25% deviation from median)
+  ///
+  /// See BiosignalConfig for detailed threshold documentation
   List<double> _filterArtifacts(List<double> rrIntervals) {
-    // Step 1: Remove physiologically impossible values
-    // Normal HR range: 30-200 BPM → RR range: 300-2000ms
-    var filtered = rrIntervals.where((rr) => rr >= 300 && rr <= 2000).toList();
-
-    if (filtered.length < 5) {
-      return filtered; // Need at least 5 values for statistics
+    if (rrIntervals.length < BiosignalConfig.minRrIntervalsForOutlierRemoval) {
+      return rrIntervals; // Need at least 5 values for statistics
     }
 
-    // Step 2: Calculate median
+    // STAGE 1: Remove physiologically impossible values
+    // Normal HR range: 30-200 BPM → RR range: 300-2000ms
+    var filtered = rrIntervals.where((rr) =>
+        rr >= BiosignalConfig.minPhysiologicalRrInterval &&
+        rr <= BiosignalConfig.maxPhysiologicalRrInterval).toList();
+
+    if (filtered.length < BiosignalConfig.minRrIntervalsForOutlierRemoval) {
+      return filtered; // Too many removed, can't continue filtering
+    }
+
+    // STAGE 2: Check successive differences (optional - can be done before this function)
+    // This is handled in PPG filter peak detection with minPeakDistanceMs
+
+    // STAGE 3: Remove statistical outliers based on median deviation
     final sorted = List<double>.from(filtered)..sort();
     final median = sorted[sorted.length ~/ 2];
 
-    // Step 3: Remove statistical outliers (>25% deviation from median)
-    // Relaxed from 20% to avoid rejecting too many valid beats during initial reading
-    final threshold = median * 0.25;
+    // Remove outliers: values deviating >25% from median
+    // Relaxed from 20% to avoid rejecting valid beats during HR changes
+    final threshold = median * BiosignalConfig.outlierDeviationThreshold;
     filtered =
         filtered.where((rr) => (rr - median).abs() <= threshold).toList();
 

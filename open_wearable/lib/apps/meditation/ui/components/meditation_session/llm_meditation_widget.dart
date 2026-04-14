@@ -995,7 +995,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         setState(() {
           _stressDetected = false;
         });
-        widget.onStressLevelChanged?.call('normal');
+        widget.onStressLevelChanged?.call('relaxed');
       }
       return;
     }
@@ -1049,7 +1049,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           // If user said "Later (30 min)", that schedule should persist
           // even if stress goes away temporarily
         });
-        widget.onStressLevelChanged?.call('normal');
+        widget.onStressLevelChanged?.call('relaxed');
       }
     }
   }
