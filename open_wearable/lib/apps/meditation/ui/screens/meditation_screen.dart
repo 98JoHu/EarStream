@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/apps/meditation/ui/shared/earstream_style.dart';
@@ -1276,8 +1275,8 @@ class _MeditationViewState extends State<MeditationView> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       padding: const EdgeInsets.all(8),
-                      child: SvgPicture.asset(
-                        'lib/apps/meditation/assets/images/earstream_logo.svg',
+                      child: Image.asset(
+                        'lib/apps/meditation/assets/earstream_logo.png',
                         fit: BoxFit.contain,
                       ),
                     ),
