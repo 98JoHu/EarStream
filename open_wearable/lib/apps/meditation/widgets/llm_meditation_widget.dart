@@ -9,7 +9,6 @@ import '../model/outlook_meeting_blocker.dart';
 import '../model/user_account.dart';
 import '../model/hr_sensor_interface.dart';
 import '../model/mood_entry.dart';
-import '../widgets/user_onboarding_screen.dart';
 import '../widgets/weekly_analysis_screen.dart';
 import 'breathing_animation.dart';
 
@@ -17,6 +16,7 @@ import 'breathing_animation.dart';
 class LlmMeditationWidget extends StatefulWidget {
   final HrSensorInterface sensor;
   final VoidCallback? onReset;
+  final Future<bool> Function()? onBeforeStartMeditation;
   final void Function(String stressLevel)? onStressLevelChanged;
   final bool stressDetectionEnabled;
 
@@ -24,6 +24,7 @@ class LlmMeditationWidget extends StatefulWidget {
     super.key,
     required this.sensor,
     this.onReset,
+    this.onBeforeStartMeditation,
     this.onStressLevelChanged,
     this.stressDetectionEnabled = true,
   });
@@ -58,12 +59,19 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   OutlookMeetingBlocker? _meetingBlocker;
 
   bool get isIdle => _currentState == MeditationState.idle;
-
-  void startMeditationNowFromExternal() {
-    if (_currentState != MeditationState.idle) {
-      return;
+  bool get _hasConfiguredGeminiKey {
+    final accountKey = _userAccount?.geminiApiKey.trim() ?? '';
+    if (accountKey.startsWith('AIza')) {
+      return true;
     }
-    _startMeditation();
+    return MeditationConfig.hasValidGeminiKey;
+  }
+
+  Future<bool> startMeditationNowFromExternal() async {
+    if (_currentState != MeditationState.idle) {
+      return false;
+    }
+    return _attemptMeditationStart();
   }
 
   @override
@@ -100,31 +108,12 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     print(
         '🔍 LOADED ACCOUNT: name="${account.name}", voice=${account.voiceGender}, style=${account.meditationStyle}');
 
-    if (!account.isSetup && mounted) {
-      // Show onboarding
-      final newAccount = await Navigator.push<UserAccount>(
-        context,
-        MaterialPageRoute(builder: (context) => UserOnboardingScreen()),
-      );
-
-      if (newAccount != null) {
-        setState(() {
-          _userAccount = newAccount;
-        });
-      } else {
-        // User cancelled, use default
-        setState(() {
-          _userAccount = account;
-        });
-      }
-    } else {
-      setState(() {
-        _userAccount = account;
-        _currentSegment = 0; // Reset segment UI
-        _sessionElapsed = Duration.zero; // Reset timer UI
-        _stressDetected = false; // Reset stress flag
-      });
-    }
+    setState(() {
+      _userAccount = account;
+      _currentSegment = 0;
+      _sessionElapsed = Duration.zero;
+      _stressDetected = false;
+    });
 
     // Initialize services
     _voiceService = MeditationVoiceService();
@@ -277,6 +266,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       _meetingBlocker = OutlookMeetingBlocker(
         accessToken: _userAccount!.microsoftGraphAccessToken,
       );
+      await _meetingBlocker!.refreshNow();
+      _meetingBlocker!.startMonitoring();
 
       // Create fresh controller
       _controller = ImprovedMeditationController(
@@ -383,6 +374,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     _meetingBlocker = OutlookMeetingBlocker(
       accessToken: _userAccount!.microsoftGraphAccessToken,
     );
+    await _meetingBlocker!.refreshNow();
+    _meetingBlocker!.startMonitoring();
 
     // Create new controller with updated services
     _controller = ImprovedMeditationController(
@@ -436,54 +429,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           });
         }
       },
-      onStressDetected: (isStressed) {
-        final now = DateTime.now();
-        final beforeScheduledTime = _scheduledMeditationTime != null &&
-            now.isBefore(_scheduledMeditationTime!);
-        final inCooldown = _lastMeditationCompletionTime != null &&
-            now.difference(_lastMeditationCompletionTime!).inMinutes < 2;
-
-        print('\n=== STRESS CALLBACK ===');
-        print('isStressed: $isStressed');
-        print('_stressDetected: $_stressDetected');
-        print('_currentState: $_currentState');
-        print('inCooldown: $inCooldown');
-        print('beforeScheduledTime: $beforeScheduledTime');
-        print('=====================\n');
-
-        if (isStressed &&
-            !_stressDetected &&
-            _currentState == MeditationState.idle) {
-          setState(() {
-            _stressDetected = true;
-          });
-          print('✓ Set _stressDetected=true');
-          if (!inCooldown && !beforeScheduledTime) {
-            print('✓✓✓ SHOWING STRESS PROMPT!');
-            _showStressPrompt();
-          } else {
-            print(
-                '✗ Not showing prompt - inCooldown=$inCooldown, beforeScheduledTime=$beforeScheduledTime');
-          }
-        } else {
-          if (isStressed) {
-            print('✗ Stress detected but NOT showing prompt because:');
-            if (_stressDetected) print('  - _stressDetected is already true');
-            if (_currentState != MeditationState.idle) {
-              print('  - state is $_currentState (not idle)');
-            }
-          }
-
-          if (!isStressed && _stressDetected) {
-            print(
-                'Stress cleared - resetting _stressDetected only (keeping schedule)');
-            setState(() {
-              _stressDetected = false;
-              // DON'T clear _scheduledMeditationTime - keep the schedule!
-            });
-          }
-        }
-      },
+      onStressDetected: _handleStressDetected,
     );
 
     setState(() {
@@ -550,9 +496,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
             child: const Text('Later (10 min)'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              _startMeditation();
+              await _attemptMeditationStart();
             },
             child: const Text('Yes, Start Now'),
           ),
@@ -967,7 +913,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
           // API Warning Banner (if APIs not configured)
           if (_currentState == MeditationState.idle &&
-              !MeditationConfig.hasValidGeminiKey)
+              !_hasConfiguredGeminiKey)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
@@ -992,7 +938,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                           ),
                         ),
                         Text(
-                          'Using fallback mode. Tap "Check API Keys" to fix.',
+                          'Using fallback mode. Open API Keys from the menu to add a runtime key.',
                           style: TextStyle(
                               fontSize: 12, color: Colors.orange[800]),
                         ),
@@ -1003,38 +949,18 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
               ),
             ),
 
-          // Weekly Analysis Button (when idle or completed)
-          if (_currentState == MeditationState.idle ||
-              _currentState == MeditationState.completed)
-            Column(
-              children: [
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const WeeklyAnalysisScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.insights),
-                  label: const Text('View Weekly Analysis'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
         ],
       ),
     );
+  }
+
+  Future<bool> _attemptMeditationStart() async {
+    final canStart = await widget.onBeforeStartMeditation?.call() ?? true;
+    if (!mounted || !canStart || _currentState != MeditationState.idle) {
+      return false;
+    }
+    _startMeditation();
+    return true;
   }
 
   void _startMeditation() {

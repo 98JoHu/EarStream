@@ -9,8 +9,10 @@ import '../model/hr_sensor_interface.dart';
 import '../model/activity_detector.dart';
 import '../widgets/hr_hrv_display_new.dart';
 import '../widgets/llm_meditation_widget.dart';
+import '../widgets/api_debug_widget.dart';
+import '../widgets/weekly_analysis_screen.dart';
 import '../model/user_account.dart';
-import '../widgets/user_onboarding_screen.dart';
+import 'earstream_settings_pages.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
 class MeditationView extends StatefulWidget {
@@ -80,19 +82,22 @@ class _MeditationViewState extends State<MeditationView> {
     _timerModeScheduledTime = null;
   }
 
-  void _scheduleTimerModeAfter(Duration delay) {
+  Future<DateTime?> _scheduleTimerModeAfter(Duration delay) async {
     final scheduled = DateTime.now().add(delay);
-    _scheduleTimerModeAt(scheduled, description: 'in ${delay.inMinutes} min');
+    return _scheduleTimerModeAt(
+      scheduled,
+      description: 'in ${delay.inMinutes} min',
+    );
   }
 
-  Future<void> _pickAndScheduleTimerModeTime() async {
+  Future<DateTime?> _pickAndScheduleTimerModeTime() async {
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
 
     if (time == null || !mounted) {
-      return;
+      return null;
     }
 
     final now = DateTime.now();
@@ -108,19 +113,19 @@ class _MeditationViewState extends State<MeditationView> {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
-    _scheduleTimerModeAt(
+    return _scheduleTimerModeAt(
       scheduled,
       description: 'at ${time.format(context)}',
     );
   }
 
-  void _scheduleTimerModeAt(DateTime scheduledTime,
+  DateTime? _scheduleTimerModeAt(DateTime scheduledTime,
       {required String description}) {
     final now = DateTime.now();
     final delay = scheduledTime.difference(now);
     if (delay <= Duration.zero) {
       _showErrorDialog('Scheduled time must be in the future.');
-      return;
+      return null;
     }
 
     _clearTimerModeSchedule();
@@ -128,7 +133,7 @@ class _MeditationViewState extends State<MeditationView> {
       _timerModeScheduledTime = scheduledTime;
     });
 
-    _timerModeTimer = Timer(delay, () {
+    _timerModeTimer = Timer(delay, () async {
       if (!mounted) {
         return;
       }
@@ -149,11 +154,12 @@ class _MeditationViewState extends State<MeditationView> {
         return;
       }
 
-      meditationState.startMeditationNowFromExternal();
-      _showSuccessSnackbar('Timer meditation started ($description).');
+      final started = await meditationState.startMeditationNowFromExternal();
+      if (started && mounted) {
+        _showSuccessSnackbar('Timer meditation started ($description).');
+      }
     });
-
-    _showSuccessSnackbar('Timer mode meditation scheduled $description.');
+    return scheduledTime;
   }
 
   String _formatScheduledTime(DateTime scheduledTime) {
@@ -166,7 +172,10 @@ class _MeditationViewState extends State<MeditationView> {
     return isToday ? 'Today $hour:$minute' : 'Tomorrow $hour:$minute';
   }
 
-  Widget _buildModeSelector() {
+  Widget _buildModeSelector({
+    required MeditationAppMode selectedMode,
+    required ValueChanged<MeditationAppMode> onModeSelected,
+  }) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -184,18 +193,18 @@ class _MeditationViewState extends State<MeditationView> {
               children: [
                 ChoiceChip(
                   label: const Text('Normal'),
-                  selected: _selectedMode == MeditationAppMode.normal,
-                  onSelected: (_) => _setMode(MeditationAppMode.normal),
+                  selected: selectedMode == MeditationAppMode.normal,
+                  onSelected: (_) => onModeSelected(MeditationAppMode.normal),
                 ),
                 ChoiceChip(
                   label: const Text('Timer'),
-                  selected: _selectedMode == MeditationAppMode.timer,
-                  onSelected: (_) => _setMode(MeditationAppMode.timer),
+                  selected: selectedMode == MeditationAppMode.timer,
+                  onSelected: (_) => onModeSelected(MeditationAppMode.timer),
                 ),
                 ChoiceChip(
                   label: const Text('Test'),
-                  selected: _selectedMode == MeditationAppMode.test,
-                  onSelected: (_) => _setMode(MeditationAppMode.test),
+                  selected: selectedMode == MeditationAppMode.test,
+                  onSelected: (_) => onModeSelected(MeditationAppMode.test),
                 ),
               ],
             ),
@@ -205,7 +214,12 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
-  Widget _buildTimerModeCard() {
+  Widget _buildTimerModeCard({
+    required DateTime? scheduledTime,
+    required Future<void> Function(Duration delay) onScheduleAfter,
+    required Future<void> Function() onPickTime,
+    required VoidCallback onCancelSchedule,
+  }) {
     return Card(
       color: Colors.blue.shade50,
       child: Padding(
@@ -227,28 +241,25 @@ class _MeditationViewState extends State<MeditationView> {
               runSpacing: 8,
               children: [
                 OutlinedButton(
-                  onPressed: () =>
-                      _scheduleTimerModeAfter(const Duration(minutes: 5)),
+                  onPressed: () => onScheduleAfter(const Duration(minutes: 5)),
                   child: const Text('After 5 min'),
                 ),
                 OutlinedButton(
-                  onPressed: () =>
-                      _scheduleTimerModeAfter(const Duration(minutes: 10)),
+                  onPressed: () => onScheduleAfter(const Duration(minutes: 10)),
                   child: const Text('After 10 min'),
                 ),
                 OutlinedButton(
-                  onPressed: () =>
-                      _scheduleTimerModeAfter(const Duration(minutes: 30)),
+                  onPressed: () => onScheduleAfter(const Duration(minutes: 30)),
                   child: const Text('After 30 min'),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _pickAndScheduleTimerModeTime,
+                  onPressed: onPickTime,
                   icon: const Icon(Icons.schedule),
                   label: const Text('Pick Time'),
                 ),
               ],
             ),
-            if (_timerModeScheduledTime != null) ...[
+            if (scheduledTime != null) ...[
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -256,17 +267,12 @@ class _MeditationViewState extends State<MeditationView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Scheduled for ${_formatScheduledTime(_timerModeScheduledTime!)}',
+                      'Scheduled for ${_formatScheduledTime(scheduledTime)}',
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _clearTimerModeSchedule();
-                      });
-                      _showSuccessSnackbar('Scheduled timer cleared.');
-                    },
+                    onPressed: onCancelSchedule,
                     child: const Text('Cancel'),
                   ),
                 ],
@@ -278,7 +284,9 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
-  Widget _buildTestModePlaceholder() {
+  Widget _buildTestModePlaceholder({
+    required VoidCallback onRunPlaceholderAction,
+  }) {
     return Card(
       color: Colors.amber.shade50,
       child: Padding(
@@ -296,8 +304,7 @@ class _MeditationViewState extends State<MeditationView> {
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: () =>
-                  _showSuccessSnackbar('Test mode placeholder is active.'),
+              onPressed: onRunPlaceholderAction,
               icon: const Icon(Icons.science_outlined),
               label: const Text('Run Placeholder Action'),
             ),
@@ -730,44 +737,424 @@ class _MeditationViewState extends State<MeditationView> {
     return desc;
   }
 
-  Future<void> _openProfileSettings() async {
-    // Load current UserAccount
-    final currentAccount = await UserAccount.load();
+  String _getModeLabel(MeditationAppMode mode) {
+    switch (mode) {
+      case MeditationAppMode.normal:
+        return 'Normal';
+      case MeditationAppMode.timer:
+        return 'Timer';
+      case MeditationAppMode.test:
+        return 'Test';
+    }
+  }
+
+  String _getModeDescription(MeditationAppMode mode) {
+    switch (mode) {
+      case MeditationAppMode.normal:
+        return 'Stress-adaptive meditation is active and can respond to live biomarkers.';
+      case MeditationAppMode.timer:
+        return _timerModeScheduledTime == null
+            ? 'Stress prompts are muted. Schedule meditation starts from the Demo Mode page.'
+            : 'Next timer meditation is scheduled for ${_formatScheduledTime(_timerModeScheduledTime!)}.';
+      case MeditationAppMode.test:
+        return 'Meditation playback is hidden so the page can focus on QA and placeholder actions.';
+    }
+  }
+
+  Widget _buildSelectedModeSummary() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Demo Mode',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _getModeLabel(_selectedMode),
+                    style: const TextStyle(
+                      color: Color(0xFF4F46E5),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _getModeDescription(_selectedMode),
+              style: TextStyle(color: Colors.grey[700], height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshMeditationSettings(UserAccount updatedAccount) async {
+    final meditationState = _meditationWidgetKey.currentState;
+    if (meditationState != null) {
+      await meditationState.updateSettings(updatedAccount);
+      return;
+    }
 
     if (mounted) {
-      // Navigate to onboarding screen with existing account
-      final updatedAccount = await Navigator.push<UserAccount>(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              UserOnboardingScreen(existingAccount: currentAccount),
-        ),
-      );
-
-      // If account was updated, update the meditation widget directly
-      if (updatedAccount != null && mounted) {
-        // Note: Can't access currentState anymore since we use UniqueKey
-        // await _meditationWidgetKey.currentState?.updateSettings(updatedAccount);
-        _showSuccessSnackbar('Settings saved! Voice and preferences updated.');
-      }
+      setState(() {
+        _recreateMeditationWidgetKey();
+      });
     }
+  }
+
+  Future<UserAccount?> _openAccountSection(
+      EarStreamAccountSection section) async {
+    final currentAccount = await UserAccount.load();
+    if (!mounted) {
+      return null;
+    }
+
+    final updatedAccount = await Navigator.push<UserAccount>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EarStreamAccountSectionPage(
+          account: currentAccount,
+          section: section,
+        ),
+      ),
+    );
+
+    if (updatedAccount != null && mounted) {
+      await _refreshMeditationSettings(updatedAccount);
+      _showSuccessSnackbar('EarStream settings updated.');
+    }
+
+    return updatedAccount;
+  }
+
+  Future<void> _openDebugInfoPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ApiDebugWidget(
+          currentModeLabel: _getModeLabel(_selectedMode),
+          sensorSourceLabel: _useMockSensor ? 'Mock sensor' : 'Earable sensor',
+          scheduledMeditationTime: _timerModeScheduledTime,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openWeeklyAnalyticsPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const WeeklyAnalysisScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openDemoModePage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) {
+          var localSelectedMode = _selectedMode;
+          var localScheduledTime = _timerModeScheduledTime;
+
+          return StatefulBuilder(
+            builder: (context, setPageState) {
+              Future<void> scheduleAfter(Duration delay) async {
+                final scheduled = await _scheduleTimerModeAfter(delay);
+                if (scheduled == null || !context.mounted) {
+                  return;
+                }
+                setPageState(() {
+                  localScheduledTime = scheduled;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Timer meditation scheduled in ${delay.inMinutes} minutes.',
+                    ),
+                  ),
+                );
+              }
+
+              Future<void> pickTime() async {
+                final scheduled = await _pickAndScheduleTimerModeTime();
+                if (scheduled == null || !context.mounted) {
+                  return;
+                }
+                setPageState(() {
+                  localScheduledTime = scheduled;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Timer meditation scheduled for ${_formatScheduledTime(scheduled)}.',
+                    ),
+                  ),
+                );
+              }
+
+              void changeMode(MeditationAppMode mode) {
+                _setMode(mode);
+                setPageState(() {
+                  localSelectedMode = mode;
+                  if (mode != MeditationAppMode.timer) {
+                    localScheduledTime = null;
+                  }
+                });
+              }
+
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Demo Mode'),
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                ),
+                body: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFFF5F3FF),
+                        Color(0xFFEDE9FE),
+                        Color(0xFFDDD6FE),
+                      ],
+                    ),
+                  ),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _buildModeSelector(
+                        selectedMode: localSelectedMode,
+                        onModeSelected: changeMode,
+                      ),
+                      const SizedBox(height: 12),
+                      if (localSelectedMode == MeditationAppMode.timer)
+                        _buildTimerModeCard(
+                          scheduledTime: localScheduledTime,
+                          onScheduleAfter: scheduleAfter,
+                          onPickTime: pickTime,
+                          onCancelSchedule: () {
+                            _clearTimerModeSchedule();
+                            setPageState(() {
+                              localScheduledTime = null;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Scheduled timer cleared.'),
+                              ),
+                            );
+                          },
+                        ),
+                      if (localSelectedMode == MeditationAppMode.test)
+                        _buildTestModePlaceholder(
+                          onRunPlaceholderAction: () {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content:
+                                      Text('Test mode placeholder is active.'),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      if (localSelectedMode == MeditationAppMode.normal)
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              _getModeDescription(MeditationAppMode.normal),
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  bool _hasRequiredPersonalInfo(UserAccount account) {
+    return account.name.trim().isNotEmpty &&
+        account.age >= 13 &&
+        account.age <= 120;
+  }
+
+  Future<bool> _ensureMeditationCanStart() async {
+    final account = await UserAccount.load();
+    if (_hasRequiredPersonalInfo(account)) {
+      return true;
+    }
+
+    if (!mounted) {
+      return false;
+    }
+
+    final shouldOpenSettings = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Personal Info Required'),
+        content: const Text(
+          'EarStream still needs a valid name and age before a meditation can start. Please complete Personal Info first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not Now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Open Personal Info'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldOpenSettings != true || !mounted) {
+      return false;
+    }
+
+    final updatedAccount =
+        await _openAccountSection(EarStreamAccountSection.personalInfo);
+    if (updatedAccount == null) {
+      return false;
+    }
+
+    final isReady = _hasRequiredPersonalInfo(updatedAccount);
+    if (!isReady && mounted) {
+      _showErrorDialog(
+        'Meditation cannot start until Personal Info contains a valid name and age.',
+      );
+    }
+
+    return isReady;
+  }
+
+  Future<void> _closeDrawerAnd(Future<void> Function() action) async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    if (!mounted) {
+      return;
+    }
+    await action();
   }
 
   @override
   Widget build(BuildContext context) {
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
+    return Scaffold(
+      appBar: AppBar(
         title: const Text('Meditation'),
-        trailingActions: [
-          PlatformIconButton(
-            materialIcon: const Icon(Icons.settings, color: Colors.white),
-            cupertinoIcon: Icon(PlatformIcons(context).settings),
-            onPressed: _openProfileSettings,
+        backgroundColor: const Color(0xFF6366F1),
+        foregroundColor: Colors.white,
+      ),
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'EarStream Menu',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Current mode: ${_getModeLabel(_selectedMode)}',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune),
+                title: const Text('Demo Mode'),
+                onTap: () => _closeDrawerAnd(_openDemoModePage),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text('Personal Info'),
+                onTap: () => _closeDrawerAnd(
+                  () => _openAccountSection(EarStreamAccountSection.personalInfo)
+                      .then((_) {}),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.spa_outlined),
+                title: const Text('Meditation Preferences'),
+                onTap: () => _closeDrawerAnd(
+                  () => _openAccountSection(
+                    EarStreamAccountSection.meditationPreferences,
+                  ).then((_) {}),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.insights_outlined),
+                title: const Text('Weekly Analytics'),
+                onTap: () => _closeDrawerAnd(_openWeeklyAnalyticsPage),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: const Text('Outlook Calendar Integration'),
+                onTap: () => _closeDrawerAnd(
+                  () => _openAccountSection(
+                    EarStreamAccountSection.outlookCalendar,
+                  ).then((_) {}),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.key_outlined),
+                title: const Text('API Keys'),
+                onTap: () => _closeDrawerAnd(
+                  () => _openAccountSection(EarStreamAccountSection.apiKeys)
+                      .then((_) {}),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.bug_report_outlined),
+                title: const Text('Debug Info'),
+                onTap: () => _closeDrawerAnd(_openDebugInfoPage),
+              ),
+            ],
           ),
-        ],
-        material: (_, __) => MaterialAppBarData(
-          backgroundColor: const Color(0xFF6366F1),
-          foregroundColor: Colors.white,
         ),
       ),
       body: Container(
@@ -792,18 +1179,8 @@ class _MeditationViewState extends State<MeditationView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _buildModeSelector(),
+                          _buildSelectedModeSummary(),
                           const SizedBox(height: 12),
-
-                          if (_selectedMode == MeditationAppMode.timer) ...[
-                            _buildTimerModeCard(),
-                            const SizedBox(height: 12),
-                          ],
-
-                          if (_selectedMode == MeditationAppMode.test) ...[
-                            _buildTestModePlaceholder(),
-                            const SizedBox(height: 12),
-                          ],
 
                           HrHrvDisplayNew(
                             hr: _currentHr,
@@ -831,6 +1208,8 @@ class _MeditationViewState extends State<MeditationView> {
                             LlmMeditationWidget(
                               key: _meditationWidgetKey,
                               sensor: _sensor!,
+                              onBeforeStartMeditation:
+                                  _ensureMeditationCanStart,
                               stressDetectionEnabled:
                                   _selectedMode == MeditationAppMode.normal,
                               onReset: _resetToBaseline,
