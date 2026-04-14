@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/apps/meditation/ui/shared/earstream_style.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
+import 'seal_check_screen.dart';
 import '../../core/biosignals/sensors/mock_hr_sensor.dart';
 import '../../core/biosignals/sensors/earable_hr_sensor.dart';
 import '../../core/biosignals/sensors/hr_sensor_interface.dart';
@@ -92,6 +94,50 @@ class _MeditationViewState extends State<MeditationView> {
     setState(() {
       _earStreamActivated = true;
     });
+  }
+
+  void _deactivateEarStream() {
+    setState(() {
+      _earStreamActivated = false;
+      // Reset monitoring state
+      _currentHr = 0.0;
+      _currentHrv = -1.0;
+      _currentSdnn = -1.0;
+      _stressLevel = 'normal';
+      _hrvIsStable = false;
+      _hrvMeasurementCount = 0;
+    });
+  }
+
+  Future<void> _toggleEarStream() async {
+    if (_earStreamActivated) {
+      // Show confirmation dialog when stopping
+      final shouldStop = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Stop Monitoring?'),
+          content: const Text(
+            'Do you want to stop monitoring your biosignals?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Stop'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldStop == true && mounted) {
+        _deactivateEarStream();
+      }
+    } else {
+      _activateEarStream();
+    }
   }
 
   Future<DateTime?> _scheduleTimerModeAfter(Duration delay) async {
@@ -241,6 +287,7 @@ class _MeditationViewState extends State<MeditationView> {
     required Future<void> Function(Duration delay) onScheduleAfter,
     required Future<void> Function() onPickTime,
     required VoidCallback onCancelSchedule,
+    required VoidCallback onStartNow,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -259,6 +306,18 @@ class _MeditationViewState extends State<MeditationView> {
             const SizedBox(height: 8),
             const Text(
               'Schedule a meditation by delay or at a specific clock time.',
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onStartNow,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Start Now'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -913,6 +972,44 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
+  Future<void> _openSealCheckPage() async {
+    // Check if wearable is available and has AudioResponseManager capability
+    if (widget.wearable == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please connect an OpenEarable device first.'),
+        ),
+      );
+      return;
+    }
+
+    if (!widget.wearable!.hasCapability<AudioResponseManager>()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This device does not support seal check (AudioResponseManager not available).',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final audioManager = widget.wearable!.requireCapability<AudioResponseManager>();
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AudioResponseMeasurementView(
+          manager: audioManager,
+          title: 'OpenEarable 2.0 Seal Check',
+          parameters: const {},
+        ),
+      ),
+    );
+  }
+
   Future<void> _openDemoModePage() async {
     await Navigator.push(
       context,
@@ -995,6 +1092,21 @@ class _MeditationViewState extends State<MeditationView> {
                                 content: Text('Scheduled timer cleared.'),
                               ),
                             );
+                          },
+                          onStartNow: () async {
+                            // Start meditation immediately
+                            _scheduleTimerModeAt(
+                              DateTime.now(),
+                              description: 'now',
+                            );
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Meditation started!'),
+                                ),
+                              );
+                            }
                           },
                         ),
                       if (localSelectedMode == MeditationAppMode.test)
@@ -1101,7 +1213,44 @@ class _MeditationViewState extends State<MeditationView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_earStreamActivated,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+
+        if (_earStreamActivated) {
+          final shouldContinue = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Exit Meditation?'),
+              content: const Text(
+                'Your biosignals are being monitored. Do you want to continue monitoring in the background?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Stop Monitoring'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Continue in Background'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldContinue == false && mounted) {
+            _deactivateEarStream();
+          }
+
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
       appBar: EarStreamStyle.appBar(
         context,
         title: EarStreamStyle.appName,
@@ -1117,25 +1266,43 @@ class _MeditationViewState extends State<MeditationView> {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      EarStreamStyle.appName,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                          ),
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: SvgPicture.asset(
+                        'lib/apps/meditation/assets/images/earstream_logo.svg',
+                        fit: BoxFit.contain,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Meditation Mode: ${_getModeLabel(_selectedMode)}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                          ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          EarStreamStyle.appName,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Meditation Mode: ${_getModeLabel(_selectedMode)}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                              ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1175,6 +1342,11 @@ class _MeditationViewState extends State<MeditationView> {
                     EarStreamAccountSection.outlookCalendar,
                   ).then((_) {}),
                 ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.verified_outlined),
+                title: const Text('OpenEarable 2.0 Seal Check'),
+                onTap: () => _closeDrawerAnd(_openSealCheckPage),
               ),
               ListTile(
                 leading: const Icon(Icons.key_outlined),
@@ -1227,6 +1399,8 @@ class _MeditationViewState extends State<MeditationView> {
                                 ? _getActivityDescription(
                                     (_sensor as EarableHrSensor).activityLevel)
                                 : null,
+                            showMonitoring: _selectedMode == MeditationAppMode.normal && 
+                                _earStreamActivated,
                           ),
                           const SizedBox(height: 16),
 
@@ -1258,12 +1432,12 @@ class _MeditationViewState extends State<MeditationView> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: _sensor == null || _earStreamActivated
+                                onPressed: _sensor == null
                                     ? null
-                                    : _activateEarStream,
+                                    : _toggleEarStream,
                                 child: Text(
                                   _earStreamActivated
-                                      ? '${EarStreamStyle.appName} Active'
+                                      ? 'Stop ${EarStreamStyle.appName}'
                                       : 'Start ${EarStreamStyle.appName}',
                                 ),
                               ),
@@ -1420,7 +1594,8 @@ class _MeditationViewState extends State<MeditationView> {
           },
         ),
       ),
-    );
+    ), // Scaffold
+  ); // PopScope
   }
 
   @override

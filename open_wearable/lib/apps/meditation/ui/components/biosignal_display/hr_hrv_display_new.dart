@@ -12,6 +12,7 @@ class HrHrvDisplayNew extends StatelessWidget {
       measurementDurationSeconds; // Timer for metrics requiring long measurement
   final String? activityLevel; // Activity level from accelerometer/gyroscope
   final String? activityDescription; // Human-readable activity description
+  final bool showMonitoring; // Show monitoring indicator
 
   const HrHrvDisplayNew({
     super.key,
@@ -23,6 +24,7 @@ class HrHrvDisplayNew extends StatelessWidget {
     this.measurementDurationSeconds,
     this.activityLevel,
     this.activityDescription,
+    this.showMonitoring = false,
   });
 
   @override
@@ -77,6 +79,39 @@ class HrHrvDisplayNew extends StatelessWidget {
               ),
             ],
           ),
+          if (showMonitoring) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4ECDC4).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF4ECDC4).withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.monitor_heart,
+                    size: 16,
+                    color: const Color(0xFF4ECDC4),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Monitoring',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF4ECDC4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [

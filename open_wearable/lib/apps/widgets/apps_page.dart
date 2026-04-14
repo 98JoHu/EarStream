@@ -172,11 +172,13 @@ final List<AppInfo> _apps = [
     ),
   ),
   AppInfo(
-    logoPath: "lib/apps/meditation/assets/image.png",
+    logoPath: "lib/apps/meditation/assets/images/earstream_logo.svg",
     supportedDevices: _meditationSupportedDevices,
     accentColor: _appAccentColor,
     title: "EarStreAM",
     description: "Stress-adaptive meditation sessions",
+    svgIconInset: 8,
+    svgIconScale: 1.0,
     widget: SelectEarableView(
       supportedDevicePrefixes: _meditationSupportedDevices,
       startApp: (wearable, sensorConfigProvider) async {

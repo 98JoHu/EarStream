@@ -123,19 +123,6 @@ class _EarStreamAccountSectionPageState
     setState(() {});
   }
 
-  String get _subtitle {
-    switch (widget.section) {
-      case EarStreamAccountSection.personalInfo:
-        return 'Profile data used for personalized stress detection.';
-      case EarStreamAccountSection.meditationPreferences:
-        return 'How EarStream should sound and feel during a session.';
-      case EarStreamAccountSection.outlookCalendar:
-        return 'Suppress meditation prompts while Outlook meetings are active.';
-      case EarStreamAccountSection.apiKeys:
-        return 'Store service keys locally so non-programmers can configure EarStream in-app.';
-    }
-  }
-
   Future<void> _save() async {
     if (widget.section == EarStreamAccountSection.personalInfo &&
         !_formKey.currentState!.validate()) {
@@ -964,16 +951,6 @@ class _EarStreamAccountSectionPageState
           child: ListView(
             padding: EarStreamStyle.pagePadding(context),
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _subtitle,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        height: 1.4,
-                      ),
-                ),
-              ),
               _buildSectionBody(),
             ],
           ),
