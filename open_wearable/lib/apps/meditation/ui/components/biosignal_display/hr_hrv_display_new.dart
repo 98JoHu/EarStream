@@ -413,7 +413,7 @@ class _HrChartPainter extends CustomPainter {
     final startTime = newestPoint.subtract(Duration(seconds: displaySeconds));
 
     // Define chart area (leave space for labels)
-    const double yAxisWidth = 36; // Space for y-axis labels on the left
+    const double yAxisWidth = 28; // Space for y-axis labels on the left (reduced to maximize chart area)
     const double bottomMargin = 20; // Space for x-axis labels
     final chartWidth = size.width - yAxisWidth;
     final chartHeight = size.height - bottomMargin;
@@ -542,6 +542,9 @@ class _HrChartPainter extends CustomPainter {
     for (var i = 0; i < hrHistory.length; i++) {
       final dataPoint = hrHistory[i];
       
+      // Skip data points outside the time window (before startTime)
+      if (dataPoint.timestamp.isBefore(startTime)) continue;
+      
       // Calculate x position based on timestamp (relative to dynamic time window)
       final timeDiff = dataPoint.timestamp.difference(startTime).inMilliseconds;
       final x = yAxisWidth + (timeDiff / displayMilliseconds) * chartWidth;
@@ -566,6 +569,9 @@ class _HrChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     for (var dataPoint in hrHistory) {
+      // Skip data points outside the time window (before startTime)
+      if (dataPoint.timestamp.isBefore(startTime)) continue;
+      
       final timeDiff = dataPoint.timestamp.difference(startTime).inMilliseconds;
       final x = yAxisWidth + (timeDiff / displayMilliseconds) * chartWidth;
       
