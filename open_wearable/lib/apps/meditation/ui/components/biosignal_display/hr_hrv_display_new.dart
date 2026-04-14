@@ -400,7 +400,6 @@ class _HrChartPainter extends CustomPainter {
     if (range == 0) return;
 
     // Dynamic time range: calculate actual data span
-    final now = DateTime.now();
     final oldestPoint = hrHistory.first.timestamp;
     final newestPoint = hrHistory.last.timestamp;
     final dataSpanSeconds = newestPoint.difference(oldestPoint).inSeconds;
@@ -410,7 +409,8 @@ class _HrChartPainter extends CustomPainter {
         ? 60 // Show at least 1 minute window even if less data
         : (dataSpanSeconds > 300 ? 300 : dataSpanSeconds); // Cap at 5 minutes
     
-    final startTime = now.subtract(Duration(seconds: displaySeconds));
+    // Use newest data point as reference (not current time) to prevent leftward drift
+    final startTime = newestPoint.subtract(Duration(seconds: displaySeconds));
 
     // Define chart area (leave space for labels)
     const double yAxisWidth = 36; // Space for y-axis labels on the left
