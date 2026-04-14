@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../model/mood_entry.dart';
 import 'package:intl/intl.dart';
+import '../earstream_style.dart';
 
 /// Weekly meditation analysis and mood tracking screen
 class WeeklyAnalysisScreen extends StatefulWidget {
@@ -88,10 +89,9 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Weekly Analysis'),
-        backgroundColor: const Color(0xFF6366F1),
-        foregroundColor: Colors.white,
+      appBar: EarStreamStyle.appBar(
+        context,
+        title: 'Weekly Analysis',
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -102,13 +102,6 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
       ),
       body: SafeArea(
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFF5F3FF), Color(0xFFEDE9FE), Color(0xFFDDD6FE)],
-            ),
-          ),
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _weeklySummary == null || _weeklySummary!['totalSessions'] == 0
@@ -129,25 +122,18 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
             Icon(
               Icons.insights,
               size: 80,
-              color: Colors.indigo.withValues(alpha: 0.3),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'No Data Yet',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.indigo,
-              ),
+              style: EarStreamStyle.pageHeadline(context),
             ),
             const SizedBox(height: 12),
             Text(
               'Complete a meditation session and rate your mood to see your weekly insights here!',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: EarStreamStyle.supportingText(context),
             ),
           ],
         ),
@@ -172,42 +158,26 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: EarStreamStyle.tintedPanel(
+                context,
+                tint: Theme.of(context).colorScheme.primary,
+                alpha: 0.12,
               ),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              child: Column(
+                children: [
+                  Text(
+                    'Your Week in Meditation',
+                    style: EarStreamStyle.pageHeadline(context),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Your Week in Meditation',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Last 7 Days',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  ],
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Last 7 Days',
+                    style: EarStreamStyle.supportingText(context),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
@@ -254,13 +224,9 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
             const SizedBox(height: 24),
 
             // Daily Breakdown
-            const Text(
+            Text(
               'Daily Breakdown',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.indigo,
-              ),
+              style: EarStreamStyle.sectionTitle(context),
             ),
             const SizedBox(height: 12),
             ...entries.reversed.map(_buildEntryCard),
@@ -375,25 +341,25 @@ class _WeeklyAnalysisScreenState extends State<WeeklyAnalysisScreen> {
               width: 60,
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.indigo.withValues(alpha: 0.1),
+                color: Theme.of(context).colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
                 children: [
                   Text(
                     DateFormat('MMM').format(entry.timestamp),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.indigo,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   Text(
                     DateFormat('d').format(entry.timestamp),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.indigo,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],

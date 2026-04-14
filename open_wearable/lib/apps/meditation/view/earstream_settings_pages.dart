@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:open_wearable/widgets/sensors/sensor_page_spacing.dart';
+import 'package:open_wearable/apps/meditation/earstream_style.dart';
 
 import '../model/meditation_config.dart';
 import '../model/outlook_meeting_blocker.dart';
@@ -320,11 +320,10 @@ class _EarStreamAccountSectionPageState
   }
 
   Widget _buildWhiteCard({required Widget child}) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: child,
-      ),
+    return EarStreamStyle.surfaceCard(
+      context,
+      padding: const EdgeInsets.all(24),
+      child: child,
     );
   }
 
@@ -935,8 +934,9 @@ class _EarStreamAccountSectionPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_title),
+      appBar: EarStreamStyle.appBar(
+        context,
+        title: _title,
       ),
       bottomNavigationBar: SafeArea(
         top: false,
@@ -962,7 +962,7 @@ class _EarStreamAccountSectionPageState
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: SensorPageSpacing.pagePaddingWithBottomInset(context),
+            padding: EarStreamStyle.pagePadding(context),
             children: [
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),

@@ -44,7 +44,9 @@ const List<String> _postureSupportedDevices = [
 ];
 const List<String> _heartSupportedDevices = [
   "OpenEarable",
-  "OpenRing",
+];
+const List<String> _meditationSupportedDevices = [
+  "OpenEarable",
 ];
 
 Sensor? _findOpticalTemperatureSensor(List<Sensor> sensors) {
@@ -171,14 +173,12 @@ final List<AppInfo> _apps = [
   ),
   AppInfo(
     logoPath: "lib/apps/meditation/assets/image.png",
-    // TODO: Change the supported devices
-    supportedDevices: _heartSupportedDevices,
+    supportedDevices: _meditationSupportedDevices,
     accentColor: _appAccentColor,
     title: "EarStreAM",
     description: "Stress-adaptive meditation sessions",
     widget: SelectEarableView(
-      // TODO: Change the supported devices
-      supportedDevicePrefixes: _heartSupportedDevices,
+      supportedDevicePrefixes: _meditationSupportedDevices,
       startApp: (wearable, sensorConfigProvider) async {
         try {
           Sensor? ppgSensor;

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
+import 'package:open_wearable/apps/meditation/earstream_style.dart';
+import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/mock_hr_sensor.dart';
 import '../model/earable_hr_sensor.dart';
 import '../model/hr_sensor_interface.dart';
@@ -13,8 +15,6 @@ import '../widgets/api_debug_widget.dart';
 import '../widgets/weekly_analysis_screen.dart';
 import '../model/user_account.dart';
 import 'earstream_settings_pages.dart';
-import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
-import 'package:open_wearable/widgets/sensors/sensor_page_spacing.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;
@@ -42,6 +42,7 @@ class _MeditationViewState extends State<MeditationView> {
   GlobalKey<LlmMeditationWidgetState> _meditationWidgetKey =
       GlobalKey<LlmMeditationWidgetState>();
   MeditationAppMode _selectedMode = MeditationAppMode.normal;
+  bool _earStreamActivated = false;
   Timer? _timerModeTimer;
   DateTime? _timerModeScheduledTime;
 
@@ -83,6 +84,16 @@ class _MeditationViewState extends State<MeditationView> {
     _timerModeScheduledTime = null;
   }
 
+  void _activateEarStream() {
+    if (_earStreamActivated) {
+      return;
+    }
+
+    setState(() {
+      _earStreamActivated = true;
+    });
+  }
+
   Future<DateTime?> _scheduleTimerModeAfter(Duration delay) async {
     final scheduled = DateTime.now().add(delay);
     return _scheduleTimerModeAt(
@@ -122,6 +133,13 @@ class _MeditationViewState extends State<MeditationView> {
 
   DateTime? _scheduleTimerModeAt(DateTime scheduledTime,
       {required String description}) {
+    if (!_earStreamActivated) {
+      _showErrorDialog(
+        'Click Start EarStreAM on the main page before scheduling a timed session.',
+      );
+      return null;
+    }
+
     final now = DateTime.now();
     final delay = scheduledTime.difference(now);
     if (delay <= Duration.zero) {
@@ -950,11 +968,12 @@ class _MeditationViewState extends State<MeditationView> {
               }
 
               return Scaffold(
-                appBar: AppBar(
-                  title: const Text('Meditation Mode'),
+                appBar: EarStreamStyle.appBar(
+                  context,
+                  title: 'Meditation Mode',
                 ),
                 body: ListView(
-                  padding: SensorPageSpacing.pagePaddingWithBottomInset(context),
+                  padding: EarStreamStyle.pagePadding(context),
                   children: [
                       _buildModeSelector(
                         selectedMode: localSelectedMode,
@@ -1083,8 +1102,9 @@ class _MeditationViewState extends State<MeditationView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('EarStreAM'),
+      appBar: EarStreamStyle.appBar(
+        context,
+        title: EarStreamStyle.appName,
       ),
       drawer: Drawer(
         child: SafeArea(
@@ -1100,7 +1120,7 @@ class _MeditationViewState extends State<MeditationView> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(
-                      'EarStreAM',
+                      EarStreamStyle.appName,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: Theme.of(context)
@@ -1183,8 +1203,7 @@ class _MeditationViewState extends State<MeditationView> {
                 ),
                 child: IntrinsicHeight(
                   child: Padding(
-                    padding:
-                        SensorPageSpacing.pagePaddingWithBottomInset(context),
+                    padding: EarStreamStyle.pagePadding(context),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -1211,9 +1230,9 @@ class _MeditationViewState extends State<MeditationView> {
                           ),
                           const SizedBox(height: 16),
 
-                          // AI-Powered Meditation (always active)
                           if (_sensor != null &&
-                              _selectedMode != MeditationAppMode.test)
+                              _selectedMode != MeditationAppMode.test &&
+                              _earStreamActivated)
                             LlmMeditationWidget(
                               key: _meditationWidgetKey,
                               sensor: _sensor!,
@@ -1234,6 +1253,23 @@ class _MeditationViewState extends State<MeditationView> {
                             ),
 
                           const SizedBox(height: 16),
+
+                          if (_selectedMode != MeditationAppMode.test) ...[
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _sensor == null || _earStreamActivated
+                                    ? null
+                                    : _activateEarStream,
+                                child: Text(
+                                  _earStreamActivated
+                                      ? '${EarStreamStyle.appName} Active'
+                                      : 'Start ${EarStreamStyle.appName}',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
 
                           Row(
                             children: [
