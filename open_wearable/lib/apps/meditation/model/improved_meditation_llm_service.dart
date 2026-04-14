@@ -3,6 +3,7 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:logger/logger.dart';
 import 'meditation_config.dart';
+import 'meditation_runtime_config.dart';
 import 'user_account.dart';
 
 final _logger = Logger();
@@ -57,20 +58,10 @@ class ImprovedMeditationLLMService {
   }
 
   String get _effectiveGeminiApiKey {
-    final accountKey = _sanitizeApiKey(_userAccount?.geminiApiKey);
-    return accountKey ?? MeditationConfig.geminiApiKey;
-  }
-
-  String? _sanitizeApiKey(String? key) {
-    final value = key?.trim();
-    if (value == null || value.isEmpty) return null;
-    if (value == 'NONE' ||
-        value == 'YOUR_GEMINI_API_KEY_HERE' ||
-        value.contains('YOUR_') ||
-        value.contains('your_')) {
-      return null;
-    }
-    return value;
+    return MeditationRuntimeConfig.geminiApiKey(
+          localValue: _userAccount?.geminiApiKey,
+        ).value ??
+        MeditationConfig.geminiApiKey;
   }
 
   /// Get style-specific guidance for LLM

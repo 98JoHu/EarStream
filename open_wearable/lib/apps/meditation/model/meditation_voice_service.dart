@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'meditation_cache.dart';
 import 'meditation_config.dart';
+import 'meditation_runtime_config.dart';
 
 final _logger = Logger();
 
@@ -43,10 +44,13 @@ class MeditationVoiceService {
   }) async {
     _meditationStyle = meditationStyle ?? 'calm and empathetic';
     _usePremiumVoice = usePremiumVoice;
-    _elevenLabsApiKey =
-        _sanitizeApiKey(elevenLabsApiKey) ?? MeditationConfig.elevenLabsApiKey;
-    _elevenLabsVoiceId = _sanitizeVoiceId(elevenLabsVoiceId) ??
-        MeditationConfig.elevenLabsVoiceId;
+    _elevenLabsApiKey = MeditationRuntimeConfig.elevenLabsApiKey(
+          localValue: elevenLabsApiKey,
+        ).value ??
+        MeditationConfig.elevenLabsApiKey;
+    _elevenLabsVoiceId = MeditationRuntimeConfig.resolveElevenLabsVoiceId(
+      localValue: elevenLabsVoiceId,
+    );
 
     _logger.i(
       'Initializing voice (style: $_meditationStyle, premium: $_usePremiumVoice)',
@@ -63,30 +67,6 @@ class MeditationVoiceService {
 
   bool get _hasValidPremiumVoiceConfig =>
       _elevenLabsApiKey != 'NONE' && _elevenLabsApiKey.length > 20;
-
-  String? _sanitizeApiKey(String? value) {
-    final key = value?.trim();
-    if (key == null || key.isEmpty) return null;
-    if (key == 'NONE' ||
-        key == 'YOUR_ELEVENLABS_API_KEY_HERE' ||
-        key.contains('YOUR_') ||
-        key.contains('your_')) {
-      return null;
-    }
-    return key;
-  }
-
-  String? _sanitizeVoiceId(String? value) {
-    final voiceId = value?.trim();
-    if (voiceId == null || voiceId.isEmpty) return null;
-    if (voiceId == 'NONE' ||
-        voiceId == 'YOUR_ELEVENLABS_VOICE_ID_HERE' ||
-        voiceId.contains('YOUR_') ||
-        voiceId.contains('your_')) {
-      return null;
-    }
-    return voiceId;
-  }
 
   Future<void> _initializeFlutterTts() async {
     try {
