@@ -10,9 +10,9 @@ import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'meditation_cache.dart';
-import 'meditation_config.dart';
-import 'meditation_runtime_config.dart';
+import '../storage/meditation_cache.dart';
+import '../../config/meditation_config.dart';
+import '../../config/meditation_runtime_config.dart';
 
 final _logger = Logger();
 

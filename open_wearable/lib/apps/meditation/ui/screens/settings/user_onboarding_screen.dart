@@ -1,7 +1,7 @@
 // ignore_for_file: require_trailing_commas
 
 import 'package:flutter/material.dart';
-import '../model/user_account.dart';
+import '../../../models/user_account.dart';
 
 /// Beautiful onboarding screen for user account setup
 class UserOnboardingScreen extends StatefulWidget {

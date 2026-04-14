@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:open_wearable/apps/meditation/earstream_style.dart';
+import 'package:open_wearable/apps/meditation/ui/shared/earstream_style.dart';
 
-import '../model/meditation_config.dart';
-import '../model/outlook_meeting_blocker.dart';
-import '../model/user_account.dart';
+import '../../../config/meditation_config.dart';
+import '../../../core/meditation/outlook_meeting_blocker.dart';
+import '../../../models/user_account.dart';
 
 enum EarStreamAccountSection {
   personalInfo,

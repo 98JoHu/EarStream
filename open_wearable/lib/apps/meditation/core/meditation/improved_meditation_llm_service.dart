@@ -2,9 +2,9 @@
 
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:logger/logger.dart';
-import 'meditation_config.dart';
-import 'meditation_runtime_config.dart';
-import 'user_account.dart';
+import '../../config/meditation_config.dart';
+import '../../config/meditation_runtime_config.dart';
+import '../../models/user_account.dart';
 
 final _logger = Logger();
 

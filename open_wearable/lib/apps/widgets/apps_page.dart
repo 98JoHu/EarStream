@@ -11,7 +11,7 @@ import 'package:open_wearable/apps/widgets/app_tile.dart';
 import 'package:open_wearable/view_models/wearables_provider.dart';
 import 'package:open_wearable/widgets/recording_activity_indicator.dart';
 import 'package:open_wearable/widgets/sensors/sensor_page_spacing.dart';
-import 'package:open_wearable/apps/meditation/view/meditation_view.dart';
+import 'package:open_wearable/apps/meditation/ui/screens/meditation_screen.dart';
 import 'package:provider/provider.dart';
 
 class AppInfo {

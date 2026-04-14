@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../models/log_file_manager.dart';
-import '../../../widgets/sensors/sensor_page_spacing.dart';
+import '../../../../../models/log_file_manager.dart';
+import '../../../../../widgets/sensors/sensor_page_spacing.dart';
 
 class ApiDebugWidget extends StatefulWidget {
   const ApiDebugWidget({super.key});

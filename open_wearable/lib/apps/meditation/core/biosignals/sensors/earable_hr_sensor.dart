@@ -2,11 +2,11 @@
 
 import 'dart:async';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
-import 'package:open_wearable/apps/meditation/model/ppg_filter_meditation.dart';
-import 'package:open_wearable/apps/meditation/model/hrv_calculator.dart';
 import 'package:logger/logger.dart';
 import 'hr_sensor_interface.dart';
-import 'activity_detector.dart';
+import '../ppg_filter_meditation.dart';
+import '../hrv_calculator.dart';
+import '../activity_detector.dart';
 
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 

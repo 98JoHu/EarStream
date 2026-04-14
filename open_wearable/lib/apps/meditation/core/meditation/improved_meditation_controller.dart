@@ -4,14 +4,14 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
-import 'hr_sensor_interface.dart';
+import '../biosignals/sensors/hr_sensor_interface.dart';
 import 'improved_meditation_llm_service.dart';
 import 'meditation_voice_service.dart';
-import 'user_account.dart';
+import '../../models/user_account.dart';
 import 'personalized_stress_detector.dart';
-import 'meditation_history.dart';
-import 'activity_detector.dart';
-import 'meditation_cache.dart';
+import '../storage/meditation_history.dart';
+import '../biosignals/activity_detector.dart';
+import '../storage/meditation_cache.dart';
 
 final _logger = Logger();
 

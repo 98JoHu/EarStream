@@ -1,15 +1,15 @@
 // ignore_for_file: require_trailing_commas
 
 import 'package:flutter/material.dart';
-import '../model/improved_meditation_controller.dart';
-import '../model/improved_meditation_llm_service.dart';
-import '../model/meditation_voice_service.dart';
-import '../model/meditation_config.dart';
-import '../model/outlook_meeting_blocker.dart';
-import '../model/user_account.dart';
-import '../model/hr_sensor_interface.dart';
-import '../model/mood_entry.dart';
-import '../widgets/weekly_analysis_screen.dart';
+import '../../../core/meditation/improved_meditation_controller.dart';
+import '../../../core/meditation/improved_meditation_llm_service.dart';
+import '../../../core/meditation/meditation_voice_service.dart';
+import '../../../config/meditation_config.dart';
+import '../../../core/meditation/outlook_meeting_blocker.dart';
+import '../../../models/user_account.dart';
+import '../../../core/biosignals/sensors/hr_sensor_interface.dart';
+import '../../../core/storage/mood_entry.dart';
+import '../../screens/weekly_analysis_screen.dart';
 import 'breathing_animation.dart';
 
 /// Improved meditation widget with natural voice and personalization

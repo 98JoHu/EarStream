@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 
-import 'meditation_config.dart';
+import '../../config/meditation_config.dart';
 
 final _logger = Logger();
 

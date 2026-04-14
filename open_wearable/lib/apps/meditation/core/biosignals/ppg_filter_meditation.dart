@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:async';
 
 import 'package:logger/logger.dart';
-import 'package:open_wearable/apps/meditation/model/band_pass_filter_meditation.dart';
+import 'band_pass_filter_meditation.dart';
 
 Logger _logger = Logger();
 

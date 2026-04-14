@@ -1,9 +1,9 @@
 // ignore_for_file: require_trailing_commas
 
 import 'package:flutter/material.dart';
-import '../model/mood_entry.dart';
+import '../../core/storage/mood_entry.dart';
 import 'package:intl/intl.dart';
-import '../earstream_style.dart';
+import '../shared/earstream_style.dart';
 
 /// Weekly meditation analysis and mood tracking screen
 class WeeklyAnalysisScreen extends StatefulWidget {

@@ -1,7 +1,7 @@
 // ignore_for_file: require_trailing_commas
 
-import 'user_account.dart';
-import 'activity_detector.dart';
+import '../../models/user_account.dart';
+import '../biosignals/activity_detector.dart';
 
 /// Personalized stress detector that adapts to user demographics
 class PersonalizedStressDetector {
