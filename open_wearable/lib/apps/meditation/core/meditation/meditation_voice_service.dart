@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
@@ -76,14 +78,23 @@ class MeditationVoiceService {
       await _flutterTts.setSpeechRate(rate);
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setPitch(0.90);
-
-      await _flutterTts.setIosAudioCategory(
-        IosTextToSpeechAudioCategory.playback,
-        [
-          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
-          IosTextToSpeechAudioCategoryOptions.duckOthers,
-        ],
-      );
+    } catch (e) {
+      _logger.w('Error configuring Flutter TTS base settings: $e');
+    }
+    try {
+      if (!kIsWeb && Platform.isIOS) {
+        await _flutterTts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+            IosTextToSpeechAudioCategoryOptions.duckOthers,
+          ],
+        );
+      }
+    } catch (e) {
+      _logger.w('iOS audio category setup failed (non-iOS?): $e');
+    }
+    try {
 
       final voices = await _flutterTts.getVoices;
       if (voices != null && voices.isNotEmpty) {
@@ -340,14 +351,20 @@ class MeditationVoiceService {
     _logger.i('Using Flutter TTS fallback');
 
     try {
-      await _flutterTts.setIosAudioCategory(
-        IosTextToSpeechAudioCategory.playback,
-        [
-          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
-          IosTextToSpeechAudioCategoryOptions.duckOthers,
-        ],
-      );
+      if (!kIsWeb && Platform.isIOS) {
+        await _flutterTts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+            IosTextToSpeechAudioCategoryOptions.duckOthers,
+          ],
+        );
+      }
+    } catch (e) {
+      _logger.w('iOS audio category setup failed: $e');
+    }
 
+    try {
       final completer = Completer<void>();
 
       _flutterTts.setCompletionHandler(() {

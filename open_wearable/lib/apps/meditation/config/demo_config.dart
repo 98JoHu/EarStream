@@ -4,6 +4,9 @@
 /// quick showcasing of EarStream capabilities without requiring personal
 /// user accounts or long calibration periods.
 
+// ignore: depend_on_referenced_packages
+import 'dart:math' as math;
+
 class DemoConfig {
   // ============================================================================
   // DEMO MODE TYPES
@@ -242,33 +245,53 @@ enum DemoPhase {
 
 /// Demo preferences for Personalized Only mode
 class DemoMeditationPreferences {
-  final String meditationStyle;
-  final String voiceTone;
+  final String meditationStyle; // 'mindfulness', 'breathing', 'body_scan', 'visualization_journey'
+  final String voiceGender; // 'female', 'male'
+  final String speakingSpeed; // 'very_slow', 'slow', 'medium', 'fast'
+  final String meditationEnvironment; // 'peaceful nature', 'calm ocean beach', etc.
+  final String voiceTone; // 'Calm', 'Warm', etc.
   final int durationMinutes;
   final bool useBackgroundSounds;
   
   const DemoMeditationPreferences({
     required this.meditationStyle,
-    required this.voiceTone,
-    required this.durationMinutes,
-    required this.useBackgroundSounds,
+    this.voiceGender = 'female',
+    this.speakingSpeed = 'slow',
+    this.meditationEnvironment = 'peaceful nature',
+    this.voiceTone = 'Calm',
+    this.durationMinutes = 5,
+    this.useBackgroundSounds = true,
   });
-  
+
+  static const _meditationStyles = [
+    'mindfulness', 'breathing', 'body_scan', 'visualization_journey',
+  ];
+  static const _environments = [
+    'peaceful nature', 'calm ocean beach', 'quiet mountain',
+    'serene forest', 'gentle garden',
+  ];
+  // Weighted towards slower speeds for better demo experience
+  static const _speeds = ['very_slow', 'slow', 'slow', 'medium'];
+
   /// Create random preferences for "Surprise me" feature
   factory DemoMeditationPreferences.random() {
-    final now = DateTime.now();
+    final r = math.Random();
     return DemoMeditationPreferences(
-      meditationStyle: DemoConfig.getRandomStyle(),
-      voiceTone: DemoConfig.getRandomVoiceTone(),
-      durationMinutes: 5 + (now.second % 6), // 5-10 minutes
-      useBackgroundSounds: now.millisecond % 2 == 0,
+      meditationStyle: _meditationStyles[r.nextInt(_meditationStyles.length)],
+      voiceGender: r.nextBool() ? 'female' : 'male',
+      speakingSpeed: _speeds[r.nextInt(_speeds.length)],
+      meditationEnvironment: _environments[r.nextInt(_environments.length)],
+      voiceTone: DemoConfig.availableVoiceTones[r.nextInt(DemoConfig.availableVoiceTones.length)],
     );
   }
   
   /// Create default preferences
   factory DemoMeditationPreferences.defaults() {
     return const DemoMeditationPreferences(
-      meditationStyle: 'Mindfulness',
+      meditationStyle: 'mindfulness',
+      voiceGender: 'female',
+      speakingSpeed: 'slow',
+      meditationEnvironment: 'peaceful nature',
       voiceTone: 'Calm',
       durationMinutes: 5,
       useBackgroundSounds: true,
@@ -277,6 +300,6 @@ class DemoMeditationPreferences {
   
   @override
   String toString() {
-    return 'Style: $meditationStyle, Tone: $voiceTone, Duration: $durationMinutes min, Sounds: $useBackgroundSounds';
+    return 'Style: $meditationStyle, Gender: $voiceGender, Speed: $speakingSpeed, Env: $meditationEnvironment';
   }
 }

@@ -131,14 +131,16 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // Initialize services
     _voiceService = MeditationVoiceService();
     await _voiceService!.initialize(
-      voiceGender: _userAccount!.voiceGender,
-      speakingSpeed: _userAccount!.speakingSpeed,
+      voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
+          ? widget.demoPreferences!.voiceGender
+          : _userAccount!.voiceGender,
+      speakingSpeed: (widget.demoMode != 'none' && widget.demoPreferences != null)
+          ? widget.demoPreferences!.speakingSpeed
+          : _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
     );
-    print(
-        '✅ Voice service initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, speed=${_userAccount!.speakingSpeed}, premium=${_userAccount!.usePremiumVoice}');
 
     _llmService = ImprovedMeditationLLMService();
     _llmService!.setUserAccount(_userAccount!);
@@ -263,8 +265,12 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
       _voiceService = MeditationVoiceService();
       await _voiceService!.initialize(
-        voiceGender: _userAccount!.voiceGender,
-        speakingSpeed: _userAccount!.speakingSpeed,
+        voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
+            ? widget.demoPreferences!.voiceGender
+            : _userAccount!.voiceGender,
+        speakingSpeed: (widget.demoMode != 'none' && widget.demoPreferences != null)
+            ? widget.demoPreferences!.speakingSpeed
+            : _userAccount!.speakingSpeed,
         usePremiumVoice: _userAccount!.usePremiumVoice,
         elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
         elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
@@ -377,8 +383,12 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // Initialize new services with updated account
     _voiceService = MeditationVoiceService();
     await _voiceService!.initialize(
-      voiceGender: _userAccount!.voiceGender,
-      speakingSpeed: _userAccount!.speakingSpeed,
+      voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
+          ? widget.demoPreferences!.voiceGender
+          : _userAccount!.voiceGender,
+      speakingSpeed: (widget.demoMode != 'none' && widget.demoPreferences != null)
+          ? widget.demoPreferences!.speakingSpeed
+          : _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,

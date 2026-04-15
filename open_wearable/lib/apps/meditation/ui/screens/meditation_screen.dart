@@ -66,6 +66,7 @@ class _MeditationViewState extends State<MeditationView> {
       'relaxed'; // Track stress level: 'relaxed' or 'stressed'
 
   // Demo mode state tracking
+  bool _isDemoModeActive = false;
   DemoPhase _demoPhase = DemoPhase.none;
   String _demoSubMode = DemoConfig.modeNone;
   DemoMeditationPreferences? _demoPreferences;
@@ -73,6 +74,7 @@ class _MeditationViewState extends State<MeditationView> {
   Timer? _demoPhaseTimer;
   double? _demoBaselineHr;
   double? _demoBaselineRmssd;
+
 
   void _recreateMeditationWidgetKey() {
     _meditationWidgetKey = GlobalKey<LlmMeditationWidgetState>();
@@ -86,6 +88,14 @@ class _MeditationViewState extends State<MeditationView> {
       _selectedMode = mode;
       if (mode != MeditationAppMode.timer) {
         _clearTimerModeSchedule();
+      }
+      // Activate demo mode when test mode is selected
+      if (mode == MeditationAppMode.test) {
+        _isDemoModeActive = true;
+        _demoPhase = DemoPhase.modeSelection;
+      } else {
+        _isDemoModeActive = false;
+        _resetDemoMode();
       }
     });
   }
@@ -536,6 +546,319 @@ class _MeditationViewState extends State<MeditationView> {
           ),
         ),
       ],
+    );
+  }
+
+  // ============================================================================
+  // DEMO CONTROL PANEL - Conference-ready guided experience
+  // ============================================================================
+  
+  Widget _buildDemoControlPanel() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    // Phase-specific content
+    String phaseTitle;
+    String phaseInstructions;
+    IconData phaseIcon;
+    Widget? actionButton;
+    Widget? statusWidget;
+    
+    switch (_demoPhase) {
+      case DemoPhase.none:
+      case DemoPhase.modeSelection:
+        phaseTitle = 'ACM UbiComp 2026 Demo Mode';
+        phaseInstructions = 'Welcome! Please select a demo experience to showcase EarStream\'s capabilities:';
+        phaseIcon = Icons.campaign_outlined;
+        
+        // Mode selection buttons
+        actionButton = Column(
+          children: [
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _selectDemoMode(DemoConfig.modePersonalizedOnly),
+                icon: const Icon(Icons.psychology_outlined),
+                label: const Text('Personalized Meditation Only'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _selectDemoMode(DemoConfig.modeBiosignalAdaptive),
+                icon: const Icon(Icons.sensors_outlined),
+                label: const Text('Biosignal-Adaptive Demo'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+          ],
+        );
+        break;
+      
+      case DemoPhase.settingPreferences:
+        phaseTitle = _demoSubMode == DemoConfig.modeBiosignalAdaptive
+            ? 'Step 1 of 5 · Demo Preferences'
+            : 'Step 1 of 2 · Demo Preferences';
+        phaseInstructions = 'Choose how the demo session should feel. '
+            'Settings are session-only and won\'t change your saved profile.';
+        phaseIcon = Icons.spa_outlined;
+
+        actionButton = SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _openDemoPreferences,
+            icon: const Icon(Icons.tune_outlined),
+            label: const Text('Set Preferences →'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+          ),
+        );
+        break;
+
+      case DemoPhase.sealCheck:
+        phaseTitle = 'Step 2 of 5 · Seal Check';
+        phaseInstructions =
+            'Navigating to seal check… Use the button on the next screen to play a tone and verify the earable fit.';
+        phaseIcon = Icons.verified_outlined;
+        // No action button — navigation happens automatically via _proceedToSealCheck
+        break;
+      
+      case DemoPhase.calibration:
+        phaseTitle = 'Step 3 of 5 · Calibration';
+        phaseInstructions = 'Filters are adjusting to your biosignal. Please remain still and relaxed.';
+        phaseIcon = Icons.settings_outlined;
+
+        if (_demoPhaseStartTime != null) {
+          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
+          final remaining = DemoConfig.calibrationDuration - elapsed;
+          final progress = elapsed.inMilliseconds /
+              DemoConfig.calibrationDuration.inMilliseconds;
+          statusWidget = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
+              const SizedBox(height: 8),
+              Text(
+                '${remaining.inSeconds.clamp(0, 999)} seconds remaining — auto-continues',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          );
+        }
+        // No action button — auto-progresses when timer fires
+        break;
+
+      case DemoPhase.baselineMeasurement:
+        phaseTitle = 'Step 4 of 5 · Baseline Measurement';
+        phaseInstructions = 'Establishing your resting heart rate and HRV as a reference point. Continue breathing normally.';
+        phaseIcon = Icons.straighten_outlined;
+
+        if (_demoPhaseStartTime != null) {
+          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
+          final remaining = DemoConfig.baselineDuration - elapsed;
+          final progress = elapsed.inMilliseconds /
+              DemoConfig.baselineDuration.inMilliseconds;
+          statusWidget = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
+              const SizedBox(height: 8),
+              Text(
+                '${remaining.inSeconds.clamp(0, 999)} seconds remaining — auto-continues',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          );
+        }
+        // No action button — auto-progresses when timer fires
+        break;
+      
+      case DemoPhase.monitoring:
+        phaseTitle = 'Step 4: Stress Monitoring';
+        phaseInstructions = 'Monitoring for stress signals. Stand up, walk around, or think of something stressful to trigger the meditation.';
+        phaseIcon = Icons.monitor_heart_outlined;
+        
+        if (_demoBaselineHr != null && _demoBaselineRmssd != null) {
+          final currentDeviation = _currentHr > 0 && _demoBaselineHr! > 0
+              ? (((_currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100).abs()
+              : 0.0;
+          
+          statusWidget = Card(
+            color: Colors.blue.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Current vs Baseline',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'Threshold: ${DemoConfig.stressThresholdPercent}%',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Column(
+                        children: [
+                          Text('Baseline HR', style: theme.textTheme.bodySmall),
+                          Text(
+                            '${_demoBaselineHr!.toStringAsFixed(0)}',
+                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      Icon(Icons.arrow_forward, color: colorScheme.primary),
+                      Column(
+                        children: [
+                          Text('Current HR', style: theme.textTheme.bodySmall),
+                          Text(
+                            _currentHr > 0 ? '${_currentHr.toStringAsFixed(0)}' : '---',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: currentDeviation >= DemoConfig.stressThresholdPercent
+                                  ? Colors.red.shade700
+                                  : Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  if (_currentHr > 0) ...[
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: (currentDeviation / (DemoConfig.stressThresholdPercent * 2)).clamp(0.0, 1.0),
+                      backgroundColor: Colors.green.shade100,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        currentDeviation >= DemoConfig.stressThresholdPercent
+                            ? Colors.red.shade600
+                            : Colors.green.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Deviation: ${currentDeviation.toStringAsFixed(1)}%',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        
+        // Manual trigger button
+        actionButton = SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _manuallyTriggerMeditation(),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Manually Start Meditation'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+          ),
+        );
+        break;
+      
+      case DemoPhase.meditationSession:
+        phaseTitle = 'Meditation In Progress';
+        phaseInstructions = _demoSubMode == DemoConfig.modePersonalizedOnly
+            ? 'Enjoying personalized meditation session (3 segments)...'
+            : 'Biosignal-adaptive meditation in progress (max 4 segments)...';
+        phaseIcon = Icons.self_improvement_outlined;
+        
+        // No manual action needed during meditation
+        break;
+      
+      case DemoPhase.analytics:
+        phaseTitle = 'Demo Complete!';
+        phaseInstructions = 'Session analytics have been displayed. Ready for another demo?';
+        phaseIcon = Icons.check_circle;
+        
+        actionButton = SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _returnToDemoSelection(),
+            icon: const Icon(Icons.replay),
+            label: const Text('Start New Demo'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+          ),
+        );
+        break;
+      
+      default:
+        return const SizedBox.shrink();
+    }
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(phaseIcon, color: colorScheme.primary, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    phaseTitle,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Text(
+              phaseInstructions,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                height: 1.5,
+              ),
+            ),
+            if (statusWidget != null) ...[
+              const SizedBox(height: 16),
+              statusWidget,
+            ],
+            if (actionButton != null) ...[
+              const SizedBox(height: 20),
+              actionButton,
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1374,6 +1697,11 @@ class _MeditationViewState extends State<MeditationView> {
 
               void changeMode(MeditationAppMode mode) {
                 _setMode(mode);
+                // Demo is managed on the main screen — close this page and return
+                if (mode == MeditationAppMode.test) {
+                  Navigator.of(context).pop();
+                  return;
+                }
                 setPageState(() {
                   localSelectedMode = mode;
                   if (mode != MeditationAppMode.timer) {
@@ -1428,13 +1756,17 @@ class _MeditationViewState extends State<MeditationView> {
                           },
                         ),
                       if (localSelectedMode == MeditationAppMode.test)
-                        _buildDemoModeSelection(
-                          onSelectPersonalizedOnly: () {
-                            Navigator.of(context).pop(DemoConfig.modePersonalizedOnly);
-                          },
-                          onSelectBiosignalAdaptive: () {
-                            Navigator.of(context).pop(DemoConfig.modeBiosignalAdaptive);
-                          },
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              'Demo mode is active on the main screen. Return there to start a demo.',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    height: 1.4,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
                         ),
                       if (localSelectedMode == MeditationAppMode.normal)
                         Card(
@@ -1482,137 +1814,99 @@ class _MeditationViewState extends State<MeditationView> {
   // DEMO MODE FLOWS
   // ============================================================================
 
-  Future<void> _startPersonalizedOnlyDemo() async {
-    // Show preferences selection dialog
-    final preferences = await _showDemoPreferencesDialog();
-    
-    if (preferences == null || !mounted) {
-      // User cancelled
-      _resetDemoMode();
-      return;
-    }
-    
+  void _selectDemoMode(String mode) {
     setState(() {
-      _demoPreferences = preferences;
+      _demoSubMode = mode;
+      // Both modes start with preference selection
       _demoPhase = DemoPhase.settingPreferences;
     });
-    
-    // Immediately start meditation with these preferences
-    _startPersonalizedOnlyMeditation();
   }
 
-  Future<void> _startBiosignalAdaptiveDemo() async {
-    // Start with seal check phase
+  Future<void> _openDemoPreferences() async {
+    final prefs = await Navigator.push<DemoMeditationPreferences>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _DemoPreferencesPage(
+          isBiosignalAdaptive:
+              _demoSubMode == DemoConfig.modeBiosignalAdaptive,
+        ),
+      ),
+    );
+
+    if (prefs == null || !mounted) return;
+
+    setState(() {
+      _demoPreferences = prefs;
+    });
+
+    if (_demoSubMode == DemoConfig.modePersonalizedOnly) {
+      _startPersonalizedOnlyMeditation();
+    } else {
+      await _proceedToSealCheck();
+    }
+  }
+
+  Future<void> _proceedToSealCheck() async {
     setState(() {
       _demoPhase = DemoPhase.sealCheck;
     });
-    
-    // Automatically navigate to seal check screen
+    // Navigate to actual seal check screen (shows tone + scores)
     await _openSealCheckPage();
-    
     if (!mounted) return;
-    
-    // After seal check, proceed to calibration if sensor is ready
-    if (_sensor != null) {
-      _startCalibrationPhase();
-    } else {
-      // Need to initialize sensor first
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please ensure earable is connected and try again.'),
-        ),
-      );
-      _resetDemoMode();
-    }
+    // Auto-start calibration after returning (whether seal check succeeded or not)
+    _proceedToCalibration();
   }
 
-  Future<DemoMeditationPreferences?> _showDemoPreferencesDialog() async {
-    return await showDialog<DemoMeditationPreferences>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _DemoPreferencesDialog(),
-    );
-  }
-
-  void _resetDemoMode() {
-    setState(() {
-      _demoPhase = DemoPhase.none;
-      _demoSubMode = DemoConfig.modeNone;
-      _demoPreferences = null;
-      _demoPhaseStartTime = null;
-      _demoBaselineHr = null;
-     _demoBaselineRmssd = null;
-    });
-    _demoPhaseTimer?.cancel();
-    _demoPhaseTimer = null;
-  }
-
-  void _startPersonalizedOnlyMeditation() {
-    setState(() {
-      _demoPhase = DemoPhase.meditationSession;
-    });
-    
-    // For personalized-only, we still need the sensor for the widget
-    // but we don't need stress detection
-    if (!_earStreamActivated && _sensor != null) {
-      _activateEarStream();
-      _startMonitoring();
-    }
-    
-    // The LlmMeditationWidget will handle the meditation with demo preferences
-    // It will be configured to use 3 segments based on demo mode
-  }
-
-  void _startCalibrationPhase() {
+  void _proceedToCalibration() {
     setState(() {
       _demoPhase = DemoPhase.calibration;
       _demoPhaseStartTime = DateTime.now();
     });
-    
+
     // Automatically activate EarStream monitoring
-    if (!_earStreamActivated) {
+    if (!_earStreamActivated && _sensor != null) {
       _activateEarStream();
-      _startMonitoring();
     }
-    
-    // Start timer for calibration duration
+
+    // Auto-advance to baseline when calibration finishes
+    _demoPhaseTimer?.cancel();
     _demoPhaseTimer = Timer(DemoConfig.calibrationDuration, () {
       if (mounted && _demoPhase == DemoPhase.calibration) {
-        _startBaselineMeasurementPhase();
+        _proceedToBaselineMeasurement();
       }
     });
   }
 
-  void _startBaselineMeasurementPhase() {
+  void _proceedToBaselineMeasurement() {
     setState(() {
       _demoPhase = DemoPhase.baselineMeasurement;
       _demoPhaseStartTime = DateTime.now();
-      // Reset baseline values
       _demoBaselineHr = null;
       _demoBaselineRmssd = null;
     });
-    
-    // Start timer for baseline duration
+
+    // Auto-advance to monitoring when baseline finishes
+    _demoPhaseTimer?.cancel();
     _demoPhaseTimer = Timer(DemoConfig.baselineDuration, () {
       if (mounted && _demoPhase == DemoPhase.baselineMeasurement) {
-        _captureBaselineAndStartMonitoring();
+        final capturedHr = _currentHr > 0 ? _currentHr : DemoConfig.fallbackBaselineHr;
+        final capturedRmssd = _currentHrv > 0 ? _currentHrv : DemoConfig.fallbackBaselineRmssd;
+        setState(() {
+          _demoBaselineHr = capturedHr;
+          _demoBaselineRmssd = capturedRmssd;
+        });
+        _proceedToMonitoring();
       }
     });
   }
 
-  void _captureBaselineAndStartMonitoring() {
-    // Capture current HR and HRV as baseline
+  void _proceedToMonitoring() {
     setState(() {
-      _demoBaselineHr = _currentHr > 0 ? _currentHr : DemoConfig.fallbackBaselineHr;
-      _demoBaselineRmssd = _currentHrv > 0 ? _currentHrv : DemoConfig.fallbackBaselineRmssd;
       _demoPhase = DemoPhase.monitoring;
       _demoPhaseStartTime = DateTime.now();
     });
     
-    print('Demo Baseline Captured: HR=${_demoBaselineHr?.toStringAsFixed(1)} BPM, '
-          'RMSSD=${_demoBaselineRmssd?.toStringAsFixed(1)} ms');
-    
-    // Start periodic stress checking (every 3 seconds)
+    // Start periodic stress checking (every 3 seconds) with auto-detection
     _demoPhaseTimer?.cancel();
     _demoPhaseTimer = Timer.periodic(DemoConfig.monitoringCheckInterval, (timer) {
       _checkDemoStressLevel();
@@ -1621,8 +1915,8 @@ class _MeditationViewState extends State<MeditationView> {
     // Also set max monitoring duration timeout
     Timer(DemoConfig.maxMonitoringDuration, () {
       if (mounted && _demoPhase == DemoPhase.monitoring) {
-        print('Demo: Max monitoring duration reached, forcing meditation start');
-        _startBiosignalAdaptiveMeditation();
+        print('Demo: Max monitoring duration reached, manual trigger still available');
+        // Don't force start, keep waiting for manual or auto trigger
       }
     });
   }
@@ -1640,14 +1934,30 @@ class _MeditationViewState extends State<MeditationView> {
     final hrDeviation = ((currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100;
     final rmssdDeviation = ((_demoBaselineRmssd! - currentRmssd) / _demoBaselineRmssd!) * 100;
     
-    // Check if either exceeds 3% threshold (HR up or RMSSD down)
+    // Check if either exceeds threshold (HR up or RMSSD down)
     final isStressed = hrDeviation >= DemoConfig.stressThresholdPercent || 
                        rmssdDeviation >= DemoConfig.stressThresholdPercent;
     
     if (isStressed) {
-      print('Demo Stress Detected! HR deviation: ${hrDeviation.toStringAsFixed(1)}%, '
+      print('Demo Auto-Stress Detected! HR deviation: ${hrDeviation.toStringAsFixed(1)}%, '
             'RMSSD deviation: ${rmssdDeviation.toStringAsFixed(1)}%');
       _startBiosignalAdaptiveMeditation();
+    }
+  }
+
+  void _manuallyTriggerMeditation() {
+    print('Demo: Manual meditation trigger');
+    _startBiosignalAdaptiveMeditation();
+  }
+
+  void _startPersonalizedOnlyMeditation() {
+    setState(() {
+      _demoPhase = DemoPhase.meditationSession;
+    });
+    
+    // Ensure sensor and monitoring are active
+    if (!_earStreamActivated && _sensor != null) {
+      _activateEarStream();
     }
   }
 
@@ -1656,9 +1966,6 @@ class _MeditationViewState extends State<MeditationView> {
     setState(() {
       _demoPhase = DemoPhase.meditationSession;
     });
-    
-    // The LlmMeditationWidget will handle the meditation with demo settings
-    // It will be configured to use 4 segments max based on demo mode
   }
 
   void _onDemoMeditationComplete() {
@@ -1666,13 +1973,63 @@ class _MeditationViewState extends State<MeditationView> {
       _demoPhase = DemoPhase.analytics;
     });
     
-    // Show analytics for a few seconds, then return to demo selection
-    Timer(const Duration(seconds: 5), () {
-      if (mounted && _demoPhase == DemoPhase.analytics) {
-        _resetDemoMode();
-        _openDemoModePage(); // Return to demo mode selection
-      }
+    // Show analytics briefly, then wait for manual reset
+    // (Analytics are shown by the meditation widget automatically)
+  }
+
+  void _returnToDemoSelection() {
+    _resetDemoMode();
+    setState(() {
+      _isDemoModeActive = true;
+      _demoPhase = DemoPhase.modeSelection;
     });
+  }
+
+  void _resetDemoMode() {
+    setState(() {
+      _demoPhase = DemoPhase.none;
+      _demoSubMode = DemoConfig.modeNone;
+      _demoPreferences = null;
+      _demoPhaseStartTime = null;
+      _demoBaselineHr = null;
+      _demoBaselineRmssd = null;
+    });
+    _demoPhaseTimer?.cancel();
+    _demoPhaseTimer = null;
+  }
+
+  // ============================================================================
+  // LEGACY DEMO MODE FLOWS (TO BE REMOVED)
+  // ============================================================================
+
+  Future<void> _startPersonalizedOnlyDemo() async {
+    // Legacy method - replaced by _selectDemoMode and manual flow
+    _selectDemoMode(DemoConfig.modePersonalizedOnly);
+  }
+
+  Future<void> _startBiosignalAdaptiveDemo() async {
+    // Legacy method - replaced by _selectDemoMode and manual flow
+    _selectDemoMode(DemoConfig.modeBiosignalAdaptive);
+  }
+
+  Future<DemoMeditationPreferences?> _showDemoPreferencesDialog() async {
+    // Legacy method - now using existing preferences UI
+    return DemoMeditationPreferences.defaults();
+  }
+
+  void _startCalibrationPhase() {
+    // Legacy method - now using manual flow with _proceedToCalibration
+    _proceedToCalibration();
+  }
+
+  void _startBaselineMeasurementPhase() {
+    // Legacy method - now using manual flow with _proceedToBaselineMeasurement
+    _proceedToBaselineMeasurement();
+  }
+
+  void _captureBaselineAndStartMonitoring() {
+    // Legacy method - baseline capture now happens in timer callback
+    // Monitoring starts with _proceedToMonitoring
   }
 
   bool _hasRequiredPersonalInfo(UserAccount account) {
@@ -1911,40 +2268,46 @@ class _MeditationViewState extends State<MeditationView> {
                           _buildSelectedModeSummary(),
                           const SizedBox(height: 12),
 
-                          // Demo Phase Indicator
-                          if (_demoPhase != DemoPhase.none && 
-                              _demoPhase != DemoPhase.modeSelection)
-                            _buildDemoPhaseIndicator(),
-                          if (_demoPhase != DemoPhase.none && 
-                              _demoPhase != DemoPhase.modeSelection)
-                            const SizedBox(height: 12),
+                          // Demo Control Panel - Shown when demo mode active
+                          if (_isDemoModeActive && _demoPhase != DemoPhase.none)
+                            _buildDemoControlPanel(),
+                          if (_isDemoModeActive && _demoPhase != DemoPhase.none)
+                            const SizedBox(height: 16),
 
-                          HrHrvDisplayNew(
-                            hr: _currentHr,
-                            hrv: _currentHrv,
-                            hrHistory: _hrHistory,
-                            isHrStable: _hrIsStable,
-                            stressLevel: _stressLevel,
-                            isHrvStable: _hrvIsStable,
-                            measurementDurationSeconds:
-                                _measurementDurationSeconds,
-                            activityLevel: _sensor is EarableHrSensor
-                                ? (_sensor as EarableHrSensor)
-                                    .activityLevel
-                                    .name
-                                : null,
-                            activityDescription: _sensor is EarableHrSensor
-                                ? _getActivityDescription(
-                                    (_sensor as EarableHrSensor).activityLevel)
-                                : null,
-                            showMonitoring: _selectedMode == MeditationAppMode.normal && 
-                                _earStreamActivated,
-                          ),
-                          const SizedBox(height: 16),
+                          // HR/HRV Display — hidden during demo mode selection
+                          // and hidden entirely for Personalized Meditation Only demo mode
+                          if (!_isDemoModeActive ||
+                              (_demoPhase != DemoPhase.none &&
+                                  _demoPhase != DemoPhase.modeSelection &&
+                                  _demoSubMode != DemoConfig.modePersonalizedOnly))
+                            HrHrvDisplayNew(
+                              hr: _currentHr,
+                              hrv: _currentHrv,
+                              hrHistory: _hrHistory,
+                              isHrStable: _hrIsStable,
+                              stressLevel: _stressLevel,
+                              isHrvStable: _hrvIsStable,
+                              measurementDurationSeconds:
+                                  _measurementDurationSeconds,
+                              activityLevel: _sensor is EarableHrSensor
+                                  ? (_sensor as EarableHrSensor)
+                                      .activityLevel
+                                      .name
+                                  : null,
+                              activityDescription: _sensor is EarableHrSensor
+                                  ? _getActivityDescription(
+                                      (_sensor as EarableHrSensor).activityLevel)
+                                  : null,
+                              showMonitoring: (_selectedMode == MeditationAppMode.normal || 
+                                  _isDemoModeActive) && _earStreamActivated,
+                            ),
+                          if (!_isDemoModeActive || 
+                              (_demoPhase != DemoPhase.none && _demoPhase != DemoPhase.modeSelection))
+                            const SizedBox(height: 16),
 
+                          // Meditation Widget - Only shown during meditation session
                           if (_sensor != null &&
-                              (_selectedMode != MeditationAppMode.test || 
-                               _demoPhase == DemoPhase.meditationSession) &&
+                              _demoPhase == DemoPhase.meditationSession &&
                               _earStreamActivated)
                             LlmMeditationWidget(
                               key: _meditationWidgetKey,
@@ -1952,7 +2315,7 @@ class _MeditationViewState extends State<MeditationView> {
                               onBeforeStartMeditation:
                                   _ensureMeditationCanStart,
                               stressDetectionEnabled:
-                                  _selectedMode == MeditationAppMode.normal,
+                                  _demoSubMode == DemoConfig.modeBiosignalAdaptive,
                               onReset: () {
                                 unawaited(_resetSession());
                               },
@@ -1973,10 +2336,39 @@ class _MeditationViewState extends State<MeditationView> {
                                 }
                               },
                             ),
+                          
+                          // Normal mode meditation widget
+                          if (_sensor != null &&
+                              !_isDemoModeActive &&
+                              _selectedMode != MeditationAppMode.test &&
+                              _earStreamActivated)
+                            LlmMeditationWidget(
+                              key: _meditationWidgetKey,
+                              sensor: _sensor!,
+                              onBeforeStartMeditation:
+                                  _ensureMeditationCanStart,
+                              stressDetectionEnabled:
+                                  _selectedMode == MeditationAppMode.normal,
+                              onReset: () {
+                                unawaited(_resetSession());
+                              },
+                              onStressLevelChanged: (level) {
+                                if (mounted) {
+                                  setState(() {
+                                    _stressLevel = level;
+                                  });
+                                }
+                              },
+                              demoMode: DemoConfig.modeNone,
+                              demoPreferences: null,
+                              demoBaselineHr: null,
+                              demoBaselineRmssd: null,
+                              onDemoComplete: null,
+                            ),
 
                           const SizedBox(height: 16),
 
-                          if (_selectedMode != MeditationAppMode.test) ...[
+                          if (!_isDemoModeActive && _selectedMode != MeditationAppMode.test) ...[
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
@@ -2164,168 +2556,185 @@ class _MeditationViewState extends State<MeditationView> {
 // DEMO PREFERENCES DIALOG
 // ================================================================================
 
-class _DemoPreferencesDialog extends StatefulWidget {
+class _DemoPreferencesPage extends StatefulWidget {
+  final bool isBiosignalAdaptive;
+  const _DemoPreferencesPage({required this.isBiosignalAdaptive});
+
   @override
-  State<_DemoPreferencesDialog> createState() => _DemoPreferencesDialogState();
+  State<_DemoPreferencesPage> createState() => _DemoPreferencesPageState();
 }
 
-class _DemoPreferencesDialogState extends State<_DemoPreferencesDialog> {
-  String _selectedStyle = 'Mindfulness';
-  String _selectedVoiceTone = 'Calm';
-  int _durationMinutes = 5;
-  bool _useBackgroundSounds = true;
+class _DemoPreferencesPageState extends State<_DemoPreferencesPage> {
+  String _meditationType = 'mindfulness';
+  String _voiceGender = 'female';
+  String _speakingSpeed = 'slow';
+  String _environment = 'peaceful nature';
+
+  static const _types = [
+    ('mindfulness', '🧘 Mindfulness'),
+    ('breathing', '🌬️ Breathing'),
+    ('body_scan', '💆 Body Scan'),
+    ('visualization_journey', '🌅 Visualization Journey'),
+  ];
+  static const _environments = [
+    ('peaceful nature', '🌳 Peaceful Nature'),
+    ('calm ocean beach', '🌊 Ocean Beach'),
+    ('quiet mountain', '⛰️ Mountain'),
+    ('serene forest', '🌲 Forest'),
+    ('gentle garden', '🌸 Garden'),
+  ];
 
   void _surpriseMe() {
-    final randomPrefs = DemoMeditationPreferences.random();
+    final prefs = DemoMeditationPreferences.random();
     setState(() {
-      _selectedStyle = randomPrefs.meditationStyle;
-      _selectedVoiceTone = randomPrefs.voiceTone;
-      _durationMinutes = randomPrefs.durationMinutes;
-      _useBackgroundSounds = randomPrefs.useBackgroundSounds;
+      _meditationType = prefs.meditationStyle;
+      _voiceGender = prefs.voiceGender;
+      _speakingSpeed = prefs.speakingSpeed;
+      _environment = prefs.meditationEnvironment;
     });
   }
 
   void _confirm() {
-    final preferences = DemoMeditationPreferences(
-      meditationStyle: _selectedStyle,
-      voiceTone: _selectedVoiceTone,
-      durationMinutes: _durationMinutes,
-      useBackgroundSounds: _useBackgroundSounds,
-    );
-    Navigator.of(context).pop(preferences);
+    Navigator.of(context).pop(DemoMeditationPreferences(
+      meditationStyle: _meditationType,
+      voiceGender: _voiceGender,
+      speakingSpeed: _speakingSpeed,
+      meditationEnvironment: _environment,
+    ));
   }
+
+  static InputDecoration _dropdownDecoration() => InputDecoration(
+        filled: true,
+        fillColor: Colors.grey[100],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final nextLabel = widget.isBiosignalAdaptive
+        ? 'Proceed to Seal Check →'
+        : 'Start Meditation →';
 
-    return AlertDialog(
-      title: Row(
+    return Scaffold(
+      appBar: EarStreamStyle.appBar(context, title: 'Demo Preferences'),
+      body: ListView(
+        padding: EarStreamStyle.pagePadding(context),
         children: [
-          Icon(Icons.tune, color: colorScheme.primary),
-          const SizedBox(width: 8),
-          const Text('Meditation Preferences'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Choose your demo meditation experience',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'These settings are session-only and won\'t affect your saved preferences.',
+                    style: TextStyle(color: Colors.grey[700], height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _surpriseMe,
+                      icon: const Icon(Icons.casino_outlined),
+                      label: const Text('🎲  Surprise me!'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Voice Gender',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _voiceGender,
+                    decoration: _dropdownDecoration(),
+                    items: const [
+                      DropdownMenuItem(value: 'female', child: Text('👩 Female')),
+                      DropdownMenuItem(value: 'male', child: Text('👨 Male')),
+                    ],
+                    onChanged: (v) => setState(() => _voiceGender = v!),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Speaking Speed',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _speakingSpeed,
+                    decoration: _dropdownDecoration(),
+                    items: const [
+                      DropdownMenuItem(value: 'very_slow', child: Text('🐌 Very Slow')),
+                      DropdownMenuItem(value: 'slow', child: Text('🐢 Slow (Recommended)')),
+                      DropdownMenuItem(value: 'medium', child: Text('🚶 Medium')),
+                      DropdownMenuItem(value: 'fast', child: Text('🏃 Fast')),
+                    ],
+                    onChanged: (v) => setState(() => _speakingSpeed = v!),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Meditation Type',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _meditationType,
+                    decoration: _dropdownDecoration(),
+                    items: _types
+                        .map((t) => DropdownMenuItem(
+                            value: t.$1, child: Text(t.$2)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _meditationType = v!),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Environment',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _environment,
+                    decoration: _dropdownDecoration(),
+                    items: _environments
+                        .map((e) => DropdownMenuItem(
+                            value: e.$1, child: Text(e.$2)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _environment = v!),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _confirm,
+              icon: const Icon(Icons.arrow_forward),
+              label: Text(nextLabel),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.8,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Surprise Me Button
-              Center(
-                child: OutlinedButton.icon(
-                  onPressed: _surpriseMe,
-                  icon: const Icon(Icons.casino),
-                  label: const Text('Surprise Me'),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: colorScheme.primaryContainer,
-                    foregroundColor: colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Divider(),
-              const SizedBox(height: 12),
-              
-              // Meditation Style
-              Text(
-                'Meditation Style',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: DemoConfig.availableStyles.map((style) {
-                  final isSelected = style == _selectedStyle;
-                  return ChoiceChip(
-                    label: Text(style),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _selectedStyle = style);
-                      }
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              
-              // Voice Tone
-              Text(
-                'Voice Tone',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: DemoConfig.availableVoiceTones.map((tone) {
-                  final isSelected = tone == _selectedVoiceTone;
-                  return ChoiceChip(
-                    label: Text(tone),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() => _selectedVoiceTone = tone);
-                      }
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              
-              // Duration
-              Text(
-                'Duration: $_durationMinutes minutes',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Slider(
-                value: _durationMinutes.toDouble(),
-                min: 3,
-                max: 10,
-                divisions: 7,
-                label: '$_durationMinutes min',
-                onChanged: (value) {
-                  setState(() => _durationMinutes = value.round());
-                },
-              ),
-              const SizedBox(height: 8),
-              
-              // Background Sounds
-              SwitchListTile(
-                title: const Text('Background Sounds'),
-                subtitle: const Text('Ambient nature sounds'),
-                value: _useBackgroundSounds,
-                onChanged: (value) {
-                  setState(() => _useBackgroundSounds = value);
-                },
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _confirm,
-          child: const Text('Start Meditation'),
-        ),
-      ],
     );
   }
 }
+

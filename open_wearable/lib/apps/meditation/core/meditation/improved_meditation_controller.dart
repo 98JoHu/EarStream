@@ -807,6 +807,12 @@ class ImprovedMeditationController {
   /// 
   /// Percentages apply to whatever time window is available (adapts before 5 minutes filled)
   bool _shouldSuppressMeditationDueToActivity() {
+    // Disable activity suppression in demo mode for conference presentations
+    // Conference visitors will be seated, so activity detection shouldn't block meditation
+    if (demoMode != null && demoMode != DemoConfig.modeNone) {
+      return false;
+    }
+    
     if (_activityHistory.isEmpty) return false;
     
     // Calculate total time window (use actual time available, not fixed 5 minutes)

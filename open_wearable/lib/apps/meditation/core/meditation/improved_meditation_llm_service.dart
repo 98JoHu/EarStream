@@ -104,12 +104,12 @@ class ImprovedMeditationLLMService {
       meditationType = _demoPreferences!.meditationStyle.toLowerCase().replaceAll(' ', '_');
       userContext = '''DEMO MODE - ACM UbiComp Conference
 Meditation Style: ${_demoPreferences!.meditationStyle}
+Environment: ${_demoPreferences!.meditationEnvironment}
 Voice Tone: ${_demoPreferences!.voiceTone}
-Background Sounds: ${_demoPreferences!.useBackgroundSounds ? 'Enabled' : 'Disabled'}
 
 This is a demonstration session to showcase personalized meditation capabilities.
-Focus on the meditation style and voice tone preferences provided.
-Keep segments concise and impactful (approximately $_wordCount words).''';
+Focus on the meditation style and environment provided.
+Keep segments concise and impactful (approximately $_wordCount words).''';;
     } else {
       // Normal mode: use full user account context
       userContext = _userAccount?.getLLMContext() ?? '';
