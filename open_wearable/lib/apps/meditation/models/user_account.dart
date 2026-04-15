@@ -19,6 +19,7 @@ class UserAccount {
   String meditationEnvironment; // Nature, ocean, mountain, etc.
   String speakingSpeed; // 'very_slow', 'slow', 'medium', 'fast'
   String additionalPreferences; // Free-form user preferences
+  double stressThreshold; // Threshold for stress detection (default 0.10 = 10%)
   bool usePremiumVoice; // Toggle for ElevenLabs TTS ($$$)
   String geminiApiKey;
   String elevenLabsApiKey;
@@ -45,6 +46,7 @@ class UserAccount {
     this.meditationEnvironment = 'peaceful nature',
     this.speakingSpeed = 'slow',
     this.additionalPreferences = '',
+    this.stressThreshold = 0.10, // 10% threshold by default
     this.usePremiumVoice = false, // Default to FREE voice
     this.geminiApiKey = '',
     this.elevenLabsApiKey = '',
@@ -131,13 +133,13 @@ class UserAccount {
     // Use measured baseline if available
     if (restingHr != null) {
       relaxHrThreshold = restingHr!;
-      stressHrThreshold = restingHr! * 1.25; // 25% above resting
+      stressHrThreshold = restingHr! * (1.0 + stressThreshold); // User-defined threshold above resting
     }
 
     if (baselineHrv != null) {
       relaxHrvThreshold = baselineHrv!;
       stressHrvThreshold =
-          baselineHrv! * 0.6; // 40% below baseline indicates stress
+          baselineHrv! * (1.0 - stressThreshold); // User-defined threshold below baseline indicates stress
     }
 
     return {
@@ -171,6 +173,7 @@ class UserAccount {
         'meditationEnvironment': meditationEnvironment,
         'speakingSpeed': speakingSpeed,
         'additionalPreferences': additionalPreferences,
+        'stressThreshold': stressThreshold,
         'usePremiumVoice': usePremiumVoice,
         'geminiApiKey': geminiApiKey,
         'elevenLabsApiKey': elevenLabsApiKey,
@@ -198,6 +201,7 @@ class UserAccount {
       meditationEnvironment: json['meditationEnvironment'] ?? 'peaceful nature',
       speakingSpeed: json['speakingSpeed'] ?? 'slow',
       additionalPreferences: json['additionalPreferences'] ?? '',
+      stressThreshold: (json['stressThreshold'] ?? 0.10).toDouble(),
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
       geminiApiKey: json['geminiApiKey'] ?? '',
       elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',

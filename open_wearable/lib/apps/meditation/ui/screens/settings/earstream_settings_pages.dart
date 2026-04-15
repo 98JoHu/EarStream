@@ -44,6 +44,7 @@ class _EarStreamAccountSectionPageState
   late String _meditationEnvironment;
   late String _voiceGender;
   late String _speakingSpeed;
+  late double _stressThreshold;
   late bool _usePremiumVoice;
   late String _selectedElevenLabsVoiceId;
 
@@ -84,6 +85,7 @@ class _EarStreamAccountSectionPageState
     _meditationEnvironment = account.meditationEnvironment;
     _voiceGender = account.voiceGender;
     _speakingSpeed = account.speakingSpeed;
+    _stressThreshold = account.stressThreshold;
     _usePremiumVoice = account.usePremiumVoice;
 
     final savedVoiceId = account.elevenLabsVoiceId;
@@ -156,6 +158,7 @@ class _EarStreamAccountSectionPageState
     updatedAccount.voiceGender = _voiceGender;
     updatedAccount.speakingSpeed = _speakingSpeed;
     updatedAccount.additionalPreferences = _additionalPreferencesController.text.trim();
+    updatedAccount.stressThreshold = _stressThreshold;
     updatedAccount.usePremiumVoice = _usePremiumVoice;
     updatedAccount.elevenLabsVoiceId = _selectedElevenLabsVoiceId;
     updatedAccount.geminiApiKey = _geminiApiKeyController.text.trim();
@@ -766,6 +769,50 @@ class _EarStreamAccountSectionPageState
                 borderSide: BorderSide.none,
               ),
             ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Stress Detection Threshold',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'How much must your heart rate increase (and HRV decrease) above baseline to be considered stressed?',
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<double>(
+            value: _stressThreshold,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 0.05,
+                child: Text('📊 5% - Very Sensitive'),
+              ),
+              DropdownMenuItem(
+                value: 0.10,
+                child: Text('📊 10% - Recommended'),
+              ),
+              DropdownMenuItem(
+                value: 0.15,
+                child: Text('📊 15% - Moderate'),
+              ),
+              DropdownMenuItem(
+                value: 0.20,
+                child: Text('📊 20% - Less Sensitive'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _stressThreshold = value);
+            },
           ),
           const SizedBox(height: 28),
           /* Premium voice toggle commented out

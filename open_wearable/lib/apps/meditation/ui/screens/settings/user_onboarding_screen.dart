@@ -31,6 +31,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   String _meditationEnvironment = 'peaceful nature';
   String _speakingSpeed = 'slow';
   late TextEditingController _additionalPreferencesController;
+  double _stressThreshold = 0.10; // 10% by default
   bool _usePremiumVoice = false; // Premium voice toggle
   String _selectedElevenLabsVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
 
@@ -62,6 +63,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _meditationType = account?.meditationType ?? 'mindfulness';
     _meditationEnvironment = account?.meditationEnvironment ?? 'peaceful nature';
     _speakingSpeed = account?.speakingSpeed ?? 'slow';
+    _stressThreshold = account?.stressThreshold ?? 0.10;
     _usePremiumVoice = account?.usePremiumVoice ?? false;
 
     final savedVoiceId = account?.elevenLabsVoiceId ?? '';
@@ -133,6 +135,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       meditationEnvironment: _meditationEnvironment,
       speakingSpeed: _speakingSpeed,
       additionalPreferences: _additionalPreferencesController.text.trim(),
+      stressThreshold: _stressThreshold,
       usePremiumVoice: _usePremiumVoice,
       geminiApiKey: _geminiApiKeyController.text.trim(),
       elevenLabsApiKey: _elevenLabsApiKeyController.text.trim(),
@@ -632,6 +635,50 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                       borderSide: BorderSide.none,
                     ),
                   ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Stress Threshold
+                const Text('Stress Detection Threshold',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Text(
+                  'How much must your heart rate increase (and HRV decrease) above baseline to be considered stressed?',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<double>(
+                  value: _stressThreshold,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 0.05,
+                      child: Text('📊 5% - Very Sensitive'),
+                    ),
+                    DropdownMenuItem(
+                      value: 0.10,
+                      child: Text('📊 10% - Recommended'),
+                    ),
+                    DropdownMenuItem(
+                      value: 0.15,
+                      child: Text('📊 15% - Moderate'),
+                    ),
+                    DropdownMenuItem(
+                      value: 0.20,
+                      child: Text('📊 20% - Less Sensitive'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _stressThreshold = value!),
                 ),
 
                 const SizedBox(height: 32),
