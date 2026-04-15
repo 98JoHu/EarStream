@@ -106,7 +106,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // Load user account (primary source of truth)
     final account = await UserAccount.load();
     print(
-        '🔍 LOADED ACCOUNT: name="${account.name}", voice=${account.voiceGender}, style=${account.meditationStyle}');
+        '🔍 LOADED ACCOUNT: name="${account.name}", voice=${account.voiceGender}, type=${account.meditationType}');
 
     setState(() {
       _userAccount = account;
@@ -119,13 +119,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     _voiceService = MeditationVoiceService();
     await _voiceService!.initialize(
       voiceGender: _userAccount!.voiceGender,
-      meditationStyle: _userAccount!.meditationStyle,
+      speakingSpeed: _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
     );
     print(
-        '✅ Voice service initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, style=${_userAccount!.meditationStyle}, premium=${_userAccount!.usePremiumVoice}');
+        '✅ Voice service initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, speed=${_userAccount!.speakingSpeed}, premium=${_userAccount!.usePremiumVoice}');
 
     _llmService = ImprovedMeditationLLMService();
     _llmService!.setUserAccount(_userAccount!);
@@ -251,13 +251,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       _voiceService = MeditationVoiceService();
       await _voiceService!.initialize(
         voiceGender: _userAccount!.voiceGender,
-        meditationStyle: _userAccount!.meditationStyle,
+        speakingSpeed: _userAccount!.speakingSpeed,
         usePremiumVoice: _userAccount!.usePremiumVoice,
         elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
         elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
       );
       print(
-          '✅ Voice service reinitialized after reset: premium=${_userAccount!.usePremiumVoice}');
+          '✅ Voice service reinitialized after reset: speed=${_userAccount!.speakingSpeed}, premium=${_userAccount!.usePremiumVoice}');
 
       _llmService = ImprovedMeditationLLMService();
       _llmService!.setUserAccount(_userAccount!);
@@ -335,7 +335,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
   Future<void> updateSettings(UserAccount updatedAccount) async {
     print(
-        '🔄 UPDATE SETTINGS CALLED: voiceGender=${updatedAccount.voiceGender.toUpperCase()}, env=${updatedAccount.preferredEnvironment}, style=${updatedAccount.meditationStyle}');
+        '🔄 UPDATE SETTINGS CALLED: voiceGender=${updatedAccount.voiceGender.toUpperCase()}, env=${updatedAccount.meditationEnvironment}, type=${updatedAccount.meditationType}');
 
     // Stop current session if active
     if (_controller != null && _currentState != MeditationState.idle) {
@@ -360,13 +360,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     _voiceService = MeditationVoiceService();
     await _voiceService!.initialize(
       voiceGender: _userAccount!.voiceGender,
-      meditationStyle: _userAccount!.meditationStyle,
+      speakingSpeed: _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
     );
     print(
-        '✅ Voice service RE-initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, style=${_userAccount!.meditationStyle}, premium=${_userAccount!.usePremiumVoice}');
+        '✅ Voice service RE-initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, speed=${_userAccount!.speakingSpeed}, premium=${_userAccount!.usePremiumVoice}');
 
     _llmService = ImprovedMeditationLLMService();
     _llmService!.setUserAccount(_userAccount!);

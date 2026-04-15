@@ -770,7 +770,7 @@ class ImprovedMeditationController {
   Future<void> _playBackgroundAmbience() async {
     String? audioFile;
     try {
-      final environment = userAccount.preferredEnvironment.toLowerCase();
+      final environment = userAccount.meditationEnvironment.toLowerCase();
       _logger.i('Starting background ambience for environment: "$environment"');
 
       // Map environment preference to audio file

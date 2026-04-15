@@ -27,8 +27,10 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   String _gender = 'other';
   String _fitnessLevel = 'moderate';
   String _voiceGender = 'female';
-  String _meditationStyle = 'calm and empathetic';
-  String _environment = 'peaceful nature';
+  String _meditationType = 'mindfulness';
+  String _meditationEnvironment = 'peaceful nature';
+  String _speakingSpeed = 'slow';
+  late TextEditingController _additionalPreferencesController;
   bool _usePremiumVoice = false; // Premium voice toggle
   String _selectedElevenLabsVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
 
@@ -52,11 +54,14 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
         TextEditingController(text: account?.elevenLabsApiKey ?? '');
     _microsoftGraphTokenController =
         TextEditingController(text: account?.microsoftGraphAccessToken ?? '');
+    _additionalPreferencesController =
+        TextEditingController(text: account?.additionalPreferences ?? '');
     _gender = account?.gender ?? 'other';
     _fitnessLevel = account?.fitnessLevel ?? 'moderate';
     _voiceGender = account?.voiceGender ?? 'female';
-    _meditationStyle = account?.meditationStyle ?? 'calm and empathetic';
-    _environment = account?.preferredEnvironment ?? 'peaceful nature';
+    _meditationType = account?.meditationType ?? 'mindfulness';
+    _meditationEnvironment = account?.meditationEnvironment ?? 'peaceful nature';
+    _speakingSpeed = account?.speakingSpeed ?? 'slow';
     _usePremiumVoice = account?.usePremiumVoice ?? false;
 
     final savedVoiceId = account?.elevenLabsVoiceId ?? '';
@@ -74,6 +79,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _geminiApiKeyController.dispose();
     _elevenLabsApiKeyController.dispose();
     _microsoftGraphTokenController.dispose();
+    _additionalPreferencesController.dispose();
     super.dispose();
   }
 
@@ -123,8 +129,10 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       gender: _gender,
       fitnessLevel: _fitnessLevel,
       voiceGender: _voiceGender,
-      meditationStyle: _meditationStyle,
-      preferredEnvironment: _environment,
+      meditationType: _meditationType,
+      meditationEnvironment: _meditationEnvironment,
+      speakingSpeed: _speakingSpeed,
+      additionalPreferences: _additionalPreferencesController.text.trim(),
       usePremiumVoice: _usePremiumVoice,
       geminiApiKey: _geminiApiKeyController.text.trim(),
       elevenLabsApiKey: _elevenLabsApiKeyController.text.trim(),
@@ -471,11 +479,12 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
               children: [
                 const SizedBox(height: 24),
 
-                const Text('Meditation Style',
+                // Voice Gender
+                const Text('Voice Gender',
                     style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: _meditationStyle,
+                  initialValue: _voiceGender,
                   isExpanded: true,
                   decoration: InputDecoration(
                     filled: true,
@@ -487,36 +496,99 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   ),
                   items: const [
                     DropdownMenuItem(
-                      value: 'calm and empathetic',
-                      child: Text('🌸 Calm & Empathetic',
-                          overflow: TextOverflow.ellipsis),
+                      value: 'female',
+                      child: Text('👩 Female'),
                     ),
                     DropdownMenuItem(
-                      value: 'gentle and soothing',
-                      child: Text('🕊️ Gentle & Soothing',
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    DropdownMenuItem(
-                      value: 'warm and compassionate',
-                      child: Text('💝 Warm & Caring',
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    DropdownMenuItem(
-                      value: 'peaceful and mindful',
-                      child: Text('☮️ Peaceful & Mindful',
-                          overflow: TextOverflow.ellipsis),
+                      value: 'male',
+                      child: Text('👨 Male'),
                     ),
                   ],
                   onChanged: (value) =>
-                      setState(() => _meditationStyle = value!),
+                      setState(() => _voiceGender = value!),
                 ),
                 const SizedBox(height: 24),
 
-                const Text('Preferred Environment',
+                // Speaking Speed
+                const Text('Speaking Speed',
                     style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: _environment,
+                  initialValue: _speakingSpeed,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'very_slow',
+                      child: Text('🐌 Very Slow'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'slow',
+                      child: Text('🐢 Slow (Recommended)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'medium',
+                      child: Text('🚶 Medium'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fast',
+                      child: Text('🏃 Fast'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _speakingSpeed = value!),
+                ),
+                const SizedBox(height: 24),
+
+                const Text('Meditation Type',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _meditationType,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'mindfulness',
+                      child: Text('🧘 Mindfulness'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'breathing',
+                      child: Text('🌬️ Breathing'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'body_scan',
+                      child: Text('💆 Body Scan'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'visualization_journey',
+                      child: Text('🌅 Visualization Journey'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _meditationType = value!),
+                ),
+                const SizedBox(height: 24),
+
+                const Text('Meditation Environment',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _meditationEnvironment,
                   isExpanded: true,
                   decoration: InputDecoration(
                     filled: true,
@@ -540,15 +612,34 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     DropdownMenuItem(
                         value: 'gentle garden', child: Text('🌸 Garden')),
                   ],
-                  onChanged: (value) => setState(() => _environment = value!),
+                  onChanged: (value) => setState(() => _meditationEnvironment = value!),
+                ),
+                const SizedBox(height: 24),
+
+                // Additional Preferences
+                const Text('Additional Preferences (Optional)',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _additionalPreferencesController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'E.g., "I prefer longer pauses" or "Focus on calming imagery"',
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
 
                 const SizedBox(height: 32),
                 const Divider(),
                 const SizedBox(height: 16),
 
-                // Premium Voice Toggle
-                Row(
+                // Premium Voice Toggle - COMMENTED OUT (ElevenLabs standard voices sufficient)
+                /* Row(
                   children: [
                     Expanded(
                       child: Column(
@@ -597,7 +688,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                       activeThumbColor: Colors.amber,
                     ),
                   ],
-                ),
+                ), */
                 const SizedBox(height: 24),
                 const Divider(),
                 const SizedBox(height: 16),

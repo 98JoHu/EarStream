@@ -24,25 +24,26 @@ class MeditationVoiceService {
   bool _isInitialized = false;
   bool _isSpeaking = false;
   bool _usePremiumVoice = false;
-  String _meditationStyle = 'calm and empathetic';
+  String _speakingSpeed = 'slow'; // 'very_slow', 'slow', 'medium', 'fast'
   String _elevenLabsApiKey = MeditationConfig.elevenLabsApiKey;
   String _elevenLabsVoiceId = MeditationConfig.elevenLabsVoiceId;
 
-  static const Map<String, Map<String, double>> _styleSettings = {
-    'calm and empathetic': {'stability': 0.62, 'similarityBoost': 0.82},
-    'gentle and soothing': {'stability': 0.70, 'similarityBoost': 0.78},
-    'warm and compassionate': {'stability': 0.58, 'similarityBoost': 0.86},
-    'peaceful and mindful': {'stability': 0.68, 'similarityBoost': 0.80},
+  // Map speaking speed to TTS rate values
+  static const Map<String, double> _speedToRate = {
+    'very_slow': 0.25,
+    'slow': 0.4,
+    'medium': 0.6,
+    'fast': 0.8,
   };
 
   Future<void> initialize({
     String voiceGender = 'female',
-    String? meditationStyle,
+    String speakingSpeed = 'slow',
     bool usePremiumVoice = false,
     String? elevenLabsApiKey,
     String? elevenLabsVoiceId,
   }) async {
-    _meditationStyle = meditationStyle ?? 'calm and empathetic';
+    _speakingSpeed = speakingSpeed;
     _usePremiumVoice = usePremiumVoice;
     _elevenLabsApiKey = MeditationRuntimeConfig.elevenLabsApiKey(
           localValue: elevenLabsApiKey,
@@ -53,7 +54,7 @@ class MeditationVoiceService {
     );
 
     _logger.i(
-      'Initializing voice (style: $_meditationStyle, premium: $_usePremiumVoice)',
+      'Initializing voice (speed: $_speakingSpeed, premium: $_usePremiumVoice)',
     );
 
     await _initializeFlutterTts();
@@ -71,7 +72,8 @@ class MeditationVoiceService {
   Future<void> _initializeFlutterTts() async {
     try {
       await _flutterTts.setLanguage('en-US');
-      await _flutterTts.setSpeechRate(0.42);
+      final rate = _speedToRate[_speakingSpeed] ?? 0.4; // Default to 'slow'
+      await _flutterTts.setSpeechRate(rate);
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setPitch(0.90);
 
@@ -231,8 +233,6 @@ class MeditationVoiceService {
         return true;
       }
 
-      final styleSettings = _styleSettings[_meditationStyle] ??
-          _styleSettings['calm and empathetic']!;
       final voiceId = _elevenLabsVoiceId;
 
       _logger.i('ElevenLabs TTS: $voiceId - API REQUEST');
@@ -254,8 +254,8 @@ class MeditationVoiceService {
               'text': text,
               'model_id': 'eleven_turbo_v2',
               'voice_settings': {
-                'stability': styleSettings['stability']!,
-                'similarity_boost': styleSettings['similarityBoost']!,
+                'stability': 0.65, // Meditation-optimized: calm and stable
+                'similarity_boost': 0.80, // Maintain voice consistency
                 'style': 0.35,
                 'use_speaker_boost': true,
               },

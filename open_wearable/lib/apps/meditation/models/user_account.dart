@@ -15,8 +15,10 @@ class UserAccount {
 
   // Meditation preferences
   String voiceGender; // 'male' or 'female'
-  String meditationStyle; // Calm, energetic, etc.
-  String preferredEnvironment; // Nature, ocean, etc.
+  String meditationType; // 'visualization_journey', 'mindfulness', 'body_scan', 'breathing'
+  String meditationEnvironment; // Nature, ocean, mountain, etc.
+  String speakingSpeed; // 'very_slow', 'slow', 'medium', 'fast'
+  String additionalPreferences; // Free-form user preferences
   bool usePremiumVoice; // Toggle for ElevenLabs TTS ($$$)
   String geminiApiKey;
   String elevenLabsApiKey;
@@ -38,9 +40,11 @@ class UserAccount {
     this.fitnessLevel = 'moderate',
     this.restingHr,
     this.baselineHrv,
-    this.voiceGender = 'female', // Fixed to female only
-    this.meditationStyle = 'calm and empathetic',
-    this.preferredEnvironment = 'peaceful nature',
+    this.voiceGender = 'female',
+    this.meditationType = 'mindfulness',
+    this.meditationEnvironment = 'peaceful nature',
+    this.speakingSpeed = 'slow',
+    this.additionalPreferences = '',
     this.usePremiumVoice = false, // Default to FREE voice
     this.geminiApiKey = '',
     this.elevenLabsApiKey = '',
@@ -163,8 +167,10 @@ class UserAccount {
         'restingHr': restingHr,
         'baselineHrv': baselineHrv,
         'voiceGender': voiceGender,
-        'meditationStyle': meditationStyle,
-        'preferredEnvironment': preferredEnvironment,
+        'meditationType': meditationType,
+        'meditationEnvironment': meditationEnvironment,
+        'speakingSpeed': speakingSpeed,
+        'additionalPreferences': additionalPreferences,
         'usePremiumVoice': usePremiumVoice,
         'geminiApiKey': geminiApiKey,
         'elevenLabsApiKey': elevenLabsApiKey,
@@ -188,8 +194,10 @@ class UserAccount {
       restingHr: json['restingHr']?.toDouble(),
       baselineHrv: json['baselineHrv']?.toDouble(),
       voiceGender: json['voiceGender'] ?? 'female',
-      meditationStyle: json['meditationStyle'] ?? 'calm and empathetic',
-      preferredEnvironment: json['preferredEnvironment'] ?? 'peaceful nature',
+      meditationType: json['meditationType'] ?? 'mindfulness',
+      meditationEnvironment: json['meditationEnvironment'] ?? 'peaceful nature',
+      speakingSpeed: json['speakingSpeed'] ?? 'slow',
+      additionalPreferences: json['additionalPreferences'] ?? '',
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
       geminiApiKey: json['geminiApiKey'] ?? '',
       elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',
@@ -212,7 +220,7 @@ class UserAccount {
     final prefs = await SharedPreferences.getInstance();
     final jsonData = toJson();
     print(
-        'SAVING ACCOUNT: voiceGender=${jsonData['voiceGender']}, meditationStyle=${jsonData['meditationStyle']}');
+        'SAVING ACCOUNT: voiceGender=${jsonData['voiceGender']}, meditationType=${jsonData['meditationType']}');
     await prefs.setString('user_account', jsonEncode(jsonData));
     print('Account saved successfully');
   }
@@ -249,8 +257,9 @@ class UserAccount {
 - Age: $age years old
 - Gender: $gender
 - Fitness Level: $fitnessLevel
-- Meditation Style: $meditationStyle
-- Preferred Environment: $preferredEnvironment
+- Meditation Type: $meditationType
+- Meditation Environment: $meditationEnvironment
+${additionalPreferences.isNotEmpty ? '- Additional Preferences: $additionalPreferences' : ''}
 ${favoriteActivity.isNotEmpty ? '- Favorite Activity: $favoriteActivity' : ''}
 ${stressTriggers.isNotEmpty ? '- Stress Triggers: ${stressTriggers.join(", ")}' : ''}
 ${relaxationTechniques.isNotEmpty ? '- What helps them relax: ${relaxationTechniques.join(", ")}' : ''}

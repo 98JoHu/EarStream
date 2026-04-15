@@ -36,11 +36,14 @@ class _EarStreamAccountSectionPageState
   late final TextEditingController _geminiApiKeyController;
   late final TextEditingController _elevenLabsApiKeyController;
   late final TextEditingController _microsoftGraphTokenController;
+  late final TextEditingController _additionalPreferencesController;
 
   late String _gender;
   late String _fitnessLevel;
-  late String _meditationStyle;
-  late String _environment;
+  late String _meditationType;
+  late String _meditationEnvironment;
+  late String _voiceGender;
+  late String _speakingSpeed;
   late bool _usePremiumVoice;
   late String _selectedElevenLabsVoiceId;
 
@@ -72,11 +75,15 @@ class _EarStreamAccountSectionPageState
         TextEditingController(text: account.elevenLabsApiKey);
     _microsoftGraphTokenController =
         TextEditingController(text: account.microsoftGraphAccessToken);
+    _additionalPreferencesController =
+        TextEditingController(text: account.additionalPreferences);
 
     _gender = account.gender;
     _fitnessLevel = account.fitnessLevel;
-    _meditationStyle = account.meditationStyle;
-    _environment = account.preferredEnvironment;
+    _meditationType = account.meditationType;
+    _meditationEnvironment = account.meditationEnvironment;
+    _voiceGender = account.voiceGender;
+    _speakingSpeed = account.speakingSpeed;
     _usePremiumVoice = account.usePremiumVoice;
 
     final savedVoiceId = account.elevenLabsVoiceId;
@@ -100,6 +107,7 @@ class _EarStreamAccountSectionPageState
     _geminiApiKeyController.dispose();
     _elevenLabsApiKeyController.dispose();
     _microsoftGraphTokenController.dispose();
+    _additionalPreferencesController.dispose();
     super.dispose();
   }
 
@@ -143,8 +151,11 @@ class _EarStreamAccountSectionPageState
 
     updatedAccount.gender = _gender;
     updatedAccount.fitnessLevel = _fitnessLevel;
-    updatedAccount.meditationStyle = _meditationStyle;
-    updatedAccount.preferredEnvironment = _environment;
+    updatedAccount.meditationType = _meditationType;
+    updatedAccount.meditationEnvironment = _meditationEnvironment;
+    updatedAccount.voiceGender = _voiceGender;
+    updatedAccount.speakingSpeed = _speakingSpeed;
+    updatedAccount.additionalPreferences = _additionalPreferencesController.text.trim();
     updatedAccount.usePremiumVoice = _usePremiumVoice;
     updatedAccount.elevenLabsVoiceId = _selectedElevenLabsVoiceId;
     updatedAccount.geminiApiKey = _geminiApiKeyController.text.trim();
@@ -587,12 +598,12 @@ class _EarStreamAccountSectionPageState
           ),
           const SizedBox(height: 24),
           const Text(
-            'Meditation style',
+            'Voice Gender',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: _meditationStyle,
+            value: _voiceGender,
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.grey[100],
@@ -603,35 +614,105 @@ class _EarStreamAccountSectionPageState
             ),
             items: const [
               DropdownMenuItem(
-                value: 'calm and empathetic',
-                child: Text('Calm and empathetic'),
+                value: 'female',
+                child: Text('👩 Female'),
               ),
               DropdownMenuItem(
-                value: 'gentle and soothing',
-                child: Text('Gentle and soothing'),
-              ),
-              DropdownMenuItem(
-                value: 'warm and compassionate',
-                child: Text('Warm and compassionate'),
-              ),
-              DropdownMenuItem(
-                value: 'peaceful and mindful',
-                child: Text('Peaceful and mindful'),
+                value: 'male',
+                child: Text('👨 Male'),
               ),
             ],
             onChanged: (value) {
               if (value == null) return;
-              setState(() => _meditationStyle = value);
+              setState(() => _voiceGender = value);
             },
           ),
           const SizedBox(height: 24),
           const Text(
-            'Preferred environment',
+            'Speaking Speed',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: _environment,
+            value: _speakingSpeed,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'very_slow',
+                child: Text('🐌 Very Slow'),
+              ),
+              DropdownMenuItem(
+                value: 'slow',
+                child: Text('🐢 Slow (Recommended)'),
+              ),
+              DropdownMenuItem(
+                value: 'medium',
+                child: Text('🚶 Medium'),
+              ),
+              DropdownMenuItem(
+                value: 'fast',
+                child: Text('🏃 Fast'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _speakingSpeed = value);
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Meditation Type',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _meditationType,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'mindfulness',
+                child: Text('🧘 Mindfulness'),
+              ),
+              DropdownMenuItem(
+                value: 'breathing',
+                child: Text('🌬️ Breathing'),
+              ),
+              DropdownMenuItem(
+                value: 'body_scan',
+                child: Text('💆 Body Scan'),
+              ),
+              DropdownMenuItem(
+                value: 'visualization_journey',
+                child: Text('🌅 Visualization Journey'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _meditationType = value);
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Meditation Environment',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _meditationEnvironment,
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.grey[100],
@@ -643,31 +724,51 @@ class _EarStreamAccountSectionPageState
             items: const [
               DropdownMenuItem(
                 value: 'peaceful nature',
-                child: Text('Peaceful nature'),
+                child: Text('🌳 Peaceful nature'),
               ),
               DropdownMenuItem(
                 value: 'calm ocean beach',
-                child: Text('Ocean beach'),
+                child: Text('🌊 Ocean beach'),
               ),
               DropdownMenuItem(
                 value: 'quiet mountain',
-                child: Text('Mountain'),
+                child: Text('⛰️ Mountain'),
               ),
               DropdownMenuItem(
                 value: 'serene forest',
-                child: Text('Forest'),
+                child: Text('🌲 Forest'),
               ),
               DropdownMenuItem(
                 value: 'gentle garden',
-                child: Text('Garden'),
+                child: Text('🌸 Garden'),
               ),
             ],
             onChanged: (value) {
               if (value == null) return;
-              setState(() => _environment = value);
+              setState(() => _meditationEnvironment = value);
             },
           ),
+          const SizedBox(height: 24),
+          const Text(
+            'Additional Preferences',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _additionalPreferencesController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: 'e.g., "Focus on gratitude" or "Include affirmations"',
+              filled: true,
+              fillColor: Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
           const SizedBox(height: 28),
+          /* Premium voice toggle commented out
           Row(
             children: [
               Expanded(
@@ -700,6 +801,7 @@ class _EarStreamAccountSectionPageState
               ),
             ],
           ),
+          */
           if (_usePremiumVoice) ...[
             const SizedBox(height: 20),
             const Text(
@@ -731,14 +833,14 @@ class _EarStreamAccountSectionPageState
               },
             ),
           ],
-          _buildStatusCard(
-            title: 'Premium voice readiness',
-            status: _usePremiumVoice ? 'Enabled' : 'Disabled',
-            description: _usePremiumVoice
-                ? 'Add or update the ElevenLabs API key in the API Keys page if you want premium voice generation to work immediately.'
-                : 'EarStream will use the device TTS fallback until premium voice is enabled.',
-            color: _usePremiumVoice ? Colors.indigo : Colors.grey,
-          ),
+          // _buildStatusCard(
+          //   title: 'Premium voice readiness',
+          //   status: _usePremiumVoice ? 'Enabled' : 'Disabled',
+          //   description: _usePremiumVoice
+          //       ? 'Add or update the ElevenLabs API key in the API Keys page if you want premium voice generation to work immediately.'
+          //       : 'EarStream will use the device TTS fallback until premium voice is enabled.',
+          //   color: _usePremiumVoice ? Colors.indigo : Colors.grey,
+          // ),
         ],
       ),
     );

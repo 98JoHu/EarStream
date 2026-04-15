@@ -64,44 +64,20 @@ class ImprovedMeditationLLMService {
         MeditationConfig.geminiApiKey;
   }
 
-  /// Get style-specific guidance for LLM
-  String _getStyleGuidance(String style) {
-    switch (style) {
-      case 'calm and empathetic':
-        return '''Your tone should be especially warm and understanding. Show deep compassion for their feelings.
-Focus on emotional validation and gentle encouragement. Use phrases like "I understand", "you're safe here", "it's okay to feel this way".''';
-
-      case 'gentle and soothing':
-        return '''Your tone should be extra soft and nurturing, like a lullaby. Create maximum comfort and safety.
-Use very slow pacing, longer pauses. Focus on creating a cocoon of peace. Emphasize softness, gentleness, and protection.''';
-
-      case 'warm and compassionate':
-        return '''Your tone should radiate kindness and care. Be like a supportive friend who truly understands.
-Balance warmth with strength. Acknowledge challenges while building confidence. Use inclusive "we" language often.''';
-
-      case 'peaceful and mindful':
-        return '''Your tone should be centered and grounded. Emphasize present-moment awareness and acceptance.
-Use mindfulness language: observe, notice, allow, let be. Focus on non-judgment and natural flow. Be neutral yet caring.''';
-
-      default:
-        return '''Your tone should be warm, empathetic, and professional.''';
-    }
-  }
+  /// Get style-specific guidance for LLM - REMOVED
+  /// Meditation type is now used to determine the overall approach
 
   String _getSystemPrompt() {
     final userContext = _userAccount?.getLLMContext() ?? '';
-
-    // Get meditation style guidance
-    final style = _userAccount?.meditationStyle ?? 'calm and empathetic';
-    final styleGuidance = _getStyleGuidance(style);
+    final meditationType = _userAccount?.meditationType ?? 'mindfulness';
 
     return '''You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.
 Your purpose is to lead personalized, adaptive meditations based on real-time biosignals (heart rate and HRV) and user demographics.
 
 $userContext
 
-MEDITATION STYLE: $style
-$styleGuidance
+MEDITATION TYPE: $meditationType
+You are guiding a $meditationType meditation session. Stay true to this meditation type throughout all segments.
 
 CRITICAL GUIDELINES:
 1. ALWAYS include specific breathing instructions in every segment:
@@ -112,7 +88,7 @@ CRITICAL GUIDELINES:
 2. Make it PERSONAL:
    - Use their name naturally (not every sentence, but occasionally)
    - Reference their specific stress triggers if mentioned
-   - Use their preferred environment imagery
+   - Use their meditation environment imagery
    - Adapt to their age and fitness level
    - Consider their gender when choosing imagery/language
 
@@ -123,11 +99,11 @@ CRITICAL GUIDELINES:
    - End with gentle pauses that invite continuation
    - DO NOT say "the meditation is now over" unless explicitly asked
 
-4. VARY your approach across segments:
-   - Segment 1: Grounding, body awareness, breath focus
-   - Segment 2: Progressive muscle relaxation, body scan
-   - Segment 3: Calming visualization of their preferred environment
-   - Segment 4+: Mix techniques, deepen relaxation, maintain engagement
+4. MEDITATION TYPE determines your approach:
+   - For 'breathing': Focus heavily on breath awareness, breath counting (if appropriate), pranayama techniques
+   - For 'body_scan': Systematically guide attention through body parts, progressive relaxation
+   - For 'visualization_journey': Create vivid imagery of their meditation environment, sensory immersion
+   - For 'mindfulness': Emphasize present-moment awareness, observation without judgment, acceptance
 
 5. VOICE QUALITY matters:
    - Speak slowly and clearly
@@ -259,48 +235,39 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
   }) {
     final userName = _userAccount?.name ?? '';
     final age = _userAccount?.age ?? 30;
-    final environment = _userAccount?.preferredEnvironment ?? 'nature';
+    final environment = _userAccount?.meditationEnvironment ?? 'nature';
+    final meditationType = _userAccount?.meditationType ?? 'mindfulness';
 
-    // Define SPECIFIC technique for each segment to prevent repetition
+    // Define technique based on meditation type (not per-segment)
     String technique = '';
     String example = '';
 
-    switch (iteration) {
-      case 1:
+    switch (meditationType) {
+      case 'breathing':
         technique =
-            'DEEP BELLY BREATHING: Guide slow, gentle breathing. Have them place hand on belly to feel movement. Focus ONLY on breath, no imagery. NO counting - use flowing descriptions instead.';
+            'BREATHING MEDITATION: Guide focused breath awareness. Use descriptive language for inhales and exhales. Create a rhythmic flow. Emphasize the naturalness of breathing.';
         example =
-            'Place your hand gently on your belly. Feel it rise as you breathe in slowly and deeply. Hold for a moment. Now release that breath, long and slow. Feel your belly falling, all tension releasing with each exhale.';
+            'Bring all your attention to your breath. Feel the cool air as you breathe in... and the warm air as you breathe out. Notice the gentle rise and fall of your chest. Let each breath anchor you to this present moment.';
         break;
-      case 2:
+      case 'body_scan':
         technique =
-            'BODY SCAN: Start at toes, move up through legs, torso, arms, neck, head. Name each part and guide release. NO breath counting here.';
+            'BODY SCAN: Systematically guide attention through body parts (feet → legs → torso → arms → neck → head). Name each area, invite awareness, encourage release of tension.';
         example =
-            'Bring your attention to your toes. Notice any tension there. Imagine warm, healing light flowing into your feet, releasing any tightness. Now move up to your calves...';
+            'Bring your attention to your feet. Notice any sensations there—warmth, coolness, tingling, or perhaps nothing at all. Simply observe without judgment. Now, gently release any tension you might be holding in your feet.';
         break;
-      case 3:
+      case 'visualization_journey':
         technique =
-            'VISUALIZATION: Create vivid $environment scene. Describe 3-4 sensory details (sights, sounds, smells, textures). Make them FEEL transported.';
+            'VISUALIZATION JOURNEY: Create vivid imagery of their meditation environment ($environment). Engage multiple senses (sight, sound, smell, touch). Make them feel transported to a peaceful place.';
         example =
-            'Picture yourself in a peaceful $environment. The air is fresh and cool on your skin. You hear gentle sounds around you. Take in the beauty, feeling completely safe and at peace here.';
+            'Picture yourself in a peaceful $environment. The air is fresh and cool on your skin. You hear gentle sounds around you—perhaps rustling leaves or flowing water. Take in the beauty, feeling completely safe and at peace here.';
         break;
-      case 4:
-        technique =
-            'PROGRESSIVE MUSCLE RELAXATION: Tense then release specific muscle groups. Start with hands, then arms.';
-        example =
-            'Make a gentle fist with your hands. Feel the tension... hold it... now release completely. Feel the difference as your hands soften, fingers relaxing, all tightness flowing away.';
-        break;
-      case 5:
-        technique =
-            'LOVING-KINDNESS: Send warmth to self. Use gentle affirmations. Build self-compassion.';
-        example =
-            'Place your hand over your heart. Feel your heartbeat, steady and strong. Silently say to yourself: I am worthy of peace. I am safe. I am calm. Let these words sink in deeply.';
-        break;
+      case 'mindfulness':
       default:
         technique =
-            'BREATH + MANTRA: Combine slow breathing with a calming phrase or word. Repeat gently with each breath.';
+            'MINDFULNESS MEDITATION: Guide present-moment awareness. Encourage observation without judgment. Use language like "notice", "observe", "allow", "let be". Emphasize acceptance of thoughts and sensations.';
         example =
-            'With each breath in, silently say "I am". With each breath out, say "calm". Breathe in... I am. Breathe out... calm. Let this rhythm carry you deeper into peace.';
+            'Notice whatever arises in this moment. Perhaps thoughts drift through your mind like clouds. Simply observe them without grasping or pushing away. Let everything be just as it is. You are safe in this space of awareness.';
+        break;
     }
 
     return '''MEDITATION SEGMENT #$iteration
