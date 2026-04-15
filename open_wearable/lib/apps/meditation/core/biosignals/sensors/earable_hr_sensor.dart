@@ -341,10 +341,14 @@ class EarableHrSensor implements HrSensorInterface {
           'Mean=${hrvMetrics['HRV_MEAN']?.toStringAsFixed(1)}ms');
 
       // DEBUG: Print buffer state to verify time-based windowing
+      final firstRR = cleanedRR.take(5).map((v) => v.toStringAsFixed(1)).join(", ");
+      final lastRR = cleanedRR.length >= 5
+          ? cleanedRR.skip(cleanedRR.length - 5).map((v) => v.toStringAsFixed(1)).join(", ")
+          : 'N/A (< 5 intervals)';
       _logger.d(
           'Time window: ${_rrIntervalsWithTime.length} intervals spanning 5 minutes. '
-          'First 5 RR: ${cleanedRR.take(5).map((v) => v.toStringAsFixed(1)).join(", ")}, '
-          'Last 5 RR: ${cleanedRR.skip(cleanedRR.length - 5).map((v) => v.toStringAsFixed(1)).join(", ")}');;
+          'First 5 RR: $firstRR, '
+          'Last 5 RR: $lastRR');
     }
   }
 
@@ -401,6 +405,11 @@ class EarableHrSensor implements HrSensorInterface {
     _accelSubscription = null;
     _gyroSubscription?.cancel();
     _gyroSubscription = null;
+    
+    // Reset measurement state to allow clean restart
+    _measurementStartTime = null;
+    _rmssdIsStable = false;
+    _hrvIsStable = false;
   }
 
   /// Start IMU sensors for activity detection

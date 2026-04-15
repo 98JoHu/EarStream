@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:logger/logger.dart';
+
+final _logger = Logger();
 
 /// Individual meditation session record
 class MeditationSession {
@@ -86,7 +89,7 @@ class MeditationHistory {
         _sessions
             .sort((a, b) => b.timestamp.compareTo(a.timestamp)); // Newest first
       } catch (e) {
-        print('Error loading history: $e');
+        _logger.e('Error loading meditation history: $e');
         _sessions = [];
       }
     }
