@@ -120,13 +120,13 @@ class DemoConfig {
   // DEMO PHASE DISPLAY MESSAGES
   // ============================================================================
   
-  static const String calibrationMessage = 
+  static String get calibrationMessage => 
       'Calibration Phase\n\nFilters are adjusting to your signal.\nPlease remain still and relaxed.\n\n${calibrationDuration.inSeconds} seconds...';
   
-  static const String baselineMessage = 
+  static String get baselineMessage => 
       'Baseline Measurement\n\nEstablishing your resting heart rate and HRV.\nThis will be your reference point.\n\n${baselineDuration.inSeconds} seconds...';
   
-  static const String monitoringMessage = 
+  static String get monitoringMessage => 
       'Monitoring Stress Level\n\nTracking your biosignals in real-time.\nMeditation will begin when needed.\n\nThreshold: ${stressThresholdPercent}% deviation';
   
   static const String sealCheckMessage =

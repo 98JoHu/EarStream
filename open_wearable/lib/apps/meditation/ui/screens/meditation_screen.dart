@@ -1529,7 +1529,7 @@ class _MeditationViewState extends State<MeditationView> {
   Future<DemoMeditationPreferences?> _showDemoPreferencesDialog() async {
     return await showDialog<DemoMeditationPreferences>(
       context: context,
-      barrierDismissable: false,
+      barrierDismissible: false,
       builder: (context) => _DemoPreferencesDialog(),
     );
   }
