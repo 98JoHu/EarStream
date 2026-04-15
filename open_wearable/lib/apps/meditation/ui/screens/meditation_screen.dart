@@ -2005,6 +2005,7 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   void _startPersonalizedOnlyMeditation() {
+    print('[EARSTREAM] _startPersonalizedOnlyMeditation() — earStreamActivated=$_earStreamActivated, sensor=$_sensor');
     setState(() {
       _demoPhase = DemoPhase.meditationSession;
     });
@@ -2016,6 +2017,7 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   void _startBiosignalAdaptiveMeditation() {
+    print('[EARSTREAM] _startBiosignalAdaptiveMeditation() — earStreamActivated=$_earStreamActivated, sensor=$_sensor');
     _demoPhaseTimer?.cancel();
     setState(() {
       _demoPhase = DemoPhase.meditationSession;

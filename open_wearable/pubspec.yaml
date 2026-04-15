@@ -92,6 +92,8 @@ flutter:
     - lib/apps/posture_tracker/assets/
     - lib/apps/heart_tracker/assets/
     - lib/apps/meditation/assets/
+    - lib/apps/meditation/assets/audio/
+    - lib/apps/meditation/assets/audio/backgrounds/
     - android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
   # An image asset can refer to one or more resolution-specific "variants", seeq

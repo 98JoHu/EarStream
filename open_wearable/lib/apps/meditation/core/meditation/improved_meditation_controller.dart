@@ -170,6 +170,7 @@ class ImprovedMeditationController {
 
     try {
       _logger.i('Starting meditation session');
+      print('[EARSTREAM] ▶ startSession() — demoMode=$demoMode, sensor=${sensor.runtimeType}');
       _sessionStartTime = DateTime.now();
       _lastSensorDataTime =
           DateTime.now(); // Initialize sensor timeout tracking
@@ -548,6 +549,7 @@ class ImprovedMeditationController {
   Future<void> _speak(String text) async {
     if (_state == MeditationState.idle) return;
 
+    print('[EARSTREAM TTS] _speak() — "${text.substring(0, text.length > 60 ? 60 : text.length)}..."');
     _setState(MeditationState.speaking);
     _sendStatus('Guiding you...');
 
@@ -922,10 +924,13 @@ class ImprovedMeditationController {
 
   Future<void> _playMeditationAsset(String fileName) async {
     final assetPath = 'lib/apps/meditation/assets/$fileName';
+    print('[EARSTREAM AUDIO] Loading asset: $assetPath');
     final bytes = await rootBundle.load(assetPath);
+    print('[EARSTREAM AUDIO] Asset loaded (${bytes.lengthInBytes} bytes), starting playback');
     await backgroundMusicPlayer.play(
       BytesSource(bytes.buffer.asUint8List()),
     );
+    print('[EARSTREAM AUDIO] backgroundMusicPlayer.play() called for $fileName');
   }
 
   /// Play background ambience based on user's environment preference
@@ -934,18 +939,19 @@ class ImprovedMeditationController {
     try {
       final environment = userAccount.meditationEnvironment.toLowerCase();
       _logger.i('Starting background ambience for environment: "$environment"');
+      print('[EARSTREAM AUDIO] _playBackgroundAmbience() — environment="$environment"');
 
       // Map environment preference to audio file
       if (environment.contains('ocean') || environment.contains('beach')) {
-        audioFile = 'Ocean_Beach.wav';
+        audioFile = 'audio/backgrounds/Ocean_Beach.wav';
       } else if (environment.contains('mountain')) {
-        audioFile = 'Mountain.wav';
+        audioFile = 'audio/backgrounds/Mountain.wav';
       } else if (environment.contains('forest')) {
-        audioFile = 'Forest.wav';
+        audioFile = 'audio/backgrounds/Forest.wav';
       } else if (environment.contains('garden')) {
-        audioFile = 'Garden.mp3';
+        audioFile = 'audio/backgrounds/Garden.mp3';
       } else if (environment.contains('nature')) {
-        audioFile = 'Peaceful_Nature.wav';
+        audioFile = 'audio/backgrounds/Peaceful_Nature.wav';
       }
 
       if (audioFile != null) {
@@ -982,19 +988,22 @@ class ImprovedMeditationController {
           await backgroundMusicPlayer.setVolume(0.60);
 
           _logger.i('Playing meditation asset: $audioFile');
+          print('[EARSTREAM AUDIO] Attempting to play: $audioFile');
           await _playMeditationAsset(audioFile);
 
           _logger.i('Background ambience playing successfully at 60% volume');
+          print('[EARSTREAM AUDIO] ✓ Background music started: $audioFile');
         } catch (e, stackTrace) {
           _logger.e('Failed to play $audioFile: $e');
           _logger.e('Stack trace: $stackTrace');
+          print('[EARSTREAM AUDIO] ✗ Background music FAILED ($audioFile): $e');
         }
       } else {
         _logger.w(
             'No specific audio file for environment: "$environment". Using default.');
         // Fallback to default meditation sound if available
         try {
-          audioFile = 'meditation_sound.mp3';
+          audioFile = 'audio/meditation_sound.mp3';
           _logger.i('Trying default: $audioFile');
           await backgroundMusicPlayer.setReleaseMode(ReleaseMode.loop);
           await backgroundMusicPlayer.setVolume(0.30);

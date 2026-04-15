@@ -153,13 +153,18 @@ class MeditationVoiceService {
 
   /// Speak text with ElevenLabs TTS (high quality).
   Future<void> speak(String text) async {
+    print('[EARSTREAM TTS] speak() called — initialized=$_isInitialized, speaking=$_isSpeaking, premium=$_usePremiumVoice');
     if (!_isInitialized) {
+      print('[EARSTREAM TTS] Not yet initialized — calling initialize()');
       await initialize();
     }
 
     if (_isSpeaking) {
       await Future.delayed(const Duration(milliseconds: 500));
-      if (_isSpeaking) return;
+      if (_isSpeaking) {
+        print('[EARSTREAM TTS] speak() skipped — still speaking');
+        return;
+      }
     }
 
     _isSpeaking = true;
@@ -180,6 +185,7 @@ class MeditationVoiceService {
       await _speakWithFlutterTts(cleanedText);
     } finally {
       _isSpeaking = false;
+      print('[EARSTREAM TTS] speak() finished');
     }
   }
 
@@ -349,6 +355,7 @@ class MeditationVoiceService {
 
   Future<void> _speakWithFlutterTts(String text) async {
     _logger.i('Using Flutter TTS fallback');
+    print('[EARSTREAM TTS] _speakWithFlutterTts() — text length=${text.length}');
 
     try {
       if (!kIsWeb && Platform.isIOS) {
@@ -368,14 +375,17 @@ class MeditationVoiceService {
       final completer = Completer<void>();
 
       _flutterTts.setCompletionHandler(() {
+        print('[EARSTREAM TTS] ✓ CompletionHandler fired');
         if (!completer.isCompleted) completer.complete();
       });
 
       _flutterTts.setCancelHandler(() {
+        print('[EARSTREAM TTS] ⚠ CancelHandler fired');
         if (!completer.isCompleted) completer.complete();
       });
 
       _flutterTts.setErrorHandler((msg) {
+        print('[EARSTREAM TTS] ✗ ErrorHandler fired: $msg');
         _logger.e('Flutter TTS error: $msg');
         if (!completer.isCompleted) completer.complete();
       });
@@ -389,15 +399,20 @@ class MeditationVoiceService {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 
-      await _flutterTts.speak(cleanText);
+      print('[EARSTREAM TTS] Calling flutterTts.speak() with ${cleanText.length} chars, focus=true');
+      final result = await _flutterTts.speak(cleanText, focus: true);
+      print('[EARSTREAM TTS] flutterTts.speak() returned: $result (1=queued, 0=already speaking)');
 
       try {
         await completer.future.timeout(const Duration(seconds: 45));
+        print('[EARSTREAM TTS] Completer resolved normally');
       } catch (e) {
+        print('[EARSTREAM TTS] ⏰ Timeout after 45s — stopping TTS');
         _logger.w('TTS timed out (likely interruption): $e. Continuing...');
         await _flutterTts.stop();
       }
     } catch (e) {
+      print('[EARSTREAM TTS] Exception in _speakWithFlutterTts: $e');
       _logger.e('Flutter TTS error: $e');
     }
   }

@@ -222,6 +222,21 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
     // Start monitoring
     _controller!.startMonitoring();
+
+    // In demo mode the meditation session must be triggered programmatically
+    // because stress-detection-based auto-start is disabled (personalised) or
+    // already satisfied in the monitoring phase (biosignal-adaptive).
+    if (widget.demoMode != 'none') {
+      print('[EARSTREAM] Demo mode (${widget.demoMode}) – scheduling auto-start of meditation session');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _currentState == MeditationState.idle && _controller != null) {
+          print('[EARSTREAM] Auto-starting meditation session for demo mode: ${widget.demoMode}');
+          _startMeditation();
+        } else {
+          print('[EARSTREAM] Auto-start skipped: mounted=$mounted, state=$_currentState, controller=$_controller');
+        }
+      });
+    }
   }
 
   @override

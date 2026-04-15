@@ -91,6 +91,11 @@ class ImprovedMeditationLLMService {
         MeditationConfig.geminiApiKey;
   }
 
+  bool get _hasValidApiKey {
+    final key = _effectiveGeminiApiKey;
+    return key != 'NONE' && key.startsWith('AIza');
+  }
+
   /// Get style-specific guidance for LLM - REMOVED
   /// Meditation type is now used to determine the overall approach
 
@@ -182,6 +187,10 @@ Remember: You're creating a calming, safe space for someone who may be stressed.
     required double baselineHr,
     required double baselineHrv,
   }) async {
+    if (!_hasValidApiKey) {
+      _logger.i('No valid Gemini API key — using fallback welcome text');
+      return "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
+    }
     try {
       final userName = _userAccount?.name ?? '';
       final nameGreeting = userName.isNotEmpty ? '$userName, ' : '';
@@ -202,7 +211,9 @@ CRITICAL INSTRUCTION: Do NOT mention specific heart rate numbers (e.g., don't sa
 
 Use their name naturally if provided. Keep it under 80 words, warm and personal.''';
       print('Generating personalized welcome with prompt:\n$prompt');
-      final response = await _model.generateContent([Content.text(prompt)]);
+      final response = await _model
+          .generateContent([Content.text(prompt)])
+          .timeout(const Duration(seconds: 10));
       print('Generated welcome text:\n${response.text ?? ''}');
       return response.text ??
           "${nameGreeting}I notice your heart rate is elevated. Let's work together to bring you back to a state of calm.";
@@ -227,6 +238,15 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
     // Each meditation should be fresh and personalized to current biomarkers
     // Note: Voice caching is still active to save API costs for repeated phrases
 
+    if (!_hasValidApiKey) {
+      _logger.i('No valid Gemini API key — using fallback segment text');
+      return 'Take a deep breath in... hold gently for a moment... and slowly release. '
+          'Feel the tension melting away with each exhale. '
+          'Your body is becoming more relaxed... your mind more peaceful. '
+          'Continue breathing naturally... finding your center... '
+          'allowing calmness to flow through you.';
+    }
+
     if (_chatSession == null) {
       startNewSession();
     }
@@ -241,7 +261,9 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
       _logger.i(
           'Generating segment #$_iterationCount (Stress: ${stressLevel.toStringAsFixed(1)}%) - CALLING GEMINI API...');
 
-      final response = await _chatSession!.sendMessage(Content.text(prompt));
+      final response = await _chatSession!
+          .sendMessage(Content.text(prompt))
+          .timeout(const Duration(seconds: 10));
       final text = response.text ?? '';
 
       if (text.isEmpty) {
@@ -358,6 +380,10 @@ Write a smooth, calming meditation using the technique above. Start directly wit
     required double endHr,
     required double endHrv,
   }) async {
+    if (!_hasValidApiKey) {
+      _logger.i('No valid Gemini API key — using fallback completion text');
+      return MeditationConfig.completionText;
+    }
     try {
       final userName = _userAccount?.name ?? '';
       final namePrefix = userName.isNotEmpty ? '$userName, ' : '';
@@ -381,7 +407,9 @@ EXAMPLE:
 
 Generate a SHORT completion message like the example above.''';
 
-      final response = await _model.generateContent([Content.text(prompt)]);
+      final response = await _model
+          .generateContent([Content.text(prompt)])
+          .timeout(const Duration(seconds: 10));
       final rawText = response.text ??
           "${namePrefix}wonderful work. Your heart rate has come down from ${startHr.toStringAsFixed(0)} to ${endHr.toStringAsFixed(0)} beats per minute. You've successfully calmed your mind and body. Carry this peace with you.";
 
