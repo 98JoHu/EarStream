@@ -3,6 +3,7 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:logger/logger.dart';
 import '../../config/meditation_config.dart';
+import '../../config/demo_config.dart';
 import '../../config/meditation_runtime_config.dart';
 import '../../models/user_account.dart';
 
@@ -27,6 +28,18 @@ class ImprovedMeditationLLMService {
   ChatSession? _chatSession;
   int _iterationCount = 0;
   UserAccount? _userAccount;
+  
+  // Demo mode support
+  String _demoMode = DemoConfig.modeNone;
+  DemoMeditationPreferences? _demoPreferences;
+  
+  // Get effective word count based on demo mode
+  int get _wordCount {
+    if (_demoMode != DemoConfig.modeNone) {
+      return DemoConfig.segmentWordCount;
+    }
+    return MeditationConfig.targetWordCount;
+  }
 
   ImprovedMeditationLLMService() {
     _initializeModel();
@@ -56,6 +69,20 @@ class ImprovedMeditationLLMService {
     _logger.i('User account set: ${_userAccount?.name ?? "default"}');
     _initializeModel();
   }
+  
+  /// Set demo mode configuration
+  void setDemoMode({
+    required String demoMode,
+    DemoMeditationPreferences? demoPreferences,
+  }) {
+    _demoMode = demoMode;
+    _demoPreferences = demoPreferences;
+    _logger.i('Demo mode set: $_demoMode');
+    if (demoPreferences != null) {
+      _logger.i('Demo preferences: ${demoPreferences.toString()}');
+    }
+    _initializeModel();
+  }
 
   String get _effectiveGeminiApiKey {
     return MeditationRuntimeConfig.geminiApiKey(
@@ -68,11 +95,29 @@ class ImprovedMeditationLLMService {
   /// Meditation type is now used to determine the overall approach
 
   String _getSystemPrompt() {
-    final userContext = _userAccount?.getLLMContext() ?? '';
-    final meditationType = _userAccount?.meditationType ?? 'mindfulness';
+    // In demo mode, use demo preferences instead of user account
+    String userContext;
+    String meditationType;
+    
+    if (_demoMode != DemoConfig.modeNone && _demoPreferences != null) {
+      // Demo mode: use demo preferences, no demographic info
+      meditationType = _demoPreferences!.meditationStyle.toLowerCase().replaceAll(' ', '_');
+      userContext = '''DEMO MODE - ACM UbiComp Conference
+Meditation Style: ${_demoPreferences!.meditationStyle}
+Voice Tone: ${_demoPreferences!.voiceTone}
+Background Sounds: ${_demoPreferences!.useBackgroundSounds ? 'Enabled' : 'Disabled'}
+
+This is a demonstration session to showcase personalized meditation capabilities.
+Focus on the meditation style and voice tone preferences provided.
+Keep segments concise and impactful (approximately $_wordCount words).''';
+    } else {
+      // Normal mode: use full user account context
+      userContext = _userAccount?.getLLMContext() ?? '';
+      meditationType = _userAccount?.meditationType ?? 'mindfulness';
+    }
 
     return '''You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.
-Your purpose is to lead personalized, adaptive meditations based on real-time biosignals (heart rate and HRV) and user demographics.
+Your purpose is to lead personalized, adaptive meditations based on real-time biosignals (heart rate and HRV).
 
 $userContext
 
@@ -86,11 +131,13 @@ CRITICAL GUIDELINES:
    - "Notice your breath... inhale deeply... exhale completely..."
 
 2. Make it PERSONAL:
-   - Use their name naturally (not every sentence, but occasionally)
+   ${_demoMode == DemoConfig.modeNone ? '''- Use their name naturally (not every sentence, but occasionally)
    - Reference their specific stress triggers if mentioned
    - Use their meditation environment imagery
    - Adapt to their age and fitness level
-   - Consider their gender when choosing imagery/language
+   - Consider their gender when choosing imagery/language''' : '''- Speak in a ${_demoPreferences?.voiceTone ?? 'calm'} tone
+   - Use the ${_demoPreferences?.meditationStyle ?? 'mindfulness'} meditation approach
+   - Create a welcoming, professional demonstration experience'''}
 
 3. This is a MULTI-SEGMENT meditation:
    - Each response is ONE segment in a longer session
@@ -100,10 +147,11 @@ CRITICAL GUIDELINES:
    - DO NOT say "the meditation is now over" unless explicitly asked
 
 4. MEDITATION TYPE determines your approach:
-   - For 'breathing': Focus heavily on breath awareness, breath counting (if appropriate), pranayama techniques
-   - For 'body_scan': Systematically guide attention through body parts, progressive relaxation
-   - For 'visualization_journey': Create vivid imagery of their meditation environment, sensory immersion
+   - For 'breathing' or 'breath_focus': Focus heavily on breath awareness, breath counting (if appropriate), pranayama techniques
+   - For 'body_scan' or 'progressive_relaxation': Systematically guide attention through body parts, progressive relaxation
+   - For 'visualization': Create vivid imagery, sensory immersion
    - For 'mindfulness': Emphasize present-moment awareness, observation without judgment, acceptance
+   - For 'loving_kindness': Cultivate compassion, warmth, and kindness towards self and others
 
 5. VOICE QUALITY matters:
    - Speak slowly and clearly
@@ -115,9 +163,9 @@ CRITICAL GUIDELINES:
    - Plain text only
    - No markdown, no meta-comments
    - Just the spoken meditation words
-   - Approximately ${MeditationConfig.targetWordCount} words per segment
+   - Approximately $_wordCount words per segment
 
-Remember: You're creating a calming, safe space for someone who is stressed. Be warm, patient, and genuinely caring.''';
+Remember: You're creating a calming, safe space for someone who may be stressed. Be warm, patient, and genuinely caring.''';
   }
 
   /// Start a new meditation session

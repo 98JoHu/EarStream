@@ -11,6 +11,7 @@ import '../../core/biosignals/sensors/earable_hr_sensor.dart';
 import '../../core/biosignals/sensors/hr_sensor_interface.dart';
 import '../../core/biosignals/activity_detector.dart';
 import '../../config/biosignal_config.dart';
+import '../../config/demo_config.dart';
 import '../components/biosignal_display/hr_hrv_display_new.dart';
 import '../components/meditation_session/llm_meditation_widget.dart';
 import '../components/debug/api_debug_widget.dart';
@@ -63,6 +64,15 @@ class _MeditationViewState extends State<MeditationView> {
 
   String _stressLevel =
       'relaxed'; // Track stress level: 'relaxed' or 'stressed'
+
+  // Demo mode state tracking
+  DemoPhase _demoPhase = DemoPhase.none;
+  String _demoSubMode = DemoConfig.modeNone;
+  DemoMeditationPreferences? _demoPreferences;
+  DateTime? _demoPhaseStartTime;
+  Timer? _demoPhaseTimer;
+  double? _demoBaselineHr;
+  double? _demoBaselineRmssd;
 
   void _recreateMeditationWidgetKey() {
     _meditationWidgetKey = GlobalKey<LlmMeditationWidgetState>();
@@ -369,32 +379,312 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
-  Widget _buildTestModePlaceholder({
-    required VoidCallback onRunPlaceholderAction,
+  Widget _buildDemoModeSelection({
+    required VoidCallback onSelectPersonalizedOnly,
+    required VoidCallback onSelectBiosignalAdaptive,
   }) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.campaign_outlined,
+                      color: colorScheme.primary,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'ACM UbiComp 2026 Demo Mode',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Select a demo experience to showcase EarStream capabilities:',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Personalized Meditation Only Option
+        Card(
+          elevation: 2,
+          child: InkWell(
+            onTap: onSelectPersonalizedOnly,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.psychology_outlined,
+                          color: colorScheme.onPrimaryContainer,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Personalized Meditation Only',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_ios, size: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '• Set meditation preferences or use "Surprise me"\n'
+                    '• Experience AI-generated personalized meditation\n'
+                    '• 3 content segments (~5 minutes)\n'
+                    '• No biosignal requirements',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Biosignal-Adaptive Option
+        Card(
+          elevation: 2,
+          child: InkWell(
+            onTap: onSelectBiosignalAdaptive,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.sensors_outlined,
+                          color: colorScheme.onSecondaryContainer,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Biosignal-Adaptive',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_ios, size: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '• Automatic seal check guided setup\n'
+                    '• 30s calibration + 30s baseline measurement\n'
+                    '• Real-time stress detection (3% threshold)\n'
+                    '• Adaptive meditation up to 4 segments\n'
+                    '• Live biosignal analytics',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDemoPhaseIndicator() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    String phaseTitle;
+    String phaseMessage;
+    IconData phaseIcon;
+    Color phaseColor;
+    Widget? progressWidget;
+
+    switch (_demoPhase) {
+      case DemoPhase.sealCheck:
+        phaseTitle = 'Demo: Seal Check';
+        phaseMessage = DemoConfig.sealCheckMessage;
+        phaseIcon = Icons.verified_outlined;
+        phaseColor = colorScheme.primary;
+        break;
+      
+      case DemoPhase.calibration:
+        phaseTitle = 'Demo: Calibration Phase';
+        phaseMessage = DemoConfig.calibrationMessage;
+        phaseIcon = Icons.settings_outlined;
+        phaseColor = Colors.orange;
+        
+        if (_demoPhaseStartTime != null) {
+          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
+          final remaining = DemoConfig.calibrationDuration - elapsed;
+          final progress = elapsed.inSeconds / DemoConfig.calibrationDuration.inSeconds;
+          
+          progressWidget = Column(
+            children: [
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
+              const SizedBox(height: 4),
+              Text(
+                '${remaining.inSeconds} seconds remaining',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          );
+        }
+        break;
+      
+      case DemoPhase.baselineMeasurement:
+        phaseTitle = 'Demo: Baseline Measurement';
+        phaseMessage = DemoConfig.baselineMessage;
+        phaseIcon = Icons.straighten_outlined;
+        phaseColor = Colors.blue;
+        
+        if (_demoPhaseStartTime != null) {
+          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
+          final remaining = DemoConfig.baselineDuration - elapsed;
+          final progress = elapsed.inSeconds / DemoConfig.baselineDuration.inSeconds;
+          
+          progressWidget = Column(
+            children: [
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
+              const SizedBox(height: 4),
+              Text(
+                '${remaining.inSeconds} seconds remaining',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          );
+        }
+        break;
+      
+      case DemoPhase.monitoring:
+        phaseTitle = 'Demo: Stress Monitoring';
+        phaseMessage = DemoConfig.monitoringMessage;
+        phaseIcon = Icons.monitor_heart_outlined;
+        phaseColor = Colors.green;
+        
+        if (_demoBaselineHr != null && _demoBaselineRmssd != null) {
+          progressWidget = Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              'Baseline: HR ${_demoBaselineHr!.toStringAsFixed(0)} BPM, '
+              'RMSSD ${_demoBaselineRmssd!.toStringAsFixed(0)} ms',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+        break;
+      
+      case DemoPhase.settingPreferences:
+        phaseTitle = 'Demo: Personalized Meditation';
+        phaseMessage = 'Starting meditation with your preferences...';
+        phaseIcon = Icons.spa_outlined;
+        phaseColor = colorScheme.primary;
+        break;
+      
+      case DemoPhase.meditationSession:
+        phaseTitle = 'Demo: Meditation In Progress';
+        phaseMessage = _demoSubMode == DemoConfig.modePersonalizedOnly
+            ? 'Personalized meditation (3 segments)'
+            : 'Biosignal-adaptive meditation (max 4 segments)';
+        phaseIcon = Icons.self_improvement_outlined;
+        phaseColor = Colors.purple;
+        break;
+      
+      case DemoPhase.analytics:
+        phaseTitle = 'Demo: Session Complete';
+        phaseMessage = 'Showing session analytics...';
+        phaseIcon = Icons.analytics_outlined;
+        phaseColor = Colors.green;
+        break;
+      
+      default:
+        return const SizedBox.shrink();
+    }
+
     return Card(
+      color: phaseColor.withOpacity(0.1),
+      elevation: 3,
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Demo mode',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              children: [
+                Icon(phaseIcon, color: phaseColor, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    phaseTitle,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: phaseColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            const Text(
-              'This area can host scripted scenarios, placeholder actions, or QA checks without showing the meditation playback UI.',
+            Text(
+              phaseMessage,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                height: 1.4,
+              ),
             ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: onRunPlaceholderAction,
-              icon: const Icon(Icons.science_outlined),
-              label: const Text('Run Placeholder Action'),
-            ),
+            if (progressWidget != null) progressWidget,
           ],
         ),
       ),
@@ -1039,7 +1329,7 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   Future<void> _openDemoModePage() async {
-    await Navigator.push(
+    final selectedDemoMode = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (context) {
@@ -1138,15 +1428,12 @@ class _MeditationViewState extends State<MeditationView> {
                           },
                         ),
                       if (localSelectedMode == MeditationAppMode.test)
-                        _buildTestModePlaceholder(
-                          onRunPlaceholderAction: () {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Demo mode placeholder is active.'),
-                                ),
-                              );
-                            }
+                        _buildDemoModeSelection(
+                          onSelectPersonalizedOnly: () {
+                            Navigator.of(context).pop(DemoConfig.modePersonalizedOnly);
+                          },
+                          onSelectBiosignalAdaptive: () {
+                            Navigator.of(context).pop(DemoConfig.modeBiosignalAdaptive);
                           },
                         ),
                       if (localSelectedMode == MeditationAppMode.normal)
@@ -1172,6 +1459,220 @@ class _MeditationViewState extends State<MeditationView> {
         },
       ),
     );
+
+    // Handle selected demo mode
+    if (selectedDemoMode != null && 
+        selectedDemoMode != DemoConfig.modeNone && 
+        mounted) {
+      setState(() {
+        _demoSubMode = selectedDemoMode;
+        _demoPhase = DemoPhase.modeSelection;
+      });
+      
+      // Start the appropriate demo flow
+      if (selectedDemoMode == DemoConfig.modePersonalizedOnly) {
+        _startPersonalizedOnlyDemo();
+      } else if (selectedDemoMode == DemoConfig.modeBiosignalAdaptive) {
+        _startBiosignalAdaptiveDemo();
+      }
+    }
+  }
+
+  // ============================================================================
+  // DEMO MODE FLOWS
+  // ============================================================================
+
+  Future<void> _startPersonalizedOnlyDemo() async {
+    // Show preferences selection dialog
+    final preferences = await _showDemoPreferencesDialog();
+    
+    if (preferences == null || !mounted) {
+      // User cancelled
+      _resetDemoMode();
+      return;
+    }
+    
+    setState(() {
+      _demoPreferences = preferences;
+      _demoPhase = DemoPhase.settingPreferences;
+    });
+    
+    // Immediately start meditation with these preferences
+    _startPersonalizedOnlyMeditation();
+  }
+
+  Future<void> _startBiosignalAdaptiveDemo() async {
+    // Start with seal check phase
+    setState(() {
+      _demoPhase = DemoPhase.sealCheck;
+    });
+    
+    // Automatically navigate to seal check screen
+    await _openSealCheckPage();
+    
+    if (!mounted) return;
+    
+    // After seal check, proceed to calibration if sensor is ready
+    if (_sensor != null) {
+      _startCalibrationPhase();
+    } else {
+      // Need to initialize sensor first
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please ensure earable is connected and try again.'),
+        ),
+      );
+      _resetDemoMode();
+    }
+  }
+
+  Future<DemoMeditationPreferences?> _showDemoPreferencesDialog() async {
+    return await showDialog<DemoMeditationPreferences>(
+      context: context,
+      barrierDismissable: false,
+      builder: (context) => _DemoPreferencesDialog(),
+    );
+  }
+
+  void _resetDemoMode() {
+    setState(() {
+      _demoPhase = DemoPhase.none;
+      _demoSubMode = DemoConfig.modeNone;
+      _demoPreferences = null;
+      _demoPhaseStartTime = null;
+      _demoBaselineHr = null;
+     _demoBaselineRmssd = null;
+    });
+    _demoPhaseTimer?.cancel();
+    _demoPhaseTimer = null;
+  }
+
+  void _startPersonalizedOnlyMeditation() {
+    setState(() {
+      _demoPhase = DemoPhase.meditationSession;
+    });
+    
+    // For personalized-only, we still need the sensor for the widget
+    // but we don't need stress detection
+    if (!_earStreamActivated && _sensor != null) {
+      _activateEarStream();
+      _startMonitoring();
+    }
+    
+    // The LlmMeditationWidget will handle the meditation with demo preferences
+    // It will be configured to use 3 segments based on demo mode
+  }
+
+  void _startCalibrationPhase() {
+    setState(() {
+      _demoPhase = DemoPhase.calibration;
+      _demoPhaseStartTime = DateTime.now();
+    });
+    
+    // Automatically activate EarStream monitoring
+    if (!_earStreamActivated) {
+      _activateEarStream();
+      _startMonitoring();
+    }
+    
+    // Start timer for calibration duration
+    _demoPhaseTimer = Timer(DemoConfig.calibrationDuration, () {
+      if (mounted && _demoPhase == DemoPhase.calibration) {
+        _startBaselineMeasurementPhase();
+      }
+    });
+  }
+
+  void _startBaselineMeasurementPhase() {
+    setState(() {
+      _demoPhase = DemoPhase.baselineMeasurement;
+      _demoPhaseStartTime = DateTime.now();
+      // Reset baseline values
+      _demoBaselineHr = null;
+      _demoBaselineRmssd = null;
+    });
+    
+    // Start timer for baseline duration
+    _demoPhaseTimer = Timer(DemoConfig.baselineDuration, () {
+      if (mounted && _demoPhase == DemoPhase.baselineMeasurement) {
+        _captureBaselineAndStartMonitoring();
+      }
+    });
+  }
+
+  void _captureBaselineAndStartMonitoring() {
+    // Capture current HR and HRV as baseline
+    setState(() {
+      _demoBaselineHr = _currentHr > 0 ? _currentHr : DemoConfig.fallbackBaselineHr;
+      _demoBaselineRmssd = _currentHrv > 0 ? _currentHrv : DemoConfig.fallbackBaselineRmssd;
+      _demoPhase = DemoPhase.monitoring;
+      _demoPhaseStartTime = DateTime.now();
+    });
+    
+    print('Demo Baseline Captured: HR=${_demoBaselineHr?.toStringAsFixed(1)} BPM, '
+          'RMSSD=${_demoBaselineRmssd?.toStringAsFixed(1)} ms');
+    
+    // Start periodic stress checking (every 3 seconds)
+    _demoPhaseTimer?.cancel();
+    _demoPhaseTimer = Timer.periodic(DemoConfig.monitoringCheckInterval, (timer) {
+      _checkDemoStressLevel();
+    });
+    
+    // Also set max monitoring duration timeout
+    Timer(DemoConfig.maxMonitoringDuration, () {
+      if (mounted && _demoPhase == DemoPhase.monitoring) {
+        print('Demo: Max monitoring duration reached, forcing meditation start');
+        _startBiosignalAdaptiveMeditation();
+      }
+    });
+  }
+
+  void _checkDemoStressLevel() {
+    if (_demoPhase != DemoPhase.monitoring) return;
+    if (_demoBaselineHr == null || _demoBaselineRmssd == null) return;
+    
+    final currentHr = _currentHr;
+    final currentRmssd = _currentHrv;
+    
+    if (currentHr <= 0 || currentRmssd <= 0) return;
+    
+    // Calculate deviation percentages
+    final hrDeviation = ((currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100;
+    final rmssdDeviation = ((_demoBaselineRmssd! - currentRmssd) / _demoBaselineRmssd!) * 100;
+    
+    // Check if either exceeds 3% threshold (HR up or RMSSD down)
+    final isStressed = hrDeviation >= DemoConfig.stressThresholdPercent || 
+                       rmssdDeviation >= DemoConfig.stressThresholdPercent;
+    
+    if (isStressed) {
+      print('Demo Stress Detected! HR deviation: ${hrDeviation.toStringAsFixed(1)}%, '
+            'RMSSD deviation: ${rmssdDeviation.toStringAsFixed(1)}%');
+      _startBiosignalAdaptiveMeditation();
+    }
+  }
+
+  void _startBiosignalAdaptiveMeditation() {
+    _demoPhaseTimer?.cancel();
+    setState(() {
+      _demoPhase = DemoPhase.meditationSession;
+    });
+    
+    // The LlmMeditationWidget will handle the meditation with demo settings
+    // It will be configured to use 4 segments max based on demo mode
+  }
+
+  void _onDemoMeditationComplete() {
+    setState(() {
+      _demoPhase = DemoPhase.analytics;
+    });
+    
+    // Show analytics for a few seconds, then return to demo selection
+    Timer(const Duration(seconds: 5), () {
+      if (mounted && _demoPhase == DemoPhase.analytics) {
+        _resetDemoMode();
+        _openDemoModePage(); // Return to demo mode selection
+      }
+    });
   }
 
   bool _hasRequiredPersonalInfo(UserAccount account) {
@@ -1410,6 +1911,14 @@ class _MeditationViewState extends State<MeditationView> {
                           _buildSelectedModeSummary(),
                           const SizedBox(height: 12),
 
+                          // Demo Phase Indicator
+                          if (_demoPhase != DemoPhase.none && 
+                              _demoPhase != DemoPhase.modeSelection)
+                            _buildDemoPhaseIndicator(),
+                          if (_demoPhase != DemoPhase.none && 
+                              _demoPhase != DemoPhase.modeSelection)
+                            const SizedBox(height: 12),
+
                           HrHrvDisplayNew(
                             hr: _currentHr,
                             hrv: _currentHrv,
@@ -1434,7 +1943,8 @@ class _MeditationViewState extends State<MeditationView> {
                           const SizedBox(height: 16),
 
                           if (_sensor != null &&
-                              _selectedMode != MeditationAppMode.test &&
+                              (_selectedMode != MeditationAppMode.test || 
+                               _demoPhase == DemoPhase.meditationSession) &&
                               _earStreamActivated)
                             LlmMeditationWidget(
                               key: _meditationWidgetKey,
@@ -1451,6 +1961,15 @@ class _MeditationViewState extends State<MeditationView> {
                                   setState(() {
                                     _stressLevel = level;
                                   });
+                                }
+                              },
+                              demoMode: _demoSubMode,
+                              demoPreferences: _demoPreferences,
+                              demoBaselineHr: _demoBaselineHr,
+                              demoBaselineRmssd: _demoBaselineRmssd,
+                              onDemoComplete: () {
+                                if (_demoPhase == DemoPhase.meditationSession) {
+                                  _onDemoMeditationComplete();
                                 }
                               },
                             ),
@@ -1631,11 +2150,182 @@ class _MeditationViewState extends State<MeditationView> {
   void dispose() {
     _timerModeTimer?.cancel();
     _measurementTimer?.cancel();
+    _demoPhaseTimer?.cancel();
     _hrSubscription?.cancel();
     _hrvSubscription?.cancel();
     _connectionSubscription?.cancel();
     _sensor?.dispose();
     // _audioPlayer.dispose(); // Removed
     super.dispose();
+  }
+}
+
+// ================================================================================
+// DEMO PREFERENCES DIALOG
+// ================================================================================
+
+class _DemoPreferencesDialog extends StatefulWidget {
+  @override
+  State<_DemoPreferencesDialog> createState() => _DemoPreferencesDialogState();
+}
+
+class _DemoPreferencesDialogState extends State<_DemoPreferencesDialog> {
+  String _selectedStyle = 'Mindfulness';
+  String _selectedVoiceTone = 'Calm';
+  int _durationMinutes = 5;
+  bool _useBackgroundSounds = true;
+
+  void _surpriseMe() {
+    final randomPrefs = DemoMeditationPreferences.random();
+    setState(() {
+      _selectedStyle = randomPrefs.meditationStyle;
+      _selectedVoiceTone = randomPrefs.voiceTone;
+      _durationMinutes = randomPrefs.durationMinutes;
+      _useBackgroundSounds = randomPrefs.useBackgroundSounds;
+    });
+  }
+
+  void _confirm() {
+    final preferences = DemoMeditationPreferences(
+      meditationStyle: _selectedStyle,
+      voiceTone: _selectedVoiceTone,
+      durationMinutes: _durationMinutes,
+      useBackgroundSounds: _useBackgroundSounds,
+    );
+    Navigator.of(context).pop(preferences);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.tune, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          const Text('Meditation Preferences'),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Surprise Me Button
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: _surpriseMe,
+                  icon: const Icon(Icons.casino),
+                  label: const Text('Surprise Me'),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: colorScheme.primaryContainer,
+                    foregroundColor: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 12),
+              
+              // Meditation Style
+              Text(
+                'Meditation Style',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: DemoConfig.availableStyles.map((style) {
+                  final isSelected = style == _selectedStyle;
+                  return ChoiceChip(
+                    label: Text(style),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _selectedStyle = style);
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              
+              // Voice Tone
+              Text(
+                'Voice Tone',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: DemoConfig.availableVoiceTones.map((tone) {
+                  final isSelected = tone == _selectedVoiceTone;
+                  return ChoiceChip(
+                    label: Text(tone),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _selectedVoiceTone = tone);
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              
+              // Duration
+              Text(
+                'Duration: $_durationMinutes minutes',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Slider(
+                value: _durationMinutes.toDouble(),
+                min: 3,
+                max: 10,
+                divisions: 7,
+                label: '$_durationMinutes min',
+                onChanged: (value) {
+                  setState(() => _durationMinutes = value.round());
+                },
+              ),
+              const SizedBox(height: 8),
+              
+              // Background Sounds
+              SwitchListTile(
+                title: const Text('Background Sounds'),
+                subtitle: const Text('Ambient nature sounds'),
+                value: _useBackgroundSounds,
+                onChanged: (value) {
+                  setState(() => _useBackgroundSounds = value);
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _confirm,
+          child: const Text('Start Meditation'),
+        ),
+      ],
+    );
   }
 }

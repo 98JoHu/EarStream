@@ -8,6 +8,7 @@ import '../biosignals/sensors/hr_sensor_interface.dart';
 import 'improved_meditation_llm_service.dart';
 import 'meditation_voice_service.dart';
 import '../../models/user_account.dart';
+import '../../config/demo_config.dart';
 import 'personalized_stress_detector.dart';
 import '../storage/meditation_history.dart';
 import '../biosignals/activity_detector.dart';
@@ -43,6 +44,13 @@ class ImprovedMeditationController {
   final UserAccount userAccount;
   late PersonalizedStressDetector stressDetector;
 
+  // Demo mode support
+  final String demoMode;
+  final DemoMeditationPreferences? demoPreferences;
+  final double? demoBaselineHr;
+  final double? demoBaselineRmssd;
+  final VoidCallback? onDemoComplete;
+
   // State
   MeditationState _state = MeditationState.idle;
   MeditationState get state => _state;
@@ -59,8 +67,24 @@ class ImprovedMeditationController {
   DateTime? _calibrationStartTime;
   final List<double> _hrMeasurements = [];
   final List<double> _hrvMeasurements = [];
-  static const int _calibrationDurationSeconds =
-      300; // 5 minutes for robust baseline calibration
+  
+  // Calibration duration - demo mode uses 30s, normal uses 300s (5 min)
+  int get _calibrationDurationSeconds {
+    if (demoMode == DemoConfig.modeBiosignalAdaptive) {
+      return DemoConfig.baselineDuration.inSeconds;
+    }
+    return 300; // 5 minutes for robust baseline calibration
+  }
+  
+  // Max meditation iterations - varies by mode
+  int get _maxMeditationIterations {
+    if (demoMode == DemoConfig.modePersonalizedOnly) {
+      return DemoConfig.personalizedOnlyMaxSegments;
+    } else if (demoMode == DemoConfig.modeBiosignalAdaptive) {
+      return DemoConfig.biosignalAdaptiveMaxSegments;
+    }
+    return 10; // Standard max for normal mode
+  }
 
   // Session tracking
   int _iterationCount = 0;
@@ -107,9 +131,22 @@ class ImprovedMeditationController {
     this.onStressDetected,
     this.onSegmentUpdate,
     this.onTimerUpdate,
+    this.demoMode = DemoConfig.modeNone,
+    this.demoPreferences,
+    this.demoBaselineHr,
+    this.demoBaselineRmssd,
+    this.onDemoComplete,
   }) {
     stressDetector = PersonalizedStressDetector(userAccount: userAccount);
     llmService.setUserAccount(userAccount);
+    
+    // Configure LLM service for demo mode
+    if (demoMode != DemoConfig.modeNone) {
+      llmService.setDemoMode(
+        demoMode: demoMode,
+        demoPreferences: demoPreferences,
+      );
+    }
   }
 
   void _setState(MeditationState newState) {
@@ -234,7 +271,40 @@ class ImprovedMeditationController {
   Future<void> _measureBaseline() async {
     _setState(MeditationState.measuringBaseline);
 
-    // Start with research-based baseline immediately (no wait!)
+    // In demo mode with provided baselines, use those directly
+    if (demoMode == DemoConfig.modeBiosignalAdaptive && 
+        demoBaselineHr != null && 
+        demoBaselineRmssd != null) {
+      _baselineHr = demoBaselineHr!;
+      _baselineHrv = demoBaselineRmssd!;
+      
+      _logger.i(
+          'Using demo baseline: HR=${_baselineHr.toStringAsFixed(1)}, RMSSD=${_baselineHrv.toStringAsFixed(1)}');
+      _logger.i('   Demo mode: No demographic data used');
+      
+      // Skip calibration entirely for demo mode - baseline already measured
+      _isCalibrating = false;
+      _isBaselineReady = true;
+      _sendStatus('Demo baseline applied');
+      return;
+    }
+    
+    // For personalized-only demo mode, use lighter calibration
+    if (demoMode == DemoConfig.modePersonalizedOnly) {
+      // Use fallback values for personalized-only (no biosignal adaptation needed)
+      _baselineHr = DemoConfig.fallbackBaselineHr;
+      _baselineHrv = DemoConfig.fallbackBaselineRmssd;
+      
+      _logger.i(
+          'Personalized-Only Demo: Using fallback baseline: HR=${_baselineHr.toStringAsFixed(1)}, RMSSD=${_baselineHrv.toStringAsFixed(1)}');
+      
+      _isCalibrating = false;
+      _isBaselineReady = true;
+      _sendStatus('Starting personalized meditation...');
+      return;
+    }
+
+    // Normal mode: Start with research-based baseline
     final researchBaseline = stressDetector.getResearchBaselines();
     _baselineHr = researchBaseline['baselineHr']!;
     _baselineHrv = researchBaseline['baselineHrv']!;
@@ -344,7 +414,7 @@ class ImprovedMeditationController {
   }
 
   Future<void> _adaptiveLoop() async {
-    const maxIterations = 10;
+    final maxIterations = _maxMeditationIterations;
 
     while (_iterationCount < maxIterations &&
         _state != MeditationState.idle &&
@@ -584,6 +654,12 @@ class ImprovedMeditationController {
     _logger.i('Session complete - HR/HRV monitoring continues');
 
     onSessionComplete?.call();
+    
+    // Call demo complete callback if in demo mode
+    if (demoMode != DemoConfig.modeNone) {
+      onDemoComplete?.call();
+      _logger.i('Demo session complete - callback invoked');
+    }
   }
 
   /// Stop session - PROPERLY

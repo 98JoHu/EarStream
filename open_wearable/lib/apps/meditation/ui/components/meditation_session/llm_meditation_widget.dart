@@ -5,6 +5,7 @@ import '../../../core/meditation/improved_meditation_controller.dart';
 import '../../../core/meditation/improved_meditation_llm_service.dart';
 import '../../../core/meditation/meditation_voice_service.dart';
 import '../../../config/meditation_config.dart';
+import '../../../config/demo_config.dart';
 import '../../../core/meditation/outlook_meeting_blocker.dart';
 import '../../../models/user_account.dart';
 import '../../../core/biosignals/sensors/hr_sensor_interface.dart';
@@ -19,6 +20,13 @@ class LlmMeditationWidget extends StatefulWidget {
   final Future<bool> Function()? onBeforeStartMeditation;
   final void Function(String stressLevel)? onStressLevelChanged;
   final bool stressDetectionEnabled;
+  
+  // Demo mode support
+  final String demoMode;
+  final DemoMeditationPreferences? demoPreferences;
+  final double? demoBaselineHr;
+  final double? demoBaselineRmssd;
+  final VoidCallback? onDemoComplete;
 
   const LlmMeditationWidget({
     super.key,
@@ -27,6 +35,11 @@ class LlmMeditationWidget extends StatefulWidget {
     this.onBeforeStartMeditation,
     this.onStressLevelChanged,
     this.stressDetectionEnabled = true,
+    this.demoMode = DemoConfig.modeNone,
+    this.demoPreferences,
+    this.demoBaselineHr,
+    this.demoBaselineRmssd,
+    this.onDemoComplete,
   });
 
   @override
@@ -324,6 +337,11 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           }
         },
         onStressDetected: _handleStressDetected,
+        demoMode: widget.demoMode,
+        demoPreferences: widget.demoPreferences,
+        demoBaselineHr: widget.demoBaselineHr,
+        demoBaselineRmssd: widget.demoBaselineRmssd,
+        onDemoComplete: widget.onDemoComplete,
       );
 
       print('✅ Controller recreated successfully after reset');
@@ -430,6 +448,11 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         }
       },
       onStressDetected: _handleStressDetected,
+      demoMode: widget.demoMode,
+      demoPreferences: widget.demoPreferences,
+      demoBaselineHr: widget.demoBaselineHr,
+      demoBaselineRmssd: widget.demoBaselineRmssd,
+      onDemoComplete: widget.onDemoComplete,
     );
 
     setState(() {
