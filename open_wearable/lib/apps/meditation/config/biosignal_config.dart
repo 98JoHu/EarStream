@@ -244,7 +244,7 @@ class BiosignalConfig {
   
   /// Check if RMSSD measurement is stable (past minimum time threshold)
   static bool isRmssdStable(Duration measurementDuration) {
-    return measurementDuration >= rmssdMinimumStableTime;
+    return measurementDuration >= rmssdMinimumMeasurementTime;
   }
   
   /// Get weighted research baseline during calibration
@@ -265,7 +265,7 @@ class BiosignalConfig {
     PPG Sampling: $ppgSamplingFrequency Hz
     Band-pass Filter: $bandPassLowCut - $bandPassHighCut Hz
     RMSSD Window: ${rmssdCalculationWindow.inMinutes} min (${maxShortTermRrIntervals} beats max)
-    RMSSD Stable After: ${rmssdMinimumStableTime.inSeconds} sec
+    RMSSD Stable After: ${rmssdMinimumMeasurementTime.inSeconds} sec
     SDNN Window: ${maxLongTermRrIntervals} beats
     Baseline Calibration: ${baselineCalibrationDuration.inSeconds} sec
     Stress HR Threshold: baseline × $stressHrMultiplier
