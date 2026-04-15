@@ -42,7 +42,6 @@ class ImprovedMeditationController {
   final AudioPlayer backgroundMusicPlayer = AudioPlayer();
   final UserAccount userAccount;
   late PersonalizedStressDetector stressDetector;
-  late ActivityDetector activityDetector;
 
   // State
   MeditationState _state = MeditationState.idle;
@@ -72,6 +71,7 @@ class ImprovedMeditationController {
   DateTime? _lastSensorDataTime; // Track when we last received sensor data
   static const int _sensorTimeoutSeconds =
       45; // Stop if no data for 45 seconds (increased from 15 to prevent false timeouts)
+  bool _isCompletingSession = false; // Guard flag to prevent concurrent completion calls
 
   // Monitoring
   Timer? _stressMonitorTimer;
@@ -109,7 +109,6 @@ class ImprovedMeditationController {
     this.onTimerUpdate,
   }) {
     stressDetector = PersonalizedStressDetector(userAccount: userAccount);
-    activityDetector = ActivityDetector();
     llmService.setUserAccount(userAccount);
   }
 
@@ -142,6 +141,7 @@ class ImprovedMeditationController {
       _meditationAutoStarted = false;
       _peakStressLevel = 0.0;
       _isPaused = false;
+      _isCompletingSession = false; // Reset completion flag
 
       llmService.startNewSession();
 
@@ -520,15 +520,22 @@ class ImprovedMeditationController {
   }
 
   Future<void> _completeSession() async {
-    // Ensure idempotency for session completion
+    // Ensure idempotency for session completion - prevent race conditions
+    if (_isCompletingSession) {
+      _logger.w('_completeSession() already in progress - skipping concurrent call');
+      return;
+    }
+    
     if (_state == MeditationState.completed ||
-        _state == MeditationState.idle ||
-        _state == MeditationState.generatingContent) {
+        _state == MeditationState.idle) {
       _logger.w(
-          '_completeSession() blocked - already completing or completed (state: $_state)');
+          '_completeSession() blocked - already completed or idle (state: $_state)');
       return;
     }
 
+    // Set guard flag
+    _isCompletingSession = true;
+    
     _logger.i('Starting session completion...');
     _setState(MeditationState.generatingContent);
 
@@ -564,6 +571,10 @@ class ImprovedMeditationController {
     _setState(MeditationState.completed);
     _sendStatus('Session complete!');
     _meditationAutoStarted = false;
+    
+    // Cancel session timer
+    _sessionTimer?.cancel();
+    _sessionTimer = null;
 
     // Keep monitoring active for post-session analytics
     // The app should continue monitoring HR/HRV to:
@@ -584,49 +595,16 @@ class ImprovedMeditationController {
     _isPaused = false;
     _meditationAutoStarted = false;
 
+    // Cancel session timer
+    _sessionTimer?.cancel();
+    _sessionTimer = null;
+
     // Stop audio playback
     await voiceService.stop();
     await backgroundMusicPlayer.stop();
 
     _logger.i('Session stopped - biosignal monitoring continues');
   }
-
-  /// Get personalized congratulatory message when user becomes relaxed
-  // String _getCongratulatoryMessage() {
-  //   final name = userAccount.name;
-
-  //   // Personalized messages based on user's meditation style
-  //   final messages = {
-  //     'calm and empathetic': [
-  //       '$name, you did it! I\'m so proud of you. You\'ve found your peace.',
-  //       'Wonderful, $name! You\'ve reached a beautiful state of calm. Well done.',
-  //       '$name, this is amazing! You\'re completely relaxed now. You should be proud.',
-  //     ],
-  //     'gentle and soothing': [
-  //       'Beautiful work, $name. You\'re peaceful now. Rest in this lovely calm.',
-  //       '$name, you\'ve done so well. Feel how relaxed you are. Just perfect.',
-  //       'Oh, $name, you\'ve found it. This beautiful peace. Well done, dear.',
-  //     ],
-  //     'warm and compassionate': [
-  //       '$name, I\'m really proud of you! You\'ve worked hard and found your calm.',
-  //       'You did it, $name! You\'ve reached such a peaceful state. Excellent work.',
-  //       'Wonderful, $name! You should feel proud. You\'ve achieved real relaxation.',
-  //     ],
-  //     'peaceful and mindful': [
-  //       'Well done, $name. You\'ve arrived at a place of deep calm. Notice how peaceful you feel.',
-  //       '$name, you\'ve done it. Observe this state of relaxation you\'ve created.',
-  //       'Excellent, $name. You\'re now in a truly relaxed state. Acknowledge this achievement.',
-  //     ],
-  //   };
-
-  //   // Get messages for user's style, or use default
-  //   final styleMessages = messages[userAccount.meditationStyle] ??
-  //       messages['warm and compassionate']!;
-
-  //   // Rotate through messages
-  //   final index = _iterationCount % styleMessages.length;
-  //   return styleMessages[index];
-  // }
 
   /// Pause session - PROPERLY
   Future<void> pauseSession() async {
@@ -671,8 +649,10 @@ class ImprovedMeditationController {
     _logger.i(
         '   Profile: ${userAccount.age}y ${userAccount.gender}, ${userAccount.fitnessLevel} fitness');
 
-    // Refine with measured values after 5 minutes
+    // Refine with measured values after 5 minutes (only if still monitoring)
     Future.delayed(Duration(seconds: 300), () {
+      if (!_isMonitoringStress) return; // Guard: only refine if still monitoring
+      
       if (_currentHr > 40 && _currentHrv > 10) {
         // Weighted average: 60% measured + 40% research
         _baselineHr = (_currentHr * 0.6) + (_baselineHr * 0.4);
@@ -724,6 +704,9 @@ class ImprovedMeditationController {
   void stopMonitoring() {
     _stressMonitorTimer?.cancel();
     _isMonitoringStress = false;
+    
+    // Clear activity history to prevent memory leak
+    _activityHistory.clear();
   }
 
   /// Update activity history with new reading and prune old entries
