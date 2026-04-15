@@ -106,13 +106,45 @@ class _MeditationViewState extends State<MeditationView> {
     _timerModeScheduledTime = null;
   }
 
-  void _activateEarStream() {
+  Future<void> _activateEarStream() async {
     if (_earStreamActivated) return;
 
     setState(() {
       _earStreamActivated = true;
     });
-    // Actually start sensor measurements now.
+
+    if (_hasEarableSensorAvailable && !_useMockSensor) {
+      // Configure the PPG hardware: sends BLE config and starts the physical
+      // PPG data stream on the earable device (first time only).
+      await _configurePpgSensor();
+
+      // Read back the actual sample frequency selected by the config system.
+      double sampleFreq = BiosignalConfig.ppgSamplingFrequency;
+      if (widget.sensorConfigProvider != null) {
+        for (final config in widget.ppgSensor!.relatedConfigurations) {
+          final value =
+              widget.sensorConfigProvider!.getSelectedConfigurationValue(config);
+          if (value is SensorFrequencyConfigurationValue) {
+            sampleFreq = value.frequencyHz;
+            break;
+          }
+        }
+      }
+
+      // Dispose the placeholder created at init and recreate with correct freq.
+      _hrSubscription?.cancel();
+      _hrvSubscription?.cancel();
+      _connectionSubscription?.cancel();
+      _sensor?.dispose();
+      _sensor = EarableHrSensor(
+        ppgSensor: widget.ppgSensor!,
+        wearable: widget.wearable!,
+        sensorManager: widget.sensorManager,
+        sampleFreq: sampleFreq,
+        configProvider: widget.sensorConfigProvider,
+      );
+    }
+
     _startMonitoring();
   }
 
@@ -172,7 +204,7 @@ class _MeditationViewState extends State<MeditationView> {
         _deactivateEarStream();
       }
     } else {
-      _activateEarStream();
+      await _activateEarStream();
     }
   }
 
@@ -1048,12 +1080,25 @@ class _MeditationViewState extends State<MeditationView> {
     }
 
     if (_hasEarableSensorAvailable) {
-      print('Starting with earable sensor');
-      final initialized = await _switchToEarableSensor(showFeedback: false);
-      if (initialized) {
+      // Only create the sensor object — the PPG hardware is NOT configured here.
+      // _configurePpgSensor() and sensor.start() are deferred to _activateEarStream()
+      // so no physical PPG stream starts until the user explicitly requests it.
+      print('Earable available — creating sensor object (PPG not yet started)');
+      try {
+        _sensor = EarableHrSensor(
+          ppgSensor: widget.ppgSensor!,
+          wearable: widget.wearable!,
+          sensorManager: widget.sensorManager,
+          sampleFreq: BiosignalConfig.ppgSamplingFrequency,
+          configProvider: widget.sensorConfigProvider,
+        );
+        setState(() {
+          _useMockSensor = false;
+        });
         return;
+      } catch (e) {
+        print('Earable sensor creation failed: $e — falling back to mock');
       }
-      print('Earable init failed, falling back to mock sensor');
     }
 
     // Fallback to mock sensor when no earable is available.
@@ -2283,12 +2328,15 @@ class _MeditationViewState extends State<MeditationView> {
                           if (_isDemoModeActive && _demoPhase != DemoPhase.none)
                             const SizedBox(height: 16),
 
-                          // HR/HRV Display — hidden during demo mode selection
-                          // and hidden entirely for Personalized Meditation Only demo mode
-                          if (!_isDemoModeActive ||
-                              (_demoPhase != DemoPhase.none &&
-                                  _demoPhase != DemoPhase.modeSelection &&
-                                  _demoSubMode != DemoConfig.modePersonalizedOnly))
+                          // HR/HRV Display — only rendered once EarStream is active.
+                          // Never shown in personalized-only demo mode or during
+                          // mode selection.
+                          if (_earStreamActivated &&
+                              (!_isDemoModeActive ||
+                                  (_demoPhase != DemoPhase.none &&
+                                      _demoPhase != DemoPhase.modeSelection &&
+                                      _demoSubMode !=
+                                          DemoConfig.modePersonalizedOnly)))
                             HrHrvDisplayNew(
                               hr: _currentHr,
                               hrv: _currentHrv,
