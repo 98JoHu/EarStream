@@ -107,16 +107,17 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   void _activateEarStream() {
-    if (_earStreamActivated) {
-      return;
-    }
+    if (_earStreamActivated) return;
 
     setState(() {
       _earStreamActivated = true;
     });
+    // Actually start sensor measurements now.
+    _startMonitoring();
   }
 
   void _deactivateEarStream() {
+    _stopSensorStreams();
     setState(() {
       _earStreamActivated = false;
       // Reset monitoring state
@@ -128,6 +129,20 @@ class _MeditationViewState extends State<MeditationView> {
       _hrvIsStable = false;
       _hrvMeasurementCount = 0;
     });
+  }
+
+  /// Stops active sensor measurements and cancels stream subscriptions.
+  /// The sensor object itself is kept alive so it can be restarted later.
+  void _stopSensorStreams() {
+    _hrSubscription?.cancel();
+    _hrSubscription = null;
+    _hrvSubscription?.cancel();
+    _hrvSubscription = null;
+    _connectionSubscription?.cancel();
+    _connectionSubscription = null;
+    _measurementTimer?.cancel();
+    _measurementTimer = null;
+    _sensor?.stop();
   }
 
   Future<void> _toggleEarStream() async {
@@ -1042,16 +1057,10 @@ class _MeditationViewState extends State<MeditationView> {
     }
 
     // Fallback to mock sensor when no earable is available.
-    print('Starting with mock sensor');
+    print('Starting with mock sensor (created, not yet started)');
     _sensor = MockHrSensor();
     _useMockSensor = true;
-
-    // Ensure sensor is started before monitoring begins
-    print('>>> Starting mock sensor...');
-    await _sensor!.start();
-    print('✓ Mock sensor started');
-
-    _startMonitoring();
+    // Sensor will be started when EarStream is activated.
   }
 
   /// Configure PPG sensor for streaming
@@ -1197,16 +1206,16 @@ class _MeditationViewState extends State<MeditationView> {
       print('✓ State updated: _useMockSensor = $_useMockSensor');
       print('✓ New widget key created - LlmMeditationWidget will rebuild');
 
-      // Start sensor before attaching listeners
-      print('=== STARTING EARABLE SENSOR ===');
-      await _sensor!.start();
-      print('✓ Earable sensor started');
-
-      // Restart monitoring with real sensor
-      // (initState won't reinitialize since _sensor is now set)
-      print('=== CALLING _startMonitoring() ===');
-      _startMonitoring();
-      print('✓ _startMonitoring() completed');
+      // Only start measurements if EarStream is already active
+      // (e.g. user swaps from mock to earable mid-session).
+      if (_earStreamActivated) {
+        print('=== STARTING EARABLE SENSOR (EarStream already active) ===');
+        await _sensor!.start();
+        _startMonitoring();
+        print('✓ Earable sensor started and monitoring resumed');
+      } else {
+        print('✓ Earable sensor created — measurements start when EarStream is activated');
+      }
 
       print('Switched to earable sensor! _useMockSensor = $_useMockSensor');
     } catch (e, stackTrace) {
@@ -1440,13 +1449,13 @@ class _MeditationViewState extends State<MeditationView> {
       _useMockSensor = true;
     });
 
-    // Start mock sensor before monitoring
-    print('>>> Starting mock sensor (reset)...');
-    await _sensor!.start();
-    print('✓ Mock sensor started (reset)');
-
-    // Restart monitoring with mock sensor
-    _startMonitoring();
+    // Only restart measurements if EarStream was active.
+    if (_earStreamActivated) {
+      print('>>> Starting mock sensor (reset)...');
+      await _sensor!.start();
+      _startMonitoring();
+      print('✓ Mock sensor started (reset)');
+    }
 
     // Clear snooze and meditation timers from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
