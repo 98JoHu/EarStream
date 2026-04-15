@@ -69,24 +69,28 @@ class BiosignalConfig {
   // HRV CALCULATION - RR INTERVAL BUFFERS
   // ============================================================================
   
-  /// Time window for short-term RMSSD calculation
-  /// Research standard: 1-5 minutes for reliable parasympathetic assessment
-  /// At 60 BPM: 5 min = 300 beats, 1 min = 60 beats
+  /// Time window for RMSSD calculation
+  /// Research standard: 5 minutes for reliable parasympathetic assessment
+  /// RMSSD is calculated on ALL RR intervals within this sliding time window
+  /// (not a fixed interval count)
   static const Duration rmssdCalculationWindow = Duration(minutes: 5);
   
-  /// Minimum time before considering RMSSD values reliable
-  /// Prevents premature stress detection with insufficient data
-  static const Duration rmssdMinimumStableTime = Duration(minutes: 1);
+  /// Minimum measurement time before calculating RMSSD
+  /// Prevents unreliable stress detection with insufficient data
+  /// RMSSD will NOT be calculated until this duration has elapsed
+  static const Duration rmssdMinimumMeasurementTime = Duration(minutes: 1);
   
   /// Maximum number of RR intervals for short-term buffer (RMSSD)
+  /// NOTE: This is now used as a safety limit, actual RMSSD uses time-based windowing
   /// At 60 BPM: 5 minutes ≈ 300 beats
   /// At 80 BPM: 5 minutes ≈ 400 beats
   /// Set to 400 to accommodate higher heart rates
   static const int maxShortTermRrIntervals = 400; // beats (~5 min at 80 BPM)
   
   /// Minimum RR intervals for initial RMSSD calculation
-  /// Research minimum: 10 intervals (≈10-15 seconds)
-  /// But mark as "unstable" until meeting minimum stable time
+  /// NOTE: This is deprecated - now using time-based minimum (1 minute)
+  /// Kept for compatibility with other code
+  @Deprecated('Use rmssdMinimumMeasurementTime instead')
   static const int minRrIntervalsForInitialRmssd = 10; // beats
   
   /// Maximum number of RR intervals for long-term buffer (SDNN)  

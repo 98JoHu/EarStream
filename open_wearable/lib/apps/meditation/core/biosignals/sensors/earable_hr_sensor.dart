@@ -41,10 +41,8 @@ class EarableHrSensor implements HrSensorInterface {
 
   final ActivityDetector activityDetector = ActivityDetector();
 
-  final List<double> _rrIntervals = [];
-  // RMSSD calculation window: 5 minutes (~300-400 beats depending on HR)
-  final int _maxRrIntervals = BiosignalConfig.maxShortTermRrIntervals; // 400 beats
-  final int _minRrIntervalsForStableHrv = BiosignalConfig.minRrIntervalsForInitialRmssd; // 10 beats
+  // Store RR intervals with timestamps for time-based windowing
+  final List<({DateTime timestamp, double intervalMs})> _rrIntervalsWithTime = [];
   
   // Track measurement duration for RMSSD stability
   DateTime? _measurementStartTime;
@@ -228,54 +226,52 @@ class EarableHrSensor implements HrSensorInterface {
       (rrIntervals) {
         if (!rrStreamStarted) {
           _logger.i(
-            ' RR INTERVAL STREAM STARTED! Received ${rrIntervals.length} intervals',
+            '🫀 RR INTERVAL STREAM STARTED! Received ${rrIntervals.length} intervals',
           );
           rrStreamStarted = true;
-          // Mark measurement start time for RMSSD stability tracking
+          // Mark measurement start time for time-based windowing
           _measurementStartTime = DateTime.now();
         }
 
-        // Add to short-term buffer for RMSSD (5-minute window)
-        _rrIntervals.addAll(rrIntervals);
-
-        // Keep only the last N intervals in short-term buffer (efficient approach)
-        if (_rrIntervals.length > _maxRrIntervals) {
-          // Remove excess from front efficiently
-          final excess = _rrIntervals.length - _maxRrIntervals;
-          _rrIntervals.removeRange(0, excess);
+        // Add RR intervals with current timestamp
+        final now = DateTime.now();
+        for (final rrInterval in rrIntervals) {
+          _rrIntervalsWithTime.add((timestamp: now, intervalMs: rrInterval));
         }
 
-        // Check RMSSD stability based on measurement duration
-        // Calculate initial RMSSD after 10 beats, but mark stable only after 1 minute
-        if (_rrIntervals.length >= _minRrIntervalsForStableHrv) {
-          // Check if we've been measuring long enough (1 minute minimum)
-          final measurementDuration = _measurementStartTime != null
-              ? DateTime.now().difference(_measurementStartTime!)
-              : Duration.zero;
-          
+        // Remove intervals older than 5 minutes (time-based window)
+        final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
+        _rrIntervalsWithTime.removeWhere(
+          (entry) => entry.timestamp.isBefore(fiveMinutesAgo),
+        );
+
+        // Check if we have enough data for RMSSD calculation
+        final measurementDuration = _measurementStartTime != null
+            ? now.difference(_measurementStartTime!)
+            : Duration.zero;
+        
+        // Only calculate RMSSD if we have at least 1 minute of data
+        if (measurementDuration >= const Duration(minutes: 1)) {
           final wasStable = _rmssdIsStable;
-          _rmssdIsStable = BiosignalConfig.isRmssdStable(measurementDuration);
+          _rmssdIsStable = true;
           
-          if (_rmssdIsStable && !wasStable) {
+          if (!wasStable) {
             _logger.i(
-              'RMSSD now STABLE after ${measurementDuration.inSeconds}s (${_rrIntervals.length} intervals).',
+              '✅ RMSSD now STABLE after ${measurementDuration.inSeconds}s (${_rrIntervalsWithTime.length} intervals in 5-min window).',
             );
             _logger.i(
-              '   Stress detection now reliable. Early RMSSD values were preliminary.',
+              '   Stress detection now reliable. Waiting period complete.',
             );
-          } else if (!_rmssdIsStable && _rrIntervals.length >= _minRrIntervalsForStableHrv) {
-            if (_rrIntervals.length % 20 == 0) { // Log every 20 intervals to avoid spam
-              _logger.d(
-                'Collecting RR intervals for STABLE HRV (${measurementDuration.inSeconds}s / ${BiosignalConfig.rmssdMinimumStableTime.inSeconds}s)',
-              );
-            }
           }
           
           _calculateAndEmitHrv();
         } else {
-          _logger.d(
-            'Collecting RR intervals for HRV (${_rrIntervals.length}/$_minRrIntervalsForStableHrv)',
-          );
+          // Log progress every 10 seconds to avoid spam
+          if (measurementDuration.inSeconds % 10 == 0) {
+            _logger.d(
+              '⏳ Collecting data for RMSSD stability: ${measurementDuration.inSeconds}s / 60s (${_rrIntervalsWithTime.length} intervals)',
+            );
+          }
         }
       },
       onError: (error) {
@@ -288,16 +284,24 @@ class EarableHrSensor implements HrSensorInterface {
 
   /// Calculate and emit HRV metrics
   void _calculateAndEmitHrv() {
-    if (_rrIntervals.length < _minRrIntervalsForStableHrv) {
-      // Not enough data yet for stable measurements
+    // Need at least 1 minute of data for reliable RMSSD
+    if (!_rmssdIsStable) {
       _logger.d(
-        'Not enough RR intervals for stable HRV: ${_rrIntervals.length}/$_minRrIntervalsForStableHrv',
+        'Not enough measurement time for reliable RMSSD (need 1 minute minimum)',
       );
       return;
     }
 
-    // Filter artifacts for short-term RMSSD calculation
-    final cleanedRR = _filterArtifacts(_rrIntervals);
+    // Extract RR intervals from time-windowed data
+    final rrIntervals = _rrIntervalsWithTime.map((e) => e.intervalMs).toList();
+    
+    if (rrIntervals.isEmpty) {
+      _logger.w('No RR intervals in 5-minute window');
+      return;
+    }
+
+    // Filter artifacts for RMSSD calculation
+    final cleanedRR = _filterArtifacts(rrIntervals);
 
     if (cleanedRR.length < 5) {
       _logger.w(
@@ -325,17 +329,22 @@ class EarableHrSensor implements HrSensorInterface {
         _hrvHistory.removeAt(0);
       }
 
-      final artifactsRemoved = _rrIntervals.length - cleanedRR.length;
+      final artifactsRemoved = rrIntervals.length - cleanedRR.length;
+      final measurementDuration = _measurementStartTime != null
+          ? DateTime.now().difference(_measurementStartTime!)
+          : Duration.zero;
+      
       _logger.d(
-          'HRV calculated from ${cleanedRR.length} clean RR intervals ($artifactsRemoved artifacts removed): '
+          'HRV calculated from ${cleanedRR.length} clean RR intervals in 5-min window '
+          '($artifactsRemoved artifacts removed, ${measurementDuration.inSeconds}s total): '
           'RMSSD=${hrvMetrics['HRV_RMSSD']?.toStringAsFixed(1)}ms, '
           'Mean=${hrvMetrics['HRV_MEAN']?.toStringAsFixed(1)}ms');
 
-      // DEBUG: Print buffer state to verify rotation
+      // DEBUG: Print buffer state to verify time-based windowing
       _logger.d(
-          'Buffer: ${_rrIntervals.length} raw intervals → ${cleanedRR.length} clean. '
+          'Time window: ${_rrIntervalsWithTime.length} intervals spanning 5 minutes. '
           'First 5 RR: ${cleanedRR.take(5).map((v) => v.toStringAsFixed(1)).join(", ")}, '
-          'Last 5 RR: ${cleanedRR.skip(cleanedRR.length - 5).map((v) => v.toStringAsFixed(1)).join(", ")}');
+          'Last 5 RR: ${cleanedRR.skip(cleanedRR.length - 5).map((v) => v.toStringAsFixed(1)).join(", ")}');;
     }
   }
 
@@ -385,6 +394,7 @@ class EarableHrSensor implements HrSensorInterface {
     _hrSubscription = null;
     _rrIntervalSubscription?.cancel();
     _rrIntervalSubscription = null;
+    _rrIntervalsWithTime.clear();
     _hrvTimer?.cancel();
     _hrvTimer = null;
     _accelSubscription?.cancel();
@@ -587,7 +597,9 @@ class EarableHrSensor implements HrSensorInterface {
   /// Reset (no-op for real sensor, but kept for interface compatibility)
   @override
   void reset() {
-    _rrIntervals.clear();
+    _rrIntervalsWithTime.clear();
+    _measurementStartTime = null;
+    _rmssdIsStable = false;
     _hrvIsStable = false;
   }
 
