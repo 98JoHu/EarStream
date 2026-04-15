@@ -725,11 +725,62 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     );
   }
 
-  /// Build calibration progress indicator (DISABLED - instant research baseline now used)
+  /// Build calibration progress indicator
   List<Widget> _buildCalibrationIndicator() {
-    // Calibration indicator removed - we now use instant research-based baselines
-    // No need to show "Calibrating..." since we start immediately with research values
-    return [];
+    // Check if controller is calibrating
+    final calibrationInfo = _controller?.getCurrentBiosignals();
+    final isCalibrating = calibrationInfo?['isCalibrating'] == true;
+    final calibrationProgress = calibrationInfo?['calibrationProgress']?.toInt() ?? 0;
+    
+    if (!isCalibrating) {
+      return []; // No indicator if not calibrating
+    }
+    
+    return [
+      const SizedBox(height: 12),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.withOpacity(0.5)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(Icons.biotech, size: 16, color: Colors.amber[800]),
+                const SizedBox(width: 8),
+                Text(
+                  'Calibrating Your Baseline',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.amber[900],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: calibrationProgress / 100,
+              backgroundColor: Colors.amber.withOpacity(0.2),
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber[700]!),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Refining demographics-based estimate with your actual measurements...',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.amber[900],
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 
   @override

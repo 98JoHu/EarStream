@@ -61,7 +61,7 @@ class ImprovedMeditationController {
   final List<double> _hrMeasurements = [];
   final List<double> _hrvMeasurements = [];
   static const int _calibrationDurationSeconds =
-      30; // 30 seconds for initial calibration
+      300; // 5 minutes for robust baseline calibration
 
   // Session tracking
   int _iterationCount = 0;
@@ -190,7 +190,7 @@ class ImprovedMeditationController {
 
       _currentHr = hr;
       _lastSensorDataTime = DateTime.now(); // Track data reception
-      _refineBaselineDuringCalibration(); // Adaptively refine baseline during first 30s
+      _refineBaselineDuringCalibration(); // Adaptively refine baseline during first 5 minutes
       onBiosignalUpdate?.call(_currentHr, _currentHrv);
 
       // Log to verify subscriptions are still active after meditation ends
@@ -213,7 +213,7 @@ class ImprovedMeditationController {
           hrvData['RMSSD'] ??
           _currentHrv;
       _lastSensorDataTime = DateTime.now(); // Track data reception
-      _refineBaselineDuringCalibration(); // Adaptively refine baseline during first 30s
+      _refineBaselineDuringCalibration(); // Adaptively refine baseline during first 5 minutes
       onBiosignalUpdate?.call(_currentHr, _currentHrv);
 
       // Log to verify subscriptions are still active after meditation ends
@@ -270,6 +270,10 @@ class ImprovedMeditationController {
       return;
     }
 
+    // Send calibration progress status message
+    final progress = (elapsed / _calibrationDurationSeconds * 100).round();
+    _sendStatus('Calibrating baseline... ${progress}% (${elapsed}s / ${_calibrationDurationSeconds}s)');
+
     // Adaptive refinement during calibration
     if (_hrMeasurements.isEmpty || _hrvMeasurements.isEmpty) return;
 
@@ -285,9 +289,9 @@ class ImprovedMeditationController {
     final researchHrv = researchBaseline['baselineHrv']!;
 
     // Weighted average: gradually trust measured values more over time
-    // 0-10s: 80% research, 20% measured
-    // 10-20s: 60% research, 40% measured
-    // 20-30s: 40% research, 60% measured
+    // 0-100s: 80% research, 20% measured
+    // 100-200s: 60% research, 40% measured
+    // 200-300s: 40% research, 60% measured
     final researchWeight = 1.0 - (elapsed / _calibrationDurationSeconds * 0.6);
     final measuredWeight = 1.0 - researchWeight;
 
@@ -332,7 +336,7 @@ class ImprovedMeditationController {
           'Calibration complete (keeping research baseline - insufficient measurements)');
     }
 
-    _sendStatus('Meditation in progress...');
+    _sendStatus('Baseline established - meditation in progress...');
   }
 
   Future<void> _adaptiveLoop() async {
@@ -663,8 +667,8 @@ class ImprovedMeditationController {
     _logger.i(
         '   Profile: ${userAccount.age}y ${userAccount.gender}, ${userAccount.fitnessLevel} fitness');
 
-    // Refine with measured values after 30 seconds
-    Future.delayed(Duration(seconds: 30), () {
+    // Refine with measured values after 5 minutes
+    Future.delayed(Duration(seconds: 300), () {
       if (_currentHr > 40 && _currentHrv > 10) {
         // Weighted average: 60% measured + 40% research
         _baselineHr = (_currentHr * 0.6) + (_baselineHr * 0.4);

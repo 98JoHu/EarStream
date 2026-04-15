@@ -131,14 +131,14 @@ class BiosignalConfig {
   
   /// Calibration duration for adaptive baseline refinement
   /// Live measurements integrate with research-based estimates over this period
-  static const Duration baselineCalibrationDuration = Duration(seconds: 30);
+  static const Duration baselineCalibrationDuration = Duration(minutes: 5);
   
   /// Initial trust weight for research-based baseline
   /// 0.8 = 80% research, 20% measured at calibration start
   static const double initialResearchWeight = 0.8;
   
   /// Final trust weight for research-based baseline after calibration
-  /// 0.3 = 30% research, 70% measured after 30 seconds
+  /// 0.3 = 30% research, 70% measured after 5 minutes
   static const double finalResearchWeight = 0.3;
   
   // ============================================================================
