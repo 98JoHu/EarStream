@@ -78,6 +78,10 @@ class ImprovedMeditationController {
   bool _isMonitoringStress = false;
   bool _meditationAutoStarted = false;
 
+  // Activity history for 5-minute buffer (prevents false stress detection after exercise)
+  final List<({DateTime timestamp, ActivityLevel level})> _activityHistory = [];
+  static const Duration _activityBufferDuration = Duration(minutes: 5);
+
   // Subscriptions
   StreamSubscription<double>? _hrSubscription;
   StreamSubscription<Map<String, double>>? _hrvSubscription;
@@ -692,16 +696,23 @@ class ImprovedMeditationController {
         // Sensor doesn't support activity detection - that's OK
       }
 
+      // Update activity history with current reading
+      _updateActivityHistory(activityLevel ?? ActivityLevel.resting);
+
       final isStressed = stressDetector.isStressed(_currentHr, _currentHrv,
           activityLevel: activityLevel);
       final stressLevel = stressDetector.getStressLevel(_currentHr, _currentHrv,
           activityLevel: activityLevel);
 
+      // Check if recent activity should suppress meditation triggering
+      final suppressedByActivity = _shouldSuppressMeditationDueToActivity();
+
       _logger.i(
-          'Periodic stress check: HR=$_currentHr, HRV=$_currentHrv, activity=${activityLevel?.name ?? "unknown"}, stressed=$isStressed, level=${stressLevel.toStringAsFixed(1)}%');
+          'Periodic stress check: HR=$_currentHr, HRV=$_currentHrv, activity=${activityLevel?.name ?? "unknown"}, stressed=$isStressed, level=${stressLevel.toStringAsFixed(1)}%, suppressed=$suppressedByActivity');
       onStressDetected?.call(isStressed);
 
-      if (isStressed && !_meditationAutoStarted) {
+      // Only auto-start if stressed AND not suppressed by recent activity
+      if (isStressed && !suppressedByActivity && !_meditationAutoStarted) {
         _meditationAutoStarted = true;
         _sendStatus('Stress detected');
       } else if (!isStressed && _meditationAutoStarted) {
@@ -713,6 +724,79 @@ class ImprovedMeditationController {
   void stopMonitoring() {
     _stressMonitorTimer?.cancel();
     _isMonitoringStress = false;
+  }
+
+  /// Update activity history with new reading and prune old entries
+  void _updateActivityHistory(ActivityLevel currentLevel) {
+    final now = DateTime.now();
+    
+    // Add current reading
+    _activityHistory.add((timestamp: now, level: currentLevel));
+    
+    // Prune entries older than 5 minutes
+    final cutoff = now.subtract(_activityBufferDuration);
+    _activityHistory.removeWhere((entry) => entry.timestamp.isBefore(cutoff));
+  }
+
+  /// Check if recent activity should suppress meditation triggering
+  /// 
+  /// Returns true if:
+  /// - Vigorous activity ≥5% of time window
+  /// - OR Moderate activity ≥20% of time window
+  /// - OR Light activity ≥40% of time window
+  /// 
+  /// Percentages apply to whatever time window is available (adapts before 5 minutes filled)
+  bool _shouldSuppressMeditationDueToActivity() {
+    if (_activityHistory.isEmpty) return false;
+    
+    // Calculate total time window (use actual time available, not fixed 5 minutes)
+    final now = DateTime.now();
+    final oldestEntry = _activityHistory.first.timestamp;
+    final timeWindowSeconds = now.difference(oldestEntry).inSeconds;
+    
+    if (timeWindowSeconds == 0) return false; // Avoid division by zero
+    
+    // Count duration at each activity level
+    // Assuming measurements every ~3 seconds, each entry represents ~3 seconds
+    int vigorousCount = 0;
+    int moderateCount = 0;
+    int lightCount = 0;
+    
+    for (final entry in _activityHistory) {
+      switch (entry.level) {
+        case ActivityLevel.intense:
+        case ActivityLevel.vigorous:
+          vigorousCount++;
+          break;
+        case ActivityLevel.moderate:
+          moderateCount++;
+          break;
+        case ActivityLevel.light:
+          lightCount++;
+          break;
+        case ActivityLevel.resting:
+          // Resting doesn't contribute to suppression
+          break;
+      }
+    }
+    
+    // Each entry represents ~3 seconds (Timer.periodic interval)
+    const secondsPerEntry = 3;
+    final vigorousSeconds = vigorousCount * secondsPerEntry;
+    final moderateSeconds = moderateCount * secondsPerEntry;
+    final lightSeconds = lightCount * secondsPerEntry;
+    
+    // Calculate percentages relative to actual time window
+    final vigorousPercent = (vigorousSeconds / timeWindowSeconds) * 100;
+    final moderatePercent = (moderateSeconds / timeWindowSeconds) * 100;
+    final lightPercent = (lightSeconds / timeWindowSeconds) * 100;
+    
+    // Check suppression criteria
+    final suppressedByVigorous = vigorousPercent >= 5.0;
+    final suppressedByModerate = moderatePercent >= 20.0;
+    final suppressedByLight = lightPercent >= 40.0;
+    
+    return suppressedByVigorous || suppressedByModerate || suppressedByLight;
   }
 
   Map<String, dynamic> getCurrentBiosignals() {
