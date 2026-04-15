@@ -741,7 +741,8 @@ class ImprovedMeditationController {
   /// Check if recent activity should suppress meditation triggering
   /// 
   /// Returns true if:
-  /// - Vigorous activity ≥5% of time window
+  /// - ANY intense activity detected in time window
+  /// - OR Vigorous activity ≥5% of time window
   /// - OR Moderate activity ≥20% of time window
   /// - OR Light activity ≥40% of time window
   /// 
@@ -758,6 +759,7 @@ class ImprovedMeditationController {
     
     // Count duration at each activity level
     // Assuming measurements every ~3 seconds, each entry represents ~3 seconds
+    int intenseCount = 0;
     int vigorousCount = 0;
     int moderateCount = 0;
     int lightCount = 0;
@@ -765,6 +767,8 @@ class ImprovedMeditationController {
     for (final entry in _activityHistory) {
       switch (entry.level) {
         case ActivityLevel.intense:
+          intenseCount++;
+          break;
         case ActivityLevel.vigorous:
           vigorousCount++;
           break;
@@ -778,6 +782,11 @@ class ImprovedMeditationController {
           // Resting doesn't contribute to suppression
           break;
       }
+    }
+    
+    // ANY intense activity blocks meditation (sprinting, very intense exercise)
+    if (intenseCount > 0) {
+      return true;
     }
     
     // Each entry represents ~3 seconds (Timer.periodic interval)
