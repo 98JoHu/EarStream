@@ -1697,16 +1697,16 @@ class _MeditationViewState extends State<MeditationView> {
 
               void changeMode(MeditationAppMode mode) {
                 _setMode(mode);
-                // Demo is managed on the main screen — close this page and return
-                if (mode == MeditationAppMode.test) {
+                // For both Demo and Timed modes the controls live on the main
+                // screen — close this page and return immediately.
+                if (mode == MeditationAppMode.test ||
+                    mode == MeditationAppMode.timer) {
                   Navigator.of(context).pop();
                   return;
                 }
                 setPageState(() {
                   localSelectedMode = mode;
-                  if (mode != MeditationAppMode.timer) {
-                    localScheduledTime = null;
-                  }
+                  localScheduledTime = null;
                 });
               }
 
@@ -1723,27 +1723,6 @@ class _MeditationViewState extends State<MeditationView> {
                         onModeSelected: changeMode,
                       ),
                       const SizedBox(height: 12),
-                      if (localSelectedMode == MeditationAppMode.timer)
-                        _buildTimerModeCard(
-                          scheduledTime: localScheduledTime,
-                          onScheduleAfter: scheduleAfter,
-                          onPickTime: pickTime,
-                          onCancelSchedule: () {
-                            _clearTimerModeSchedule();
-                            setPageState(() {
-                              localScheduledTime = null;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Scheduled timer cleared.'),
-                              ),
-                            );
-                          },
-                          onStartNow: () async {
-                            Navigator.of(context).pop();
-                            await _startTimerNow();
-                          },
-                        ),
                       if (localSelectedMode == MeditationAppMode.test)
                         Card(
                           child: Padding(
@@ -1757,12 +1736,12 @@ class _MeditationViewState extends State<MeditationView> {
                             ),
                           ),
                         ),
-                      if (localSelectedMode == MeditationAppMode.normal)
+                      if (localSelectedMode != MeditationAppMode.test)
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Text(
-                              _getModeDescription(MeditationAppMode.normal),
+                              _getModeDescription(localSelectedMode),
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     height: 1.4,
                                     color: Theme.of(context)
@@ -2279,6 +2258,7 @@ class _MeditationViewState extends State<MeditationView> {
                           // Never shown in personalized-only demo mode or during
                           // mode selection.
                           if (_earStreamActivated &&
+                              _selectedMode != MeditationAppMode.timer &&
                               (!_isDemoModeActive ||
                                   (_demoPhase != DemoPhase.none &&
                                       _demoPhase != DemoPhase.modeSelection &&
@@ -2378,7 +2358,7 @@ class _MeditationViewState extends State<MeditationView> {
                           const SizedBox(height: 16),
 
                           // Timer mode card — shown inline on main screen when Timed mode is selected
-                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer)
+                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer && !_isMeditationSessionActive)
                             _buildTimerModeCard(
                               scheduledTime: _timerModeScheduledTime,
                               onScheduleAfter: (delay) async {
@@ -2406,8 +2386,42 @@ class _MeditationViewState extends State<MeditationView> {
                               },
                               onStartNow: () => unawaited(_startTimerNow()),
                             ),
-                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer)
+                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer && !_isMeditationSessionActive)
                             const SizedBox(height: 8),
+
+                          if (!_isDemoModeActive &&
+                              _selectedMode == MeditationAppMode.timer &&
+                              !_isMeditationSessionActive &&
+                              !(_meditationWidgetKey.currentState?.hasConfiguredApiKey ?? true))
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.info_outline_rounded,
+                                        color: Theme.of(context).colorScheme.primary),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'API Not Configured',
+                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                          ),
+                                          Text(
+                                            'Open API Keys from the menu to configure Gemini for timed meditation sessions.',
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
 
                           if (!_isDemoModeActive && _selectedMode != MeditationAppMode.test && _selectedMode != MeditationAppMode.timer) ...[
                             SizedBox(
@@ -2426,7 +2440,7 @@ class _MeditationViewState extends State<MeditationView> {
                             const SizedBox(height: 8),
                           ],
 
-                          if (!_isDemoModeActive)
+                          if (!_isDemoModeActive && _selectedMode != MeditationAppMode.timer)
                           Row(
                             children: [
                               Expanded(

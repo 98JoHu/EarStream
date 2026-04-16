@@ -11,7 +11,6 @@ import '../../../models/user_account.dart';
 import '../../../core/biosignals/sensors/hr_sensor_interface.dart';
 import '../../../core/storage/mood_entry.dart';
 import '../../screens/weekly_analysis_screen.dart';
-import 'breathing_animation.dart';
 
 /// Improved meditation widget with natural voice and personalization
 class LlmMeditationWidget extends StatefulWidget {
@@ -81,6 +80,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     }
     return MeditationConfig.hasValidGeminiKey;
   }
+
+  /// Public getter so the parent screen can show the API warning inline.
+  bool get hasConfiguredApiKey => _hasConfiguredGeminiKey;
 
   Future<bool> startMeditationNowFromExternal() async {
     if (_currentState != MeditationState.idle) {
@@ -225,8 +227,11 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       _statusMessage = 'Monitoring your vitals...';
     });
 
-    // Start monitoring
-    _controller!.startMonitoring();
+    // Start monitoring (only in modes that use biosignal-based stress detection;
+    // timer mode is a pure output mode with no sensor polling)
+    if (widget.stressDetectionEnabled) {
+      _controller!.startMonitoring();
+    }
 
     // In demo mode the meditation session must be triggered programmatically
     // because stress-detection-based auto-start is disabled (personalised) or
@@ -496,8 +501,11 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       _statusMessage = 'Monitoring your vitals...';
     });
 
-    // Start monitoring
-    _controller!.startMonitoring();
+    // Start monitoring (only in modes that use biosignal-based stress detection;
+    // timer mode is a pure output mode with no sensor polling)
+    if (widget.stressDetectionEnabled) {
+      _controller!.startMonitoring();
+    }
 
     print('Settings update complete!');
   }
@@ -619,6 +627,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       barrierDismissible: false,
       builder: (context) {
         final isDemo = widget.demoMode != DemoConfig.modeNone;
+        final isTimerMode = !widget.stressDetectionEnabled && !isDemo;
         return AlertDialog(
         title: Row(
           children: [
@@ -638,7 +647,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
             const SizedBox(height: 16),
-            if (!isDemo) ...[
+            if (!isDemo && !isTimerMode) ...[
               const Text(
                 '💭 Stress monitoring is paused for 2 minutes to let you enjoy this calm state.',
                 style: TextStyle(
@@ -648,41 +657,43 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
               ),
               const SizedBox(height: 20),
             ],
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Before:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Text('❤️  ${_baselineHr.toStringAsFixed(0)} BPM',
-                          style: const TextStyle(fontSize: 13)),
-                      Text('📊 ${_baselineHrv.toStringAsFixed(0)} ms',
-                          style: const TextStyle(fontSize: 13)),
-                    ],
+            if (!isDemo && !isTimerMode) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Before:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text('❤️  ${_baselineHr.toStringAsFixed(0)} BPM',
+                            style: const TextStyle(fontSize: 13)),
+                        Text('📊 ${_baselineHrv.toStringAsFixed(0)} ms',
+                            style: const TextStyle(fontSize: 13)),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('After:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Text('❤️  ${_currentHr.toStringAsFixed(0)} BPM',
-                          style: const TextStyle(fontSize: 13)),
-                      Text('📊 ${_currentHrv.toStringAsFixed(0)} ms',
-                          style: const TextStyle(fontSize: 13)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('After:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text('❤️  ${_currentHr.toStringAsFixed(0)} BPM',
+                            style: const TextStyle(fontSize: 13)),
+                        Text('📊 ${_currentHrv.toStringAsFixed(0)} ms',
+                            style: const TextStyle(fontSize: 13)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
             const Divider(),
             const SizedBox(height: 12),
             const Text(
@@ -917,8 +928,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                           ),
                           const SizedBox(height: 8),
 
-                          // Calibration progress indicator (now disabled)
-                          if (_controller != null)
+                          // Calibration progress indicator (biosignal modes only)
+                          if (widget.stressDetectionEnabled && _controller != null)
                             ..._buildCalibrationIndicator(),
 
                           Row(
@@ -962,42 +973,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                     ),
                   )
                 : const SizedBox.shrink(key: ValueKey('session_info_empty')),
-          ),
-
-          // Use AnimatedSwitcher to prevent flickering when state changes
-          // Keep breathing animation visible during content generation to prevent flicker
-          AnimatedSwitcher(
-            duration: const Duration(
-                milliseconds: 150), // Reduced from 300ms for snappier feel
-            child: (_currentState == MeditationState.speaking ||
-                    _currentState == MeditationState.waitingForBiosignals ||
-                    _currentState ==
-                        MeditationState
-                            .generatingContent || // KEEP VISIBLE during generation!
-                    _currentState == MeditationState.paused)
-                ? Column(
-                    key: const ValueKey('meditation_breathing'),
-                    children: [
-                      const SizedBox(height: 16),
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: BreathingAnimation(
-                            isActive: _currentState ==
-                                    MeditationState.speaking ||
-                                _currentState ==
-                                    MeditationState
-                                        .generatingContent, // Keep animating during generation
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  )
-                : const SizedBox.shrink(key: ValueKey('meditation_empty')),
           ),
 
           if (_currentState == MeditationState.speaking ||
