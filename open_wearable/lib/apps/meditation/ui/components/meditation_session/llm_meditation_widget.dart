@@ -711,7 +711,16 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       String emoji, String label, MoodRating mood, double stressReduction) {
     return InkWell(
       onTap: () async {
-        // Save mood entry
+        if (widget.demoMode != DemoConfig.modeNone) {
+          // Demo mode: dismiss dialog, stop sensors, return to demo selection
+          Navigator.pop(context);
+          if (mounted) {
+            widget.onReset?.call();
+          }
+          return;
+        }
+
+        // Normal mode: save mood and offer analytics
         final entry = MoodEntry(
           timestamp: DateTime.now(),
           mood: mood,

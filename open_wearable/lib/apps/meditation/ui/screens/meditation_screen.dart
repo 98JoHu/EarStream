@@ -671,164 +671,17 @@ class _MeditationViewState extends State<MeditationView> {
         break;
 
       case DemoPhase.calibration:
-        phaseTitle = 'Step 3 of 5 · Calibration';
-        phaseInstructions = 'Filters are adjusting to your biosignal. Please remain still and relaxed.';
-        phaseIcon = Icons.settings_outlined;
-
-        if (_demoPhaseStartTime != null) {
-          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
-          final remaining = DemoConfig.calibrationDuration - elapsed;
-          final progress = elapsed.inMilliseconds /
-              DemoConfig.calibrationDuration.inMilliseconds;
-          statusWidget = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 12),
-              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
-              const SizedBox(height: 8),
-              Text(
-                '${remaining.inSeconds.clamp(0, 999)} seconds remaining — auto-continues',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          );
-        }
-        // No action button — auto-progresses when timer fires
-        break;
-
       case DemoPhase.baselineMeasurement:
-        phaseTitle = 'Step 4 of 5 · Baseline Measurement';
-        phaseInstructions = 'Establishing your resting heart rate and HRV as a reference point. Continue breathing normally.';
-        phaseIcon = Icons.straighten_outlined;
-
-        if (_demoPhaseStartTime != null) {
-          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
-          final remaining = DemoConfig.baselineDuration - elapsed;
-          final progress = elapsed.inMilliseconds /
-              DemoConfig.baselineDuration.inMilliseconds;
-          statusWidget = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 12),
-              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
-              const SizedBox(height: 8),
-              Text(
-                '${remaining.inSeconds.clamp(0, 999)} seconds remaining — auto-continues',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          );
-        }
-        // No action button — auto-progresses when timer fires
-        break;
-      
       case DemoPhase.monitoring:
-        phaseTitle = 'Step 4: Stress Monitoring';
-        phaseInstructions = 'Monitoring for stress signals. Stand up, walk around, or think of something stressful to trigger the meditation.';
-        phaseIcon = Icons.monitor_heart_outlined;
-        
-        if (_demoBaselineHr != null && _demoBaselineRmssd != null) {
-          final currentDeviation = _currentHr > 0 && _demoBaselineHr! > 0
-              ? (((_currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100).abs()
-              : 0.0;
-          
-          statusWidget = Card(
-            color: Colors.blue.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Current vs Baseline',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        'Threshold: ${DemoConfig.stressThresholdPercent}%',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Column(
-                        children: [
-                          Text('Baseline HR', style: theme.textTheme.bodySmall),
-                          Text(
-                            '${_demoBaselineHr!.toStringAsFixed(0)}',
-                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                      Icon(Icons.arrow_forward, color: colorScheme.primary),
-                      Column(
-                        children: [
-                          Text('Current HR', style: theme.textTheme.bodySmall),
-                          Text(
-                            _currentHr > 0 ? '${_currentHr.toStringAsFixed(0)}' : '---',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: currentDeviation >= DemoConfig.stressThresholdPercent
-                                  ? Colors.red.shade700
-                                  : Colors.green.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  if (_currentHr > 0) ...[
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: (currentDeviation / (DemoConfig.stressThresholdPercent * 2)).clamp(0.0, 1.0),
-                      backgroundColor: Colors.green.shade100,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        currentDeviation >= DemoConfig.stressThresholdPercent
-                            ? Colors.red.shade600
-                            : Colors.green.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Deviation: ${currentDeviation.toStringAsFixed(1)}%',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        }
-        
-        // Manual trigger button
-        actionButton = SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () => _manuallyTriggerMeditation(),
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Manually Start Meditation'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        );
-        break;
-      
       case DemoPhase.meditationSession:
+        // For biosignal-adaptive active phases: show compact inline status only
+        if (_demoSubMode == DemoConfig.modeBiosignalAdaptive) {
+          return _buildDemoStatusChip();
+        }
+        // Personalized-only keeps the full card for meditationSession
         phaseTitle = 'Meditation In Progress';
-        phaseInstructions = _demoSubMode == DemoConfig.modePersonalizedOnly
-            ? 'Enjoying personalized meditation session (3 segments)...'
-            : 'Biosignal-adaptive meditation in progress (max 4 segments)...';
+        phaseInstructions = 'Enjoying personalized meditation session (3 segments)...';
         phaseIcon = Icons.self_improvement_outlined;
-        
-        // No manual action needed during meditation
         break;
       
       case DemoPhase.analytics:
@@ -1049,6 +902,96 @@ class _MeditationViewState extends State<MeditationView> {
             if (progressWidget != null) progressWidget,
           ],
         ),
+      ),
+    );
+  }
+
+  /// Compact status pill shown in biosignal-adaptive demo during active phases
+  /// (calibration, baseline, monitoring, meditation).
+  Widget _buildDemoStatusChip() {
+    final theme = Theme.of(context);
+    IconData icon;
+    String label;
+    Color color;
+    Widget? trailing;
+
+    switch (_demoPhase) {
+      case DemoPhase.calibration:
+        icon = Icons.settings_outlined;
+        label = 'Calibration';
+        color = Colors.orange;
+        if (_demoPhaseStartTime != null) {
+          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
+          final progress = (elapsed.inMilliseconds /
+                  DemoConfig.calibrationDuration.inMilliseconds)
+              .clamp(0.0, 1.0);
+          trailing = SizedBox(
+            width: 120,
+            child: LinearProgressIndicator(
+              value: progress,
+              color: color,
+              backgroundColor: color.withOpacity(0.2),
+            ),
+          );
+        }
+        break;
+      case DemoPhase.baselineMeasurement:
+        icon = Icons.straighten_outlined;
+        label = 'Baseline Measurement';
+        color = Colors.blue;
+        if (_demoPhaseStartTime != null) {
+          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
+          final progress = (elapsed.inMilliseconds /
+                  DemoConfig.baselineDuration.inMilliseconds)
+              .clamp(0.0, 1.0);
+          trailing = SizedBox(
+            width: 120,
+            child: LinearProgressIndicator(
+              value: progress,
+              color: color,
+              backgroundColor: color.withOpacity(0.2),
+            ),
+          );
+        }
+        break;
+      case DemoPhase.monitoring:
+        icon = Icons.monitor_heart_outlined;
+        label = 'Monitoring';
+        color = Colors.green;
+        break;
+      case DemoPhase.meditationSession:
+        icon = Icons.self_improvement_outlined;
+        label = 'Meditation';
+        color = Colors.purple;
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            trailing,
+          ],
+        ],
       ),
     );
   }
@@ -2035,6 +1978,14 @@ class _MeditationViewState extends State<MeditationView> {
     });
   }
 
+  /// Called after the demo mood emoji is tapped.
+  /// Stops sensor streams, deactivates EarStream, and returns to demo selection.
+  void _onDemoSessionEnd() {
+    _demoPhaseTimer?.cancel();
+    _deactivateEarStream();
+    _returnToDemoSelection();
+  }
+
   void _resetDemoMode() {
     setState(() {
       _demoPhase = DemoPhase.none;
@@ -2369,9 +2320,7 @@ class _MeditationViewState extends State<MeditationView> {
                                   _ensureMeditationCanStart,
                               stressDetectionEnabled:
                                   _demoSubMode == DemoConfig.modeBiosignalAdaptive,
-                              onReset: () {
-                                unawaited(_resetSession());
-                              },
+                              onReset: _onDemoSessionEnd,
                               onStressLevelChanged: (level) {
                                 if (mounted) {
                                   setState(() {
@@ -2438,6 +2387,7 @@ class _MeditationViewState extends State<MeditationView> {
                             const SizedBox(height: 8),
                           ],
 
+                          if (!_isDemoModeActive)
                           Row(
                             children: [
                               Expanded(
