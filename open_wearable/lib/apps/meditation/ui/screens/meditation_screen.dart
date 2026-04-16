@@ -670,14 +670,6 @@ class _MeditationViewState extends State<MeditationView> {
         );
         break;
 
-      case DemoPhase.sealCheck:
-        phaseTitle = 'Step 2 of 5 · Seal Check';
-        phaseInstructions =
-            'Navigating to seal check… Use the button on the next screen to play a tone and verify the earable fit.';
-        phaseIcon = Icons.verified_outlined;
-        // No action button — navigation happens automatically via _proceedToSealCheck
-        break;
-      
       case DemoPhase.calibration:
         phaseTitle = 'Step 3 of 5 · Calibration';
         phaseInstructions = 'Filters are adjusting to your biosignal. Please remain still and relaxed.';
@@ -1901,13 +1893,14 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   Future<void> _proceedToSealCheck() async {
-    setState(() {
-      _demoPhase = DemoPhase.sealCheck;
-    });
-    // Navigate to actual seal check screen (shows tone + scores)
-    await _openSealCheckPage();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _SealCheckPage(wearable: widget.wearable),
+      ),
+    );
     if (!mounted) return;
-    // Auto-start calibration after returning (whether seal check succeeded or not)
+    // Start calibration after returning from the seal check page
     _proceedToCalibration();
   }
 
@@ -1966,11 +1959,12 @@ class _MeditationViewState extends State<MeditationView> {
       _checkDemoStressLevel();
     });
     
-    // Also set max monitoring duration timeout
+    // Also trigger automatically after maxMonitoringDuration so every attendee
+    // experiences the full demo even when stress threshold is not met.
     Timer(DemoConfig.maxMonitoringDuration, () {
       if (mounted && _demoPhase == DemoPhase.monitoring) {
-        print('Demo: Max monitoring duration reached, manual trigger still available');
-        // Don't force start, keep waiting for manual or auto trigger
+        print('Demo: Max monitoring duration reached — auto-triggering meditation');
+        _startBiosignalAdaptiveMeditation();
       }
     });
   }
@@ -1988,8 +1982,8 @@ class _MeditationViewState extends State<MeditationView> {
     final hrDeviation = ((currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100;
     final rmssdDeviation = ((_demoBaselineRmssd! - currentRmssd) / _demoBaselineRmssd!) * 100;
     
-    // Check if either exceeds threshold (HR up or RMSSD down)
-    final isStressed = hrDeviation >= DemoConfig.stressThresholdPercent || 
+    // Both HR elevation AND HRV decrease must exceed threshold to trigger meditation
+    final isStressed = hrDeviation >= DemoConfig.stressThresholdPercent &&
                        rmssdDeviation >= DemoConfig.stressThresholdPercent;
     
     if (isStressed) {
@@ -2788,6 +2782,179 @@ class _DemoPreferencesPageState extends State<_DemoPreferencesPage> {
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+// ================================================================================
+// SEAL CHECK PAGE (Biosignal-Adaptive demo — Step 2 of 5)
+// ================================================================================
+
+class _SealCheckPage extends StatefulWidget {
+  final Wearable? wearable;
+  const _SealCheckPage({required this.wearable});
+
+  @override
+  State<_SealCheckPage> createState() => _SealCheckPageState();
+}
+
+class _SealCheckPageState extends State<_SealCheckPage> {
+  bool _sealCheckRan = false;
+
+  Future<void> _runSealCheck() async {
+    if (widget.wearable == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please connect an OpenEarable device first.'),
+        ),
+      );
+      return;
+    }
+
+    if (!widget.wearable!.hasCapability<AudioResponseManager>()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This device does not support seal check (AudioResponseManager not available).',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final audioManager =
+        widget.wearable!.requireCapability<AudioResponseManager>();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AudioResponseMeasurementView(
+          manager: audioManager,
+          title: 'OpenEarable 2.0 Seal Check',
+          parameters: const {},
+        ),
+      ),
+    );
+    if (mounted) {
+      setState(() => _sealCheckRan = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      appBar: EarStreamStyle.appBar(context, title: 'Step 2 of 5 · Seal Check'),
+      body: ListView(
+        padding: EarStreamStyle.pagePadding(context),
+        children: [
+          // Why seal check
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.verified_outlined,
+                          color: colorScheme.primary, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Why run a seal check?',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'A good acoustic seal is essential for accurate heart rate and HRV measurements. '
+                    'The seal check plays a brief tone through the earable and analyses the acoustic '
+                    'response to confirm that the earable sits correctly in your ear.',
+                    style: TextStyle(color: Colors.grey[700], height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Run seal check action
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Run the seal check',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Put on the OpenEarable, then tap the button below. '
+                    'A short tone will be played — stay still during the measurement. '
+                    'You can run the check as many times as needed.',
+                    style: TextStyle(color: Colors.grey[700], height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _runSealCheck,
+                      icon: const Icon(Icons.hearing_outlined),
+                      label: const Text('Run Seal Check'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  if (_sealCheckRan) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle,
+                            color: Colors.green.shade600, size: 20),
+                        const SizedBox(width: 8),
+                        const Text('Seal check completed successfully.'),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Primary CTA
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.sensors_outlined),
+              label: const Text('Start EarStream →'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Skip seal check'),
             ),
           ),
           const SizedBox(height: 16),

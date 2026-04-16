@@ -937,9 +937,12 @@ class ImprovedMeditationController {
   Future<void> _playBackgroundAmbience() async {
     String? audioFile;
     try {
-      final environment = userAccount.meditationEnvironment.toLowerCase();
+      final environment = (demoPreferences != null
+              ? demoPreferences!.meditationEnvironment
+              : userAccount.meditationEnvironment)
+          .toLowerCase();
       _logger.i('Starting background ambience for environment: "$environment"');
-      print('[EARSTREAM AUDIO] _playBackgroundAmbience() — environment="$environment"');
+      print('[EARSTREAM AUDIO] _playBackgroundAmbience() — environment="$environment" (source: ${demoPreferences != null ? "demoPreferences" : "userAccount"})');
 
       // Map environment preference to audio file
       if (environment.contains('ocean') || environment.contains('beach')) {
@@ -972,11 +975,11 @@ class ImprovedMeditationController {
               },
             ),
             android: AudioContextAndroid(
-              isSpeakerphoneOn: true,
+              isSpeakerphoneOn: false,
               stayAwake: true,
               contentType: AndroidContentType.music,
               usageType: AndroidUsageType.media,
-              audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+              audioFocus: AndroidAudioFocus.gain,
             ),
           );
 

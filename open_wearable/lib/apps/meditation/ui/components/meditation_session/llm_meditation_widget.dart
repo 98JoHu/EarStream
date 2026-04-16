@@ -609,12 +609,16 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (context) {
+        final isDemo = widget.demoMode != DemoConfig.modeNone;
+        return AlertDialog(
         title: Row(
           children: [
             const Icon(Icons.celebration, color: Colors.green),
             const SizedBox(width: 8),
-            Text('Great, ${_userAccount?.name ?? ""}!'),
+            Text(isDemo
+                ? 'Great!'
+                : 'Great, ${_userAccount?.name ?? ""}!'),
           ],
         ),
         content: Column(
@@ -622,18 +626,20 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'You\'ve achieved ${stressReduction.toStringAsFixed(0)}% stress reduction in ${_sessionElapsed.inMinutes} minutes.',
+              'Your body has calmed down.',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
             const SizedBox(height: 16),
-            const Text(
-              '💭 Stress monitoring is paused for 2 minutes to let you enjoy this calm state.',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
+            if (!isDemo) ...[
+              const Text(
+                '💭 Stress monitoring is paused for 2 minutes to let you enjoy this calm state.',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
+            ],
             Row(
               children: [
                 Expanded(
@@ -696,7 +702,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
             ),
           ],
         ),
-      ),
+      );
+      },
     );
   }
 

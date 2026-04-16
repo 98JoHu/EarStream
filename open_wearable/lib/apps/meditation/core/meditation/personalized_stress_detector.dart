@@ -93,7 +93,8 @@ class PersonalizedStressDetector {
   }
 
   /// Check if user is currently stressed
-  /// Returns true if HR is elevated OR HRV is low
+  /// Returns true only when BOTH HR is elevated AND HRV is low.
+  /// Requiring both signals prevents false positives from a single-metric spike.
   /// Activity-aware: accounts for exercise-induced HR elevation
   bool isStressed(double currentHr, double currentHrv,
       {ActivityLevel? activityLevel}) {
@@ -109,7 +110,8 @@ class PersonalizedStressDetector {
     final hrStressed = currentHr > thresholds['stressHrThreshold']!;
     final hrvStressed = currentHrv < thresholds['stressHrvThreshold']!;
 
-    return hrStressed || hrvStressed;
+    // Both signals must confirm stress to avoid single-metric false positives
+    return hrStressed && hrvStressed;
   }
 
   /// Check if user is relaxed
