@@ -46,6 +46,7 @@ class _MeditationViewState extends State<MeditationView> {
       GlobalKey<LlmMeditationWidgetState>();
   MeditationAppMode _selectedMode = MeditationAppMode.normal;
   bool _earStreamActivated = false;
+  bool _isMeditationSessionActive = false; // True when a meditation is actively running
   Timer? _timerModeTimer;
   DateTime? _timerModeScheduledTime;
 
@@ -216,6 +217,23 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
+  /// Immediately starts a timed meditation session, bypassing stress detection.
+  Future<void> _startTimerNow() async {
+    final meditationState = _meditationWidgetKey.currentState;
+    if (meditationState == null) {
+      _showErrorDialog('Meditation widget is not ready. Please wait a moment.');
+      return;
+    }
+    if (!meditationState.isIdle) {
+      _showSuccessSnackbar('A session is already running.');
+      return;
+    }
+    final started = await meditationState.startMeditationNowFromExternal();
+    if (started && mounted) {
+      _showSuccessSnackbar('Timed meditation started.');
+    }
+  }
+
   Future<DateTime?> _pickAndScheduleTimerModeTime() async {
     final time = await showTimePicker(
       context: context,
@@ -247,13 +265,6 @@ class _MeditationViewState extends State<MeditationView> {
 
   DateTime? _scheduleTimerModeAt(DateTime scheduledTime,
       {required String description}) {
-    if (!_earStreamActivated) {
-      _showErrorDialog(
-        'Click Start EarStreAM on the main page before scheduling a timed session.',
-      );
-      return null;
-    }
-
     final now = DateTime.now();
     final delay = scheduledTime.difference(now);
     if (delay <= Duration.zero) {
@@ -1729,19 +1740,8 @@ class _MeditationViewState extends State<MeditationView> {
                             );
                           },
                           onStartNow: () async {
-                            // Start meditation immediately
-                            _scheduleTimerModeAt(
-                              DateTime.now(),
-                              description: 'now',
-                            );
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Meditation started!'),
-                                ),
-                              );
-                            }
+                            Navigator.of(context).pop();
+                            await _startTimerNow();
                           },
                         ),
                       if (localSelectedMode == MeditationAppMode.test)
@@ -2302,8 +2302,8 @@ class _MeditationViewState extends State<MeditationView> {
                                   ? _getActivityDescription(
                                       (_sensor as EarableHrSensor).activityLevel)
                                   : null,
-                              showMonitoring: (_selectedMode == MeditationAppMode.normal || 
-                                  _isDemoModeActive) && _earStreamActivated,
+                              showMonitoring: _selectedMode == MeditationAppMode.normal && _earStreamActivated,
+                              isMeditationSessionActive: _isMeditationSessionActive,
                             ),
                           if (!_isDemoModeActive || 
                               (_demoPhase != DemoPhase.none && _demoPhase != DemoPhase.modeSelection))
@@ -2343,7 +2343,7 @@ class _MeditationViewState extends State<MeditationView> {
                           if (_sensor != null &&
                               !_isDemoModeActive &&
                               _selectedMode != MeditationAppMode.test &&
-                              _earStreamActivated)
+                              (_earStreamActivated || _selectedMode == MeditationAppMode.timer))
                             LlmMeditationWidget(
                               key: _meditationWidgetKey,
                               sensor: _sensor!,
@@ -2361,6 +2361,13 @@ class _MeditationViewState extends State<MeditationView> {
                                   });
                                 }
                               },
+                              onMeditationSessionActive: (active) {
+                                if (mounted) {
+                                  setState(() {
+                                    _isMeditationSessionActive = active;
+                                  });
+                                }
+                              },
                               demoMode: DemoConfig.modeNone,
                               demoPreferences: null,
                               demoBaselineHr: null,
@@ -2370,7 +2377,39 @@ class _MeditationViewState extends State<MeditationView> {
 
                           const SizedBox(height: 16),
 
-                          if (!_isDemoModeActive && _selectedMode != MeditationAppMode.test) ...[
+                          // Timer mode card — shown inline on main screen when Timed mode is selected
+                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer)
+                            _buildTimerModeCard(
+                              scheduledTime: _timerModeScheduledTime,
+                              onScheduleAfter: (delay) async {
+                                final scheduled = await _scheduleTimerModeAfter(delay);
+                                if (scheduled != null && mounted) {
+                                  setState(() {}); // Refresh to show scheduled time
+                                  _showSuccessSnackbar(
+                                    'Timer meditation scheduled in ${delay.inMinutes} minutes.',
+                                  );
+                                }
+                              },
+                              onPickTime: () async {
+                                final scheduled = await _pickAndScheduleTimerModeTime();
+                                if (scheduled != null && mounted) {
+                                  setState(() {});
+                                  _showSuccessSnackbar(
+                                    'Timer meditation scheduled for ${_formatScheduledTime(scheduled)}.',
+                                  );
+                                }
+                              },
+                              onCancelSchedule: () {
+                                _clearTimerModeSchedule();
+                                setState(() {});
+                                _showSuccessSnackbar('Scheduled timer cleared.');
+                              },
+                              onStartNow: () => unawaited(_startTimerNow()),
+                            ),
+                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer)
+                            const SizedBox(height: 8),
+
+                          if (!_isDemoModeActive && _selectedMode != MeditationAppMode.test && _selectedMode != MeditationAppMode.timer) ...[
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(

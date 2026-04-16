@@ -14,6 +14,7 @@ class HrHrvDisplayNew extends StatelessWidget {
   final String? activityLevel; // Activity level from accelerometer/gyroscope
   final String? activityDescription; // Human-readable activity description
   final bool showMonitoring; // Show monitoring indicator
+  final bool isMeditationSessionActive; // True when a meditation session is running
 
   const HrHrvDisplayNew({
     super.key,
@@ -27,6 +28,7 @@ class HrHrvDisplayNew extends StatelessWidget {
     this.activityLevel,
     this.activityDescription,
     this.showMonitoring = false,
+    this.isMeditationSessionActive = false,
   });
 
   @override
@@ -106,36 +108,7 @@ class HrHrvDisplayNew extends StatelessWidget {
           ),
           if (showMonitoring) ...[
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF4ECDC4).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xFF4ECDC4).withValues(alpha: 0.3),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.monitor_heart,
-                    size: 16,
-                    color: const Color(0xFF4ECDC4),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Monitoring',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF4ECDC4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildMonitoringChip(),
           ],
           // HR History Chart below the metrics - only show after 30 seconds
           // and exclude data from the loading phase (first 30 seconds)
@@ -212,6 +185,78 @@ class HrHrvDisplayNew extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonitoringChip() {
+    final dur = measurementDurationSeconds;
+    const calibrationEnd = 30;
+    const baselineEnd = 330; // 30s calibration + 5 min baseline
+
+    IconData icon;
+    String label;
+    Color color;
+    double? progress;
+
+    if (isMeditationSessionActive) {
+      icon = Icons.self_improvement_outlined;
+      label = 'Monitoring \u00b7 Meditation';
+      color = Colors.purple;
+    } else if (dur == null || dur < calibrationEnd) {
+      icon = Icons.settings_outlined;
+      label = 'Calibration (30s)';
+      color = Colors.orange;
+      progress = dur == null ? 0.0 : (dur / calibrationEnd).clamp(0.0, 1.0);
+    } else if (dur < baselineEnd) {
+      icon = Icons.straighten_outlined;
+      label = 'Monitoring \u00b7 Baseline Adjustment';
+      color = Colors.blue;
+      progress = ((dur - calibrationEnd) / (baselineEnd - calibrationEnd)).clamp(0.0, 1.0);
+    } else {
+      icon = Icons.monitor_heart;
+      label = 'Monitoring';
+      color = const Color(0xFF4ECDC4);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 4),
+            SizedBox(
+              width: 180,
+              child: LinearProgressIndicator(
+                value: progress,
+                color: color,
+                backgroundColor: color.withValues(alpha: 0.2),
+                minHeight: 3,
               ),
             ),
           ],

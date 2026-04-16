@@ -27,6 +27,7 @@ class LlmMeditationWidget extends StatefulWidget {
   final double? demoBaselineHr;
   final double? demoBaselineRmssd;
   final VoidCallback? onDemoComplete;
+  final ValueChanged<bool>? onMeditationSessionActive;
 
   const LlmMeditationWidget({
     super.key,
@@ -40,6 +41,7 @@ class LlmMeditationWidget extends StatefulWidget {
     this.demoBaselineHr,
     this.demoBaselineRmssd,
     this.onDemoComplete,
+    this.onMeditationSessionActive,
   });
 
   @override
@@ -146,11 +148,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     _llmService!.setUserAccount(_userAccount!);
 
     _meetingBlocker?.dispose();
-    _meetingBlocker = OutlookMeetingBlocker(
-      accessToken: _userAccount!.microsoftGraphAccessToken,
-    );
-    await _meetingBlocker!.refreshNow();
-    _meetingBlocker!.startMonitoring();
+    if (widget.demoMode == DemoConfig.modeNone) {
+      _meetingBlocker = OutlookMeetingBlocker(
+        accessToken: _userAccount!.microsoftGraphAccessToken,
+      );
+      await _meetingBlocker!.refreshNow();
+      _meetingBlocker!.startMonitoring();
+    }
 
     // Create controller
     print(
@@ -165,6 +169,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           setState(() {
             _currentState = state;
           });
+          widget.onMeditationSessionActive?.call(state != MeditationState.idle);
         }
       },
       onStatusMessage: (message) {
@@ -297,11 +302,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       _llmService!.setUserAccount(_userAccount!);
 
       _meetingBlocker?.dispose();
-      _meetingBlocker = OutlookMeetingBlocker(
-        accessToken: _userAccount!.microsoftGraphAccessToken,
-      );
-      await _meetingBlocker!.refreshNow();
-      _meetingBlocker!.startMonitoring();
+      if (widget.demoMode == DemoConfig.modeNone) {
+        _meetingBlocker = OutlookMeetingBlocker(
+          accessToken: _userAccount!.microsoftGraphAccessToken,
+        );
+        await _meetingBlocker!.refreshNow();
+        _meetingBlocker!.startMonitoring();
+      }
 
       // Create fresh controller
       _controller = ImprovedMeditationController(
@@ -314,6 +321,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
             setState(() {
               _currentState = state;
             });
+            widget.onMeditationSessionActive?.call(state != MeditationState.idle);
           }
         },
         onStatusMessage: (message) {
@@ -414,11 +422,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     _llmService = ImprovedMeditationLLMService();
     _llmService!.setUserAccount(_userAccount!);
 
-    _meetingBlocker = OutlookMeetingBlocker(
-      accessToken: _userAccount!.microsoftGraphAccessToken,
-    );
-    await _meetingBlocker!.refreshNow();
-    _meetingBlocker!.startMonitoring();
+    if (widget.demoMode == DemoConfig.modeNone) {
+      _meetingBlocker = OutlookMeetingBlocker(
+        accessToken: _userAccount!.microsoftGraphAccessToken,
+      );
+      await _meetingBlocker!.refreshNow();
+      _meetingBlocker!.startMonitoring();
+    }
 
     // Create new controller with updated services
     _controller = ImprovedMeditationController(
@@ -431,6 +441,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           setState(() {
             _currentState = state;
           });
+          widget.onMeditationSessionActive?.call(state != MeditationState.idle);
         }
       },
       onStatusMessage: (message) {
@@ -589,22 +600,19 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       }
     });
 
-    // Calculate stress reduction more conservatively
-    // Use the max of HR reduction and HRV increase, capped at 100%
-    double hrChange = _baselineHr > 0
-        ? ((_baselineHr - _currentHr) / _baselineHr * 100)
+    // Calculate stress reduction as average of HR reduction and HRV improvement.
+    // HR reduction: how much HR dropped relative to baseline (BPM → %).
+    // HRV improvement: how much RMSSD increased relative to baseline (ms → %).
+    // Each component is clamped to [0, 100] before averaging, so the result
+    // is also in [0, 100] with no further cap needed.
+    final hrChange = _baselineHr > 0
+        ? ((_baselineHr - _currentHr) / _baselineHr * 100).clamp(0.0, 100.0)
         : 0.0;
-    double hrvChange = _baselineHrv > 0
-        ? ((_currentHrv - _baselineHrv) / _baselineHrv * 100)
+    final hrvChange = _baselineHrv > 0
+        ? ((_currentHrv - _baselineHrv) / _baselineHrv * 100).clamp(0.0, 100.0)
         : 0.0;
 
-    // Sometimes baseline is captured when already relaxed, leading to 0% or negative.
-    // Ensure we don't show negative improvement for "Stress Reduction".
-    if (hrChange < 0) hrChange = 0;
-    if (hrvChange < 0) hrvChange = 0;
-
-    double stressReduction = (hrChange + hrvChange) / 2;
-    if (stressReduction > 100) stressReduction = 99.0; // Cap at 99% logic
+    final double stressReduction = (hrChange + hrvChange) / 2;
 
     showDialog(
       context: context,
