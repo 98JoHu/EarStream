@@ -337,8 +337,7 @@ class EarableHrSensor implements HrSensorInterface {
       _logger.d(
           'HRV calculated from ${cleanedRR.length} clean RR intervals in 5-min window '
           '($artifactsRemoved artifacts removed, ${measurementDuration.inSeconds}s total): '
-          'RMSSD=${hrvMetrics['HRV_RMSSD']?.toStringAsFixed(1)}ms, '
-          'Mean=${hrvMetrics['HRV_MEAN']?.toStringAsFixed(1)}ms');
+          'RMSSD=${hrvMetrics['HRV_RMSSD']?.toStringAsFixed(1)}ms');
 
       // DEBUG: Print buffer state to verify time-based windowing
       final firstRR = cleanedRR.take(5).map((v) => v.toStringAsFixed(1)).join(", ");

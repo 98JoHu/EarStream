@@ -3,18 +3,42 @@
 import '../../models/user_account.dart';
 import '../biosignals/activity_detector.dart';
 
-/// Personalized stress detector that adapts to user demographics
+/// Personalized stress detector that adapts to user demographics.
+///
+/// Thresholds are always derived as a relative percentage of the individualized
+/// baseline, ensuring consistent semantics regardless of how the baseline was
+/// established (demographic estimate or measured value):
+///
+///   stressHrThreshold  = baseline_HR  * (1 + stressThreshold)  e.g. +10%
+///   stressHrvThreshold = baseline_HRV * (1 - stressThreshold)  e.g. -10%
+///   relaxHrThreshold   = baseline_HR  (HR at or below resting = relaxed)
+///   relaxHrvThreshold  = baseline_HRV (HRV at or above resting = relaxed)
 class PersonalizedStressDetector {
   final UserAccount userAccount;
   late Map<String, double> thresholds;
 
   PersonalizedStressDetector({required this.userAccount}) {
-    thresholds = userAccount.getPersonalizedThresholds();
+    updateThresholds();
   }
 
-  /// Update thresholds when user account changes
+  /// Recompute thresholds from the current baseline and stress threshold.
+  /// Call whenever the user account or its stressThreshold field changes.
   void updateThresholds() {
-    thresholds = userAccount.getPersonalizedThresholds();
+    final baselines = getResearchBaselines();
+    final baselineHr = baselines['baselineHr']!;
+    final baselineHrv = baselines['baselineHrv']!;
+    final t = userAccount.stressThreshold; // e.g. 0.10 for 10%
+
+    thresholds = {
+      'baselineHr': baselineHr,
+      'baselineHrv': baselineHrv,
+      // Stress: HR elevated by t%, HRV reduced by t%
+      'stressHrThreshold': baselineHr * (1.0 + t),
+      'stressHrvThreshold': baselineHrv * (1.0 - t),
+      // Relaxed: signals have returned to (or better than) baseline
+      'relaxHrThreshold': baselineHr,
+      'relaxHrvThreshold': baselineHrv,
+    };
   }
 
   /// Get research-based baseline values (resting state) from demographics

@@ -93,14 +93,6 @@ class BiosignalConfig {
   @Deprecated('Use rmssdMinimumMeasurementTime instead')
   static const int minRrIntervalsForInitialRmssd = 10; // beats
   
-  /// Maximum number of RR intervals for long-term buffer (SDNN)  
-  /// For 5-minute SDNN calculation (clinical standard)
-  static const int maxLongTermRrIntervals = 400; // beats (~5 min at 80 BPM)
-  
-  /// Minimum RR intervals for SDNN calculation
-  /// Research standard: 30+ intervals from ≥1 minute recording
-  static const int minRrIntervalsForSdnn = 30; // beats
-  
   // ============================================================================
   // ARTIFACT FILTERING
   // ============================================================================
@@ -145,22 +137,6 @@ class BiosignalConfig {
   // STRESS DETECTION THRESHOLDS
   // ============================================================================
   
-  /// HR threshold multiplier for stress detection
-  /// Stress detected when: current HR > baseline × 1.25 (25% elevation)
-  static const double stressHrMultiplier = 1.25;
-  
-  /// HRV threshold multiplier for stress detection  
-  /// Stress detected when: current HRV < baseline × 0.60 (40% reduction)
-  static const double stressHrvMultiplier = 0.60;
-  
-  /// HR threshold multiplier for relaxed state
-  /// Relaxed when: current HR < baseline × 1.04 (within 4% of baseline)
-  static const double relaxedHrMultiplier = 1.04;
-  
-  /// HRV threshold multiplier for relaxed state
-  /// Relaxed when: current HRV > baseline × 1.20 (20% increase)
-  static const double relaxedHrvMultiplier = 1.20;
-  
   /// Stress monitoring polling interval
   /// How often to check stress state during idle monitoring
   static const Duration stressMonitoringInterval = Duration(seconds: 3);
@@ -176,22 +152,6 @@ class BiosignalConfig {
   /// Maximum meditation iterations (safety limit)
   /// Ensures session eventually ends even if relaxation not achieved
   static const int maxMeditationIterations = 10;
-  
-  /// HRV improvement thresholds for termination scenarios
-  /// Percentage improvement from baseline required to end session
-  static const double hrvImprovementExcellent = 0.30; // 30%
-  static const double hrvImprovementStrong = 0.25; // 25%  
-  static const double hrvImprovementGood = 0.20; // 20%
-  static const double hrvImprovementMild = 0.10; // 10%
-  
-  /// HR improvement threshold for combined termination
-  /// Used in scenario 4: both HR and HRV must improve
-  static const double hrImprovementThreshold = 0.10; // 10%
-  
-  /// Stress level thresholds for termination (0-100 scale)
-  static const double stressLevelLow = 40.0; // <40% stress
-  static const double stressLevelVeryLow = 30.0; // <30% stress
-  static const double stressLevelMinimal = 20.0; // <20% stress
   
   /// Sensor timeout duration
   /// Stop session if no sensor data received for this long
@@ -266,10 +226,7 @@ class BiosignalConfig {
     Band-pass Filter: $bandPassLowCut - $bandPassHighCut Hz
     RMSSD Window: ${rmssdCalculationWindow.inMinutes} min (${maxShortTermRrIntervals} beats max)
     RMSSD Stable After: ${rmssdMinimumMeasurementTime.inSeconds} sec
-    SDNN Window: ${maxLongTermRrIntervals} beats
     Baseline Calibration: ${baselineCalibrationDuration.inSeconds} sec
-    Stress HR Threshold: baseline × $stressHrMultiplier
-    Stress HRV Threshold: baseline × $stressHrvMultiplier
     Activity Window: $activityWindowSize samples (~${activityWindowSize / 10} sec at 10 Hz)
     =========================================
     ''';

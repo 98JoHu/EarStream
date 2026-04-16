@@ -75,8 +75,6 @@ class MeditationConfig {
 
   // Meditation Settings
   static const int targetWordCount = 280;
-  static const double stressThresholdPercentage =
-      0.15; // 15% increase for stress detection
 
   // Audio Settings
   static const String backgroundMusicPath =
