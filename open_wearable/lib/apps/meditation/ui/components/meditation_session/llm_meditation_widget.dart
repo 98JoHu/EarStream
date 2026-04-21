@@ -75,7 +75,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   bool get isIdle => _currentState == MeditationState.idle;
   bool get _hasConfiguredGeminiKey {
     final accountKey = _userAccount?.geminiApiKey.trim() ?? '';
-    if (accountKey.startsWith('AIza')) {
+    if (accountKey.length > 20 &&
+        !accountKey.contains('YOUR_') &&
+        !accountKey.contains('your_')) {
       return true;
     }
     return MeditationConfig.hasValidGeminiKey;
@@ -1012,8 +1014,10 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
             ),
 
           // API Warning Banner (if APIs not configured)
+          // Hidden in timer mode — the parent screen shows it below the timer card.
           if (_currentState == MeditationState.idle &&
-              !_hasConfiguredGeminiKey)
+              !_hasConfiguredGeminiKey &&
+              widget.stressDetectionEnabled)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),

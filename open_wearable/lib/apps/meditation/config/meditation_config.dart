@@ -66,7 +66,7 @@ class MeditationConfig {
 
   // Debug helper to check if APIs are configured
   static bool get hasValidGeminiKey =>
-      geminiApiKey != 'NONE' && geminiApiKey.startsWith('AIza');
+      geminiApiKey != 'NONE' && geminiApiKey.length > 20;
   static bool get hasValidTtsKey =>
       elevenLabsApiKey != 'NONE' && elevenLabsApiKey.length > 20;
   static bool get hasValidMicrosoftGraphToken =>
