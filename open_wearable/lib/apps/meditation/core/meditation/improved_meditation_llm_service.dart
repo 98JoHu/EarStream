@@ -191,6 +191,25 @@ Remember: You're creating a calming, safe space for someone who may be stressed.
       _logger.i('No valid Gemini API key — using fallback welcome text');
       return "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
     }
+    // Demo mode: no personal context or physiological data in prompt
+    if (_demoMode != DemoConfig.modeNone) {
+      try {
+        final demoStyle = _demoPreferences?.meditationStyle ?? 'mindfulness';
+        final demoEnv = _demoPreferences?.meditationEnvironment ?? 'peaceful nature';
+        final demoWelcomePrompt =
+            'Create a warm, welcoming introduction for a $demoStyle meditation '
+            'in a $demoEnv setting. Under 60 words. Warm and inviting. '
+            'No personal names, no health metrics. Plain text for text-to-speech.';
+        final response = await _model
+            .generateContent([Content.text(demoWelcomePrompt)])
+            .timeout(const Duration(seconds: 10));
+        return response.text ??
+            "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
+      } catch (e) {
+        _logger.e('Error generating demo welcome: $e');
+        return "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
+      }
+    }
     try {
       final userName = _userAccount?.name ?? '';
       final nameGreeting = userName.isNotEmpty ? '$userName, ' : '';
@@ -303,6 +322,69 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
     required bool isStressed,
     required double stressLevel,
   }) {
+    // Demo mode: build prompt with NO personal or physiological data
+    if (_demoMode != DemoConfig.modeNone && _demoPreferences != null) {
+      final demoEnv = _demoPreferences!.meditationEnvironment;
+      final demoType = _demoPreferences!.meditationStyle
+          .toLowerCase()
+          .replaceAll(' ', '_');
+      String demoTechnique;
+      String demoExample;
+      switch (demoType) {
+        case 'breathing':
+          demoTechnique =
+              'BREATHING MEDITATION: Guide focused breath awareness. Use descriptive language for inhales and exhales. Create a rhythmic flow.';
+          demoExample =
+              'Bring all your attention to your breath. Feel the cool air as you breathe in... and the warm air as you breathe out. Notice the gentle rise and fall of your chest. Let each breath anchor you to this present moment.';
+          break;
+        case 'body_scan':
+          demoTechnique =
+              'BODY SCAN: Systematically guide attention through body parts (feet → legs → torso → arms → neck → head). Invite awareness, encourage release of tension.';
+          demoExample =
+              'Bring your attention to your feet. Notice any sensations there—warmth, coolness, tingling, or perhaps nothing at all. Simply observe without judgment. Gently release any tension you might be holding.';
+          break;
+        case 'visualization_journey':
+          demoTechnique =
+              'VISUALIZATION JOURNEY: Create vivid imagery of the meditation environment ($demoEnv). Engage multiple senses. Make them feel transported to a peaceful place.';
+          demoExample =
+              'Picture yourself in a peaceful $demoEnv. The air is fresh and cool on your skin. You hear gentle sounds around you. Take in the beauty, feeling completely safe and at peace here.';
+          break;
+        default:
+          demoTechnique =
+              'MINDFULNESS MEDITATION: Guide present-moment awareness. Encourage observation without judgment. Use language like "notice", "observe", "allow". Emphasize acceptance.';
+          demoExample =
+              'Notice whatever arises in this moment. Perhaps thoughts drift through your mind like clouds. Simply observe them without grasping or pushing away. Let everything be just as it is.';
+      }
+      return '''MEDITATION SEGMENT #$iteration
+
+SESSION CONTEXT:
+- Environment: $demoEnv
+- Currently: ${isStressed ? 'needs calming support' : 'relaxing well, maintain peace'}
+
+YOUR TASK:
+$demoTechnique
+
+STRICT RULES:
+1. NO GREETINGS: Don't say "hello", "hi", "welcome back"
+2. NO BIOMARKER NUMBERS: Don't mention heart rate, HRV, or any health metrics
+3. NO META-TALK: Don't say "let's do", "now we'll", "in this segment"
+4. NO RANDOM WORDS: NEVER say "dollars", "money", "price", or any non-meditation words
+5. NO COUNTING: Use flowing descriptions like "breathe in deeply... and release slowly"
+6. JUMP STRAIGHT INTO THE TECHNIQUE: Start immediately with the meditation instruction
+7. NO NAMES: Do not address the listener by any personal name
+8. SMOOTH FLOW: Write in complete, flowing sentences. Use "..." for natural pauses
+9. ONE TECHNIQUE ONLY: Stick to the technique above
+10. APPROXIMATELY $_wordCount WORDS: Not too short, not too long
+11. NO ENDING: Don't conclude. Just pause naturally so next segment can continue
+12. MEDITATION VOCABULARY ONLY: Only calming, meditation-appropriate words
+
+EXAMPLE (DO NOT COPY - just shows the style):
+$demoExample
+
+NOW GENERATE SEGMENT #$iteration:
+Start directly with the instruction. No greetings, no names, no numbers, just pure meditation guidance.''';
+    }
+
     final userName = _userAccount?.name ?? '';
     final age = _userAccount?.age ?? 30;
     final environment = _userAccount?.meditationEnvironment ?? 'nature';
@@ -383,6 +465,24 @@ Write a smooth, calming meditation using the technique above. Start directly wit
     if (!_hasValidApiKey) {
       _logger.i('No valid Gemini API key — using fallback completion text');
       return MeditationConfig.completionText;
+    }
+    // Demo mode: no HR values or personal names in completion
+    if (_demoMode != DemoConfig.modeNone) {
+      try {
+        const demoCompletionPrompt =
+            'Create a SHORT, warm congratulatory message for completing a meditation session. '
+            '2-3 sentences, under 50 words. No personal names, no health metrics, no numbers. '
+            'Plain text for text-to-speech. '
+            'Example: "Wonderful work. You have taken a meaningful moment to find calm within. Carry this sense of peace with you."';
+        final response = await _model
+            .generateContent([Content.text(demoCompletionPrompt)])
+            .timeout(const Duration(seconds: 10));
+        return _cleanTextForSpeech(response.text ??
+            'Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.');
+      } catch (e) {
+        _logger.e('Error generating demo completion: $e');
+        return 'Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.';
+      }
     }
     try {
       final userName = _userAccount?.name ?? '';

@@ -658,6 +658,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               DefaultCupertinoLocalizations.delegate,
             ],
             title: 'Open Wearable',
+            debugShowCheckedModeBanner: false,
           ),
         ),
       ),

@@ -627,18 +627,20 @@ class ImprovedMeditationController {
     await voiceService.stop();
     await backgroundMusicPlayer.stop();
 
-    // Save to history
-    final duration = DateTime.now().difference(_sessionStartTime!).inSeconds;
-    await MeditationHistory.instance.addSession(
-      userId: userAccount.userId,
-      startHr: _baselineHr,
-      startHrv: _baselineHrv,
-      endHr: _currentHr,
-      endHrv: _currentHrv,
-      durationSeconds: duration,
-      iterationCount: _iterationCount,
-      peakStressLevel: _peakStressLevel,
-    );
+    // Save to history (skip in demo mode — no session data from demo participants)
+    if (demoMode == DemoConfig.modeNone) {
+      final duration = DateTime.now().difference(_sessionStartTime!).inSeconds;
+      await MeditationHistory.instance.addSession(
+        userId: userAccount.userId,
+        startHr: _baselineHr,
+        startHrv: _baselineHrv,
+        endHr: _currentHr,
+        endHrv: _currentHrv,
+        durationSeconds: duration,
+        iterationCount: _iterationCount,
+        peakStressLevel: _peakStressLevel,
+      );
+    }
 
     _setState(MeditationState.completed);
     _sendStatus('Session complete!');

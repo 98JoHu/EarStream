@@ -2178,50 +2178,58 @@ class _MeditationViewState extends State<MeditationView> {
                 title: const Text('Meditation Mode'),
                 onTap: () => _closeDrawerAnd(_openDemoModePage),
               ),
-              ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: const Text('Personal Info'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(EarStreamAccountSection.personalInfo)
-                      .then((_) {}),
+              // Personal info and preferences are hidden in demo mode to
+              // prevent any free-form input from demo participants.
+              if (!_isDemoModeActive) ...[
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('Personal Info'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(EarStreamAccountSection.personalInfo)
+                        .then((_) {}),
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.spa_outlined),
-                title: const Text('Meditation Preferences'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(
-                    EarStreamAccountSection.meditationPreferences,
-                  ).then((_) {}),
+                ListTile(
+                  leading: const Icon(Icons.spa_outlined),
+                  title: const Text('Meditation Preferences'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(
+                      EarStreamAccountSection.meditationPreferences,
+                    ).then((_) {}),
+                  ),
                 ),
-              ),
+              ],
               ListTile(
                 leading: const Icon(Icons.insights_outlined),
                 title: const Text('Weekly Analytics'),
                 onTap: () => _closeDrawerAnd(_openWeeklyAnalyticsPage),
               ),
-              ListTile(
-                leading: const Icon(Icons.calendar_today_outlined),
-                title: const Text('Outlook Calendar Integration'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(
-                    EarStreamAccountSection.outlookCalendar,
-                  ).then((_) {}),
+              if (!_isDemoModeActive) ...[
+                ListTile(
+                  leading: const Icon(Icons.calendar_today_outlined),
+                  title: const Text('Outlook Calendar Integration'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(
+                      EarStreamAccountSection.outlookCalendar,
+                    ).then((_) {}),
+                  ),
                 ),
-              ),
+              ],
               ListTile(
                 leading: const Icon(Icons.verified_outlined),
                 title: const Text('OpenEarable 2.0 Seal Check'),
                 onTap: () => _closeDrawerAnd(_openSealCheckPage),
               ),
-              ListTile(
-                leading: const Icon(Icons.key_outlined),
-                title: const Text('API Keys'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(EarStreamAccountSection.apiKeys)
-                      .then((_) {}),
+              if (!_isDemoModeActive) ...[
+                ListTile(
+                  leading: const Icon(Icons.key_outlined),
+                  title: const Text('API Keys'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(EarStreamAccountSection.apiKeys)
+                        .then((_) {}),
+                  ),
                 ),
-              ),
+              ],
               ListTile(
                 leading: const Icon(Icons.bug_report_outlined),
                 title: const Text('Debug Info'),
