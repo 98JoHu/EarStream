@@ -16,6 +16,7 @@ class HrHrvDisplayNew extends StatelessWidget {
   final bool showMonitoring; // Show monitoring indicator
   final bool
       isMeditationSessionActive; // True when a meditation session is running
+  final int maxDisplaySeconds; // Max seconds to show in the HR chart (default 300)
 
   const HrHrvDisplayNew({
     super.key,
@@ -31,6 +32,7 @@ class HrHrvDisplayNew extends StatelessWidget {
     this.activityDescription,
     this.showMonitoring = false,
     this.isMeditationSessionActive = false,
+    this.maxDisplaySeconds = 300,
   });
 
   @override
@@ -119,6 +121,20 @@ class HrHrvDisplayNew extends StatelessWidget {
             const SizedBox(height: 8),
             _buildMonitoringChip(),
           ],
+          // Heartbeat history chart — trim to maxDisplaySeconds window
+          if (hrHistory.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _HrHistoryChart(
+              hrHistory: hrHistory.isNotEmpty
+                  ? hrHistory
+                      .where((p) => p.timestamp.isAfter(
+                            hrHistory.last.timestamp.subtract(
+                                Duration(seconds: maxDisplaySeconds)),
+                          ))
+                      .toList()
+                  : hrHistory,
+            ),
+          ],
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
@@ -181,12 +197,7 @@ class HrHrvDisplayNew extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          // Heartbeat history chart (shows when we have HR history data)
-          if (hrHistory.isNotEmpty) ...[
-            _HrHistoryChart(hrHistory: hrHistory),
-            const SizedBox(height: 8),
-          ],
+          const SizedBox(height: 4),
         ],
       ),
     );

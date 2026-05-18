@@ -11,6 +11,7 @@ class BandPassFilterMeditation {
   late final double a0, a1, a2, b1, b2;
   double x1 = 0, x2 = 0;
   double y1 = 0, y2 = 0;
+  bool _isFirstSample = true;
 
   BandPassFilterMeditation({
     required this.sampleFreq,
@@ -35,6 +36,15 @@ class BandPassFilterMeditation {
   }
 
   double filter(double x) {
+    // Pre-warm filter state on the first sample to avoid a step-function
+    // transient: a band-pass filter has zero DC gain, so y1=y2=0 is correct,
+    // but seeding x1=x2=firstSample eliminates the large initial ringing that
+    // otherwise produces false peaks and a spuriously high HR for ~30 seconds.
+    if (_isFirstSample) {
+      _isFirstSample = false;
+      x1 = x;
+      x2 = x;
+    }
     final y = a0 * x + a1 * x1 + a2 * x2 - b1 * y1 - b2 * y2;
     x2 = x1;
     x1 = x;

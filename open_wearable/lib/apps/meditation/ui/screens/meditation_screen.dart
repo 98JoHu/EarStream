@@ -1350,18 +1350,22 @@ class _MeditationViewState extends State<MeditationView> {
       setState(() {
         _currentHr = hr;
 
-        // Add to HR history with timestamp
-        final now = DateTime.now();
-        _hrHistory.add(HrDataPoint(timestamp: now, hr: hr));
-
-        // Keep only last 5 minutes of data (300 seconds)
-        final cutoffTime = now.subtract(const Duration(seconds: 300));
-        _hrHistory.removeWhere((point) => point.timestamp.isBefore(cutoffTime));
-
         // HR becomes stable after 30 seconds of measurements
         if (!_hrIsStable && _measurementDurationSeconds >= 30) {
           _hrIsStable = true;
           print('✅ HR measurements now stable (30+ seconds of data)');
+        }
+
+        // Only record to chart history after warm-up is complete.
+        // Early readings are unreliable (filter transient + Kalman settling)
+        // and would show a misleading spike at the start of the chart.
+        if (_hrIsStable) {
+          final now = DateTime.now();
+          _hrHistory.add(HrDataPoint(timestamp: now, hr: hr));
+
+          // Keep only last 5 minutes of data (300 seconds)
+          final cutoffTime = now.subtract(const Duration(seconds: 300));
+          _hrHistory.removeWhere((point) => point.timestamp.isBefore(cutoffTime));
         }
       });
     });
@@ -2361,6 +2365,7 @@ class _MeditationViewState extends State<MeditationView> {
                                       _earStreamActivated,
                               isMeditationSessionActive:
                                   _isMeditationSessionActive,
+                              maxDisplaySeconds: _isDemoModeActive ? 120 : 300,
                             ),
                           if (!_isDemoModeActive ||
                               (_demoPhase != DemoPhase.none &&

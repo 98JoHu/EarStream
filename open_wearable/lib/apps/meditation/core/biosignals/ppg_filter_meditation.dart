@@ -17,6 +17,7 @@ class PpgFilterMeditation {
   final int _minPeakDistanceMs = 300; // e.g., 200 BPM max
 
   double _hrEstimate = 75.0;
+  bool _kalmanInitialized = false; // seed from first real measurement, not 75 prior
   double _p = 1.0;
   final double _q = 0.01; // process noise
   final double _r = 4.0;
@@ -62,6 +63,16 @@ class PpgFilterMeditation {
 
   double _kalmanUpdate(double measurement) {
     if (measurement.isNaN || measurement.isInfinite) return _hrEstimate;
+
+    // On the first valid measurement, seed the filter directly instead of
+    // pulling from the 75 BPM prior — this eliminates the downward drift
+    // artifact when the user's true resting rate differs from 75.
+    if (!_kalmanInitialized) {
+      _kalmanInitialized = true;
+      _hrEstimate = measurement;
+      _p = 1.0;
+      return measurement;
+    }
 
     _p += _q;
     final k = _p / (_p + _r);

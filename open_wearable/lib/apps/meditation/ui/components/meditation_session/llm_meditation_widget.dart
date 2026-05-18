@@ -666,64 +666,90 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     final isTimerMode = !widget.stressDetectionEnabled && !isDemo;
 
     if (isDemo) {
-      // Full white-background screen for demo mode — cleaner for screenshots.
+      // Card-style full-screen for demo mode — matches the welcome panel aesthetic.
       Navigator.push(
         context,
         MaterialPageRoute<void>(
           fullscreenDialog: true,
-          builder: (_) => Scaffold(
-            backgroundColor: Colors.white,
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 32.0, vertical: 48.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.celebration, color: Colors.green, size: 36),
-                        SizedBox(width: 12),
-                        Text(
-                          'Great!',
-                          style: TextStyle(
-                              fontSize: 26, fontWeight: FontWeight.bold),
+          builder: (routeContext) {
+            final theme = Theme.of(routeContext);
+            return Scaffold(
+              backgroundColor: Colors.grey.shade50,
+              body: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0, vertical: 32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.celebration,
+                                      color: Colors.green,
+                                      size: 28,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Text(
+                                      'Great job!',
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                              fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 24),
+                              Text(
+                                'Your body has calmed down. Well done completing your meditation session!',
+                                style: theme.textTheme.bodyLarge
+                                    ?.copyWith(height: 1.5),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                'How do you feel right now?',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 24),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _buildMoodButton('😌', 'Very Relaxed',
+                                      MoodRating.veryRelaxed, stressReduction),
+                                  _buildMoodButton('😊', 'Relaxed',
+                                      MoodRating.relaxed, stressReduction),
+                                  _buildMoodButton('😐', 'Neutral',
+                                      MoodRating.neutral, stressReduction),
+                                  _buildMoodButton('😟', 'Stressed',
+                                      MoodRating.stressed, stressReduction),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Your body has calmed down.',
-                      style: TextStyle(fontSize: 15),
-                    ),
-                    const SizedBox(height: 40),
-                    const Divider(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'How do you feel right now?',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 18),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildMoodButton('😌', 'Very Relaxed',
-                            MoodRating.veryRelaxed, stressReduction),
-                        _buildMoodButton('😊', 'Relaxed',
-                            MoodRating.relaxed, stressReduction),
-                        _buildMoodButton('😐', 'Neutral',
-                            MoodRating.neutral, stressReduction),
-                        _buildMoodButton('😟', 'Stressed',
-                            MoodRating.stressed, stressReduction),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       );
       return;
