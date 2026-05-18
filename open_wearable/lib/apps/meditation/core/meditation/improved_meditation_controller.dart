@@ -97,6 +97,7 @@ class ImprovedMeditationController {
       45; // Stop if no data for 45 seconds (increased from 15 to prevent false timeouts)
   bool _isCompletingSession =
       false; // Guard flag to prevent concurrent completion calls
+  Future<String>? _prefetchFuture; // Pre-fetched next segment to reduce silence gaps
 
   // Monitoring
   Timer? _stressMonitorTimer;
@@ -498,25 +499,51 @@ class ImprovedMeditationController {
         return;
       }
 
-      // Generate next segment
+      // Generate next segment (use pre-fetched if available to reduce silence gaps)
       _setState(MeditationState.generatingContent);
       _sendStatus('Creating personalized guidance...');
 
       try {
-        final segment = await llmService.generateMeditationSegment(
-          currentHr: _currentHr,
-          currentHrv: _currentHrv,
-          baselineHr: _baselineHr,
-          baselineHrv: _baselineHrv,
-          isStressed: true,
-          stressLevel: stressLevel,
-        );
+        String segment;
+        if (_prefetchFuture != null) {
+          _logger.i('Using pre-fetched segment — minimal API wait expected');
+          segment = await _prefetchFuture!;
+          _prefetchFuture = null;
+        } else {
+          segment = await llmService.generateMeditationSegment(
+            currentHr: _currentHr,
+            currentHrv: _currentHrv,
+            baselineHr: _baselineHr,
+            baselineHrv: _baselineHrv,
+            isStressed: true,
+            stressLevel: stressLevel,
+          );
+        }
 
         if (_state == MeditationState.idle) break; // User stopped
+
+        // Pre-fetch next segment in background while speaking current one
+        if (_iterationCount < maxIterations - 1) {
+          final capturedHr = _currentHr;
+          final capturedHrv = _currentHrv;
+          final capturedStress = stressLevel;
+          _prefetchFuture = llmService.generateMeditationSegment(
+            currentHr: capturedHr,
+            currentHrv: capturedHrv,
+            baselineHr: _baselineHr,
+            baselineHrv: _baselineHrv,
+            isStressed: true,
+            stressLevel: capturedStress,
+          );
+          _logger.i('Pre-fetching segment ${_iterationCount + 1} in background');
+        }
 
         await _speak(segment);
 
-        if (_state == MeditationState.idle) break; // User stopped
+        if (_state == MeditationState.idle) {
+          _prefetchFuture = null;
+          break; // User stopped
+        }
 
         // Check again after speaking - person might have relaxed during the segment
         if (_iterationCount >= 3 &&
@@ -533,6 +560,7 @@ class ImprovedMeditationController {
             currentHrv: _currentHrv,
           );
           _logger.i('Session complete after segment: $reason');
+          _prefetchFuture = null;
           await _completeSession();
           return;
         }
@@ -540,6 +568,7 @@ class ImprovedMeditationController {
         await Future.delayed(const Duration(
             milliseconds: 1500)); // Reduced from 3s to 1.5s for smoother flow
       } catch (e) {
+        _prefetchFuture = null;
         _logger.e('Error in loop: $e');
       }
     }
@@ -678,6 +707,7 @@ class ImprovedMeditationController {
     _setState(MeditationState.idle);
     _isPaused = false;
     _meditationAutoStarted = false;
+    _prefetchFuture = null; // Discard any pending pre-fetch
 
     // Stop stress monitoring as part of an explicit stop.
     stopMonitoring();

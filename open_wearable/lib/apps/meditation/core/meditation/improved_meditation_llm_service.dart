@@ -1,17 +1,17 @@
 // ignore_for_file: require_trailing_commas
 
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import '../../config/meditation_config.dart';
 import '../../config/demo_config.dart';
-import '../../config/meditation_runtime_config.dart';
 import '../../models/user_account.dart';
 
 final _logger = Logger();
 
 /// LLM-powered meditation content generation service
 ///
-/// Generates personalized, stress-adaptive meditation guidance using Google's Gemini.
+/// Generates personalized, stress-adaptive meditation guidance using DeepSeek.
 /// Falls back to pre-generated personalized texts when API is unavailable.
 ///
 /// Features:
@@ -22,10 +22,12 @@ final _logger = Logger();
 /// - Meditation style customization (calm, gentle, mindful)
 /// - Environment imagery (nature, ocean, mountain, etc.)
 ///
-/// Uses Gemini 2.0 Flash with custom system prompts for meditation guidance.
+/// Uses DeepSeek v4 Pro with custom system prompts for meditation guidance.
 class ImprovedMeditationLLMService {
-  late GenerativeModel _model;
-  ChatSession? _chatSession;
+  /// Accumulated message history for the current chat session (segments only).
+  List<Map<String, dynamic>> _chatHistory = [];
+  /// Cached system prompt — rebuilt whenever user account or demo mode changes.
+  String _currentSystemPrompt = '';
   int _iterationCount = 0;
   UserAccount? _userAccount;
   
@@ -46,21 +48,9 @@ class ImprovedMeditationLLMService {
   }
 
   void _initializeModel() {
-    try {
-      _model = GenerativeModel(
-        model: 'gemini-2.5-flash', // Using newest Gemini model (2026)
-        apiKey: _effectiveGeminiApiKey,
-        systemInstruction: Content.system(_getSystemPrompt()),
-        generationConfig: GenerationConfig(
-          temperature: 0.9,
-          maxOutputTokens: 600,
-        ),
-      );
-      _logger.i('Improved Meditation LLM initialized (gemini-2.5-flash)');
-    } catch (e) {
-      _logger.e('Error initializing LLM: $e');
-      rethrow;
-    }
+    _currentSystemPrompt = _getSystemPrompt();
+    _chatHistory = [];
+    _logger.i('DeepSeek meditation service initialized (deepseek-v4-pro)');
   }
 
   /// Set user account for deep personalization
@@ -84,16 +74,65 @@ class ImprovedMeditationLLMService {
     _initializeModel();
   }
 
-  String get _effectiveGeminiApiKey {
-    return MeditationRuntimeConfig.geminiApiKey(
-          localValue: _userAccount?.geminiApiKey,
-        ).value ??
-        MeditationConfig.geminiApiKey;
-  }
+  String get _effectiveDeepSeekApiKey => MeditationConfig.deepSeekApiKey;
 
   bool get _hasValidApiKey {
-    final key = _effectiveGeminiApiKey;
-    return key != 'NONE' && key.startsWith('AIza');
+    final key = _effectiveDeepSeekApiKey;
+    return key != 'NONE' && key.length > 10;
+  }
+
+  /// Makes a one-shot DeepSeek API call (no persistent history).
+  Future<String> _callDeepSeek(String userMessage) async {
+    return _callDeepSeekInternal(userMessage, useHistory: false);
+  }
+
+  /// Makes a DeepSeek API call using the current chat history, then appends
+  /// the exchange to [_chatHistory] so subsequent calls have context.
+  Future<String> _callDeepSeekChat(String userMessage) async {
+    return _callDeepSeekInternal(userMessage, useHistory: true);
+  }
+
+  Future<String> _callDeepSeekInternal(
+    String userMessage, {
+    required bool useHistory,
+  }) async {
+    final messages = <Map<String, dynamic>>[
+      {'role': 'system', 'content': _currentSystemPrompt},
+      if (useHistory) ..._chatHistory,
+      {'role': 'user', 'content': userMessage},
+    ];
+
+    final response = await http
+        .post(
+          Uri.parse('https://api.deepseek.com/chat/completions'),
+          headers: {
+            'Authorization': 'Bearer $_effectiveDeepSeekApiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'model': 'deepseek-v4-pro',
+            'messages': messages,
+            'max_tokens': 600,
+            'temperature': 0.9,
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'DeepSeek API error ${response.statusCode}: ${response.body}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final content =
+        (decoded['choices'] as List).first['message']['content'] as String;
+
+    if (useHistory) {
+      _chatHistory.add({'role': 'user', 'content': userMessage});
+      _chatHistory.add({'role': 'assistant', 'content': content});
+    }
+
+    return content;
   }
 
   /// Get style-specific guidance for LLM - REMOVED
@@ -175,7 +214,7 @@ Remember: You're creating a calming, safe space for someone who may be stressed.
 
   /// Start a new meditation session
   void startNewSession() {
-    _chatSession = _model.startChat();
+    _chatHistory = [];
     _iterationCount = 0;
     _logger.i('New meditation session started');
   }
@@ -188,7 +227,7 @@ Remember: You're creating a calming, safe space for someone who may be stressed.
     required double baselineHrv,
   }) async {
     if (!_hasValidApiKey) {
-      _logger.i('No valid Gemini API key — using fallback welcome text');
+      _logger.i('No valid DeepSeek API key — using fallback welcome text');
       return "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
     }
     // Demo mode: no personal context or physiological data in prompt
@@ -200,11 +239,10 @@ Remember: You're creating a calming, safe space for someone who may be stressed.
             'Create a warm, welcoming introduction for a $demoStyle meditation '
             'in a $demoEnv setting. Under 60 words. Warm and inviting. '
             'No personal names, no health metrics. Plain text for text-to-speech.';
-        final response = await _model
-            .generateContent([Content.text(demoWelcomePrompt)])
-            .timeout(const Duration(seconds: 10));
-        return response.text ??
-            "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
+        final text = await _callDeepSeek(demoWelcomePrompt);
+        return text.isNotEmpty
+            ? text
+            : "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
       } catch (e) {
         _logger.e('Error generating demo welcome: $e');
         return "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
@@ -229,13 +267,12 @@ The user is showing signs of stress. Acknowledge their current state warmly. Rea
 CRITICAL INSTRUCTION: Do NOT mention specific heart rate numbers (e.g., don't say "85 BPM"). Just refer to "your racing heart" or "tension in your body" or "your calm state". Focus on FEELING, not metrics.
 
 Use their name naturally if provided. Keep it under 80 words, warm and personal.''';
-      print('Generating personalized welcome with prompt:\n$prompt');
-      final response = await _model
-          .generateContent([Content.text(prompt)])
-          .timeout(const Duration(seconds: 10));
-      print('Generated welcome text:\n${response.text ?? ''}');
-      return response.text ??
-          "${nameGreeting}I notice your heart rate is elevated. Let's work together to bring you back to a state of calm.";
+      _logger.i('Generating personalized welcome via DeepSeek API...');
+      final text = await _callDeepSeek(prompt);
+      _logger.i('Generated welcome text:\n$text');
+      return text.isNotEmpty
+          ? text
+          : "${nameGreeting}I notice your heart rate is elevated. Let's work together to bring you back to a state of calm.";
     } catch (e) {
       _logger.e('Error generating welcome: $e');
       return "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
@@ -258,7 +295,7 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
     // Note: Voice caching is still active to save API costs for repeated phrases
 
     if (!_hasValidApiKey) {
-      _logger.i('No valid Gemini API key — using fallback segment text');
+      _logger.i('No valid DeepSeek API key — using fallback segment text');
       return 'Take a deep breath in... hold gently for a moment... and slowly release. '
           'Feel the tension melting away with each exhale. '
           'Your body is becoming more relaxed... your mind more peaceful. '
@@ -266,7 +303,7 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
           'allowing calmness to flow through you.';
     }
 
-    if (_chatSession == null) {
+    if (_chatHistory.isEmpty) {
       startNewSession();
     }
 
@@ -278,18 +315,15 @@ Use their name naturally if provided. Keep it under 80 words, warm and personal.
       );
 
       _logger.i(
-          'Generating segment #$_iterationCount (Stress: ${stressLevel.toStringAsFixed(1)}%) - CALLING GEMINI API...');
+          'Generating segment #$_iterationCount (Stress: ${stressLevel.toStringAsFixed(1)}%) - CALLING DEEPSEEK API...');
 
-      final response = await _chatSession!
-          .sendMessage(Content.text(prompt))
-          .timeout(const Duration(seconds: 10));
-      final text = response.text ?? '';
+      final text = await _callDeepSeekChat(prompt);
 
       if (text.isEmpty) {
         throw Exception('Empty LLM response');
       }
 
-      _logger.i(' SUCCESS! Got ${text.length} characters from Gemini API');
+      _logger.i(' SUCCESS! Got ${text.length} characters from DeepSeek API');
       _logger.i(
           ' First 150 chars: "${text.substring(0, text.length > 150 ? 150 : text.length)}..."');
 
@@ -463,7 +497,7 @@ Write a smooth, calming meditation using the technique above. Start directly wit
     required double endHrv,
   }) async {
     if (!_hasValidApiKey) {
-      _logger.i('No valid Gemini API key — using fallback completion text');
+      _logger.i('No valid DeepSeek API key — using fallback completion text');
       return MeditationConfig.completionText;
     }
     // Demo mode: no HR values or personal names in completion
@@ -474,11 +508,10 @@ Write a smooth, calming meditation using the technique above. Start directly wit
             '2-3 sentences, under 50 words. No personal names, no health metrics, no numbers. '
             'Plain text for text-to-speech. '
             'Example: "Wonderful work. You have taken a meaningful moment to find calm within. Carry this sense of peace with you."';
-        final response = await _model
-            .generateContent([Content.text(demoCompletionPrompt)])
-            .timeout(const Duration(seconds: 10));
-        return _cleanTextForSpeech(response.text ??
-            'Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.');
+        final text = await _callDeepSeek(demoCompletionPrompt);
+        return _cleanTextForSpeech(text.isNotEmpty
+            ? text
+            : 'Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.');
       } catch (e) {
         _logger.e('Error generating demo completion: $e');
         return 'Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.';
@@ -507,14 +540,10 @@ EXAMPLE:
 
 Generate a SHORT completion message like the example above.''';
 
-      final response = await _model
-          .generateContent([Content.text(prompt)])
-          .timeout(const Duration(seconds: 10));
-      final rawText = response.text ??
-          "${namePrefix}wonderful work. Your heart rate has come down from ${startHr.toStringAsFixed(0)} to ${endHr.toStringAsFixed(0)} beats per minute. You've successfully calmed your mind and body. Carry this peace with you.";
-
-      // Clean text for smooth speech
-      final completionText = _cleanTextForSpeech(rawText);
+      final rawText = await _callDeepSeek(prompt);
+      final completionText = _cleanTextForSpeech(rawText.isNotEmpty
+          ? rawText
+          : "${namePrefix}wonderful work. Your heart rate has come down from ${startHr.toStringAsFixed(0)} to ${endHr.toStringAsFixed(0)} beats per minute. You've successfully calmed your mind and body. Carry this peace with you.");
 
       _logger.i(' Completion message generated: "$completionText"');
       return completionText;
@@ -585,7 +614,7 @@ Generate a SHORT completion message like the example above.''';
   }
 
   void reset() {
-    _chatSession = null;
+    _chatHistory = [];
     _iterationCount = 0;
   }
 

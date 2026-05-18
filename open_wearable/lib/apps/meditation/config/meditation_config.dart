@@ -64,9 +64,19 @@ class MeditationConfig {
     return token;
   }
 
+  static String get deepSeekApiKey {
+    final key = _readEnv('DEEPSEEK_API_KEY');
+    if (key == 'NONE' || key.contains('YOUR_') || key.contains('your_')) {
+      return 'NONE';
+    }
+    return key;
+  }
+
   // Debug helper to check if APIs are configured
   static bool get hasValidGeminiKey =>
       geminiApiKey != 'NONE' && geminiApiKey.length > 20;
+  static bool get hasValidDeepSeekKey =>
+      deepSeekApiKey != 'NONE' && deepSeekApiKey.length > 20;
   static bool get hasValidTtsKey =>
       elevenLabsApiKey != 'NONE' && elevenLabsApiKey.length > 20;
   static bool get hasValidMicrosoftGraphToken =>

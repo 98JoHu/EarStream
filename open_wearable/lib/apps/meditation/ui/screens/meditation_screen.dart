@@ -2512,7 +2512,7 @@ class _MeditationViewState extends State<MeditationView> {
                                                 ),
                                           ),
                                           Text(
-                                            'Open API Keys from the menu to configure Gemini for timed meditation sessions.',
+                                            'Open API Keys from the menu to configure DeepSeek for timed meditation sessions.',
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .bodySmall,

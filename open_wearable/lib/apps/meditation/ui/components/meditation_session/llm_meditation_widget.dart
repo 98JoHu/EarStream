@@ -13,6 +13,7 @@ import '../../../models/user_account.dart';
 import '../../../core/biosignals/sensors/hr_sensor_interface.dart';
 import '../../../core/storage/mood_entry.dart';
 import '../../screens/weekly_analysis_screen.dart';
+import '../../shared/earstream_style.dart';
 
 /// Improved meditation widget with natural voice and personalization
 class LlmMeditationWidget extends StatefulWidget {
@@ -76,15 +77,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   OutlookMeetingBlocker? _meetingBlocker;
 
   bool get isIdle => _currentState == MeditationState.idle;
-  bool get _hasConfiguredGeminiKey {
-    final accountKey = _userAccount?.geminiApiKey.trim() ?? '';
-    if (accountKey.length > 20 &&
-        !accountKey.contains('YOUR_') &&
-        !accountKey.contains('your_')) {
-      return true;
-    }
-    return MeditationConfig.hasValidGeminiKey;
-  }
+  bool get _hasConfiguredGeminiKey => MeditationConfig.hasValidDeepSeekKey;
 
   /// Public getter so the parent screen can show the API warning inline.
   bool get hasConfiguredApiKey => _hasConfiguredGeminiKey;
@@ -674,13 +667,16 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           builder: (routeContext) {
             final theme = Theme.of(routeContext);
             return Scaffold(
-              backgroundColor: Colors.grey.shade50,
-              body: SafeArea(
+              appBar: EarStreamStyle.appBar(
+                routeContext,
+                title: EarStreamStyle.appName,
+              ),
+              body: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0, vertical: 32.0),
+                  padding: EarStreamStyle.pagePadding(routeContext),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Card(
                         child: Padding(
