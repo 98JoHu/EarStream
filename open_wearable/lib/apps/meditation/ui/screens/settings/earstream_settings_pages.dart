@@ -70,8 +70,7 @@ class _EarStreamAccountSectionPageState
     _ageController = TextEditingController(
       text: account.age > 0 ? account.age.toString() : '',
     );
-    _geminiApiKeyController =
-        TextEditingController(text: account.geminiApiKey);
+    _geminiApiKeyController = TextEditingController(text: account.geminiApiKey);
     _elevenLabsApiKeyController =
         TextEditingController(text: account.elevenLabsApiKey);
     _microsoftGraphTokenController =
@@ -157,7 +156,8 @@ class _EarStreamAccountSectionPageState
     updatedAccount.meditationEnvironment = _meditationEnvironment;
     updatedAccount.voiceGender = _voiceGender;
     updatedAccount.speakingSpeed = _speakingSpeed;
-    updatedAccount.additionalPreferences = _additionalPreferencesController.text.trim();
+    updatedAccount.additionalPreferences =
+        _additionalPreferencesController.text.trim();
     updatedAccount.stressThreshold = _stressThreshold;
     updatedAccount.usePremiumVoice = _usePremiumVoice;
     updatedAccount.elevenLabsVoiceId = _selectedElevenLabsVoiceId;
@@ -191,7 +191,8 @@ class _EarStreamAccountSectionPageState
         return;
       }
 
-      final hasLocalToken = _microsoftGraphTokenController.text.trim().isNotEmpty;
+      final hasLocalToken =
+          _microsoftGraphTokenController.text.trim().isNotEmpty;
       final usingEnvFallback =
           !hasLocalToken && MeditationConfig.hasValidMicrosoftGraphToken;
 
@@ -355,8 +356,9 @@ class _EarStreamAccountSectionPageState
           children: [
             Icon(
               icon,
-              color:
-                  selected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+              color: selected
+                  ? colorScheme.onPrimary
+                  : colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 4),
             Text(
@@ -364,8 +366,7 @@ class _EarStreamAccountSectionPageState
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color:
-                    selected ? colorScheme.onPrimary : colorScheme.onSurface,
+                color: selected ? colorScheme.onPrimary : colorScheme.onSurface,
               ),
             ),
           ],
@@ -444,8 +445,7 @@ class _EarStreamAccountSectionPageState
                 ],
               ),
             ),
-            if (selected)
-              Icon(Icons.check_circle, color: colorScheme.primary),
+            if (selected) Icon(Icons.check_circle, color: colorScheme.primary),
           ],
         ),
       ),
@@ -849,7 +849,7 @@ class _EarStreamAccountSectionPageState
             ],
           ),
           */
-          if (_usePremiumVoice) ...[
+          ...[
             const SizedBox(height: 20),
             const Text(
               'ElevenLabs voice',
@@ -896,9 +896,8 @@ class _EarStreamAccountSectionPageState
   Widget _buildOutlookCalendarPage() {
     final hasLocalToken = _microsoftGraphTokenController.text.trim().isNotEmpty;
     final hasFallbackToken = MeditationConfig.hasValidMicrosoftGraphToken;
-    final statusColor = hasLocalToken || hasFallbackToken
-        ? Colors.indigo
-        : Colors.orange;
+    final statusColor =
+        hasLocalToken || hasFallbackToken ? Colors.indigo : Colors.orange;
 
     return _buildWhiteCard(
       child: Column(
@@ -953,7 +952,9 @@ class _EarStreamAccountSectionPageState
                   )
                 : const Icon(Icons.refresh),
             label: Text(
-              _isCheckingOutlook ? 'Checking Outlook...' : 'Check Outlook Status',
+              _isCheckingOutlook
+                  ? 'Checking Outlook...'
+                  : 'Check Outlook Status',
             ),
           ),
           if (_outlookStatusMessage != null)

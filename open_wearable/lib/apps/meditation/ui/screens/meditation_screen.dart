@@ -40,13 +40,28 @@ class MeditationView extends StatefulWidget {
 enum MeditationAppMode { normal, timer, test }
 
 class _MeditationViewState extends State<MeditationView> {
+  static const String _ubicompLogoAsset =
+      'lib/apps/meditation/assets/Ubicomp_2025_Finland_Logo-300x169.jpg';
+
+  Widget _buildUbicompLogoIcon({double height = 28}) {
+    // Preserve original logo ratio (300x169) so the full width is visible.
+    final width = height * (300 / 169);
+    return Image.asset(
+      _ubicompLogoAsset,
+      width: width,
+      height: height,
+      fit: BoxFit.contain,
+    );
+  }
+
   HrSensorInterface? _sensor;
   bool _useMockSensor = true;
   GlobalKey<LlmMeditationWidgetState> _meditationWidgetKey =
       GlobalKey<LlmMeditationWidgetState>();
   MeditationAppMode _selectedMode = MeditationAppMode.normal;
   bool _earStreamActivated = false;
-  bool _isMeditationSessionActive = false; // True when a meditation is actively running
+  bool _isMeditationSessionActive =
+      false; // True when a meditation is actively running
   Timer? _timerModeTimer;
   DateTime? _timerModeScheduledTime;
 
@@ -69,13 +84,16 @@ class _MeditationViewState extends State<MeditationView> {
   // Demo mode state tracking
   bool _isDemoModeActive = false;
   DemoPhase _demoPhase = DemoPhase.none;
-  String _demoSubMode = DemoConfig.modeNone;
+  String _demoSubMode = DemoConfig.modeBiosignalAdaptive;
   DemoMeditationPreferences? _demoPreferences;
   DateTime? _demoPhaseStartTime;
   Timer? _demoPhaseTimer;
   double? _demoBaselineHr;
   double? _demoBaselineRmssd;
-
+  bool _isSealCheckRunning = false;
+  bool _sealCheckCompleted = false;
+  Object? _sealCheckError;
+  Map<String, dynamic>? _sealCheckResult;
 
   void _recreateMeditationWidgetKey() {
     _meditationWidgetKey = GlobalKey<LlmMeditationWidgetState>();
@@ -123,8 +141,8 @@ class _MeditationViewState extends State<MeditationView> {
       double sampleFreq = BiosignalConfig.ppgSamplingFrequency;
       if (widget.sensorConfigProvider != null) {
         for (final config in widget.ppgSensor!.relatedConfigurations) {
-          final value =
-              widget.sensorConfigProvider!.getSelectedConfigurationValue(config);
+          final value = widget.sensorConfigProvider!
+              .getSelectedConfigurationValue(config);
           if (value is SensorFrequencyConfigurationValue) {
             sampleFreq = value.frequencyHz;
             break;
@@ -202,6 +220,8 @@ class _MeditationViewState extends State<MeditationView> {
       );
 
       if (shouldStop == true && mounted) {
+        await _meditationWidgetKey.currentState
+            ?.stopMeditationAndClearPendingActions();
         _deactivateEarStream();
       }
     } else {
@@ -447,200 +467,46 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
-  Widget _buildDemoModeSelection({
-    required VoidCallback onSelectPersonalizedOnly,
-    required VoidCallback onSelectBiosignalAdaptive,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    
-    return Column(
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.campaign_outlined,
-                      color: colorScheme.primary,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'ACM UbiComp 2026 Demo Mode',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Select a demo experience to showcase EarStream capabilities:',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        
-        // Personalized Meditation Only Option
-        Card(
-          elevation: 2,
-          child: InkWell(
-            onTap: onSelectPersonalizedOnly,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.psychology_outlined,
-                          color: colorScheme.onPrimaryContainer,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Personalized Meditation Only',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Icon(Icons.arrow_forward_ios, size: 16),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '• Set meditation preferences or use "Surprise me"\n'
-                    '• Experience AI-generated personalized meditation\n'
-                    '• 3 content segments (~5 minutes)\n'
-                    '• No biosignal requirements',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        
-        // Biosignal-Adaptive Option
-        Card(
-          elevation: 2,
-          child: InkWell(
-            onTap: onSelectBiosignalAdaptive,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: colorScheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.sensors_outlined,
-                          color: colorScheme.onSecondaryContainer,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Biosignal-Adaptive',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Icon(Icons.arrow_forward_ios, size: 16),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '• Automatic seal check guided setup\n'
-                    '• 30s calibration + 30s baseline measurement\n'
-                    '• Real-time stress detection (3% threshold)\n'
-                    '• Adaptive meditation up to 4 segments\n'
-                    '• Live biosignal analytics',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   // ============================================================================
   // DEMO CONTROL PANEL - Conference-ready guided experience
   // ============================================================================
-  
+
   Widget _buildDemoControlPanel() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     // Phase-specific content
     String phaseTitle;
     String phaseInstructions;
     IconData phaseIcon;
     Widget? actionButton;
     Widget? statusWidget;
-    
+
     switch (_demoPhase) {
       case DemoPhase.none:
       case DemoPhase.modeSelection:
         phaseTitle = 'ACM UbiComp 2026 Demo Mode';
-        phaseInstructions = 'Welcome! Please select a demo experience to showcase EarStream\'s capabilities:';
+        phaseInstructions =
+            'Welcome! Please select a demo experience to showcase EarStream\'s capabilities:';
         phaseIcon = Icons.campaign_outlined;
-        
-        // Mode selection buttons
+
+        // Mode selection buttons (Biosignal is primary)
         actionButton = Column(
           children: [
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => _selectDemoMode(DemoConfig.modePersonalizedOnly),
-                icon: const Icon(Icons.psychology_outlined),
-                label: const Text('Personalized Meditation Only'),
+                onPressed: () =>
+                    _selectDemoMode(DemoConfig.modeBiosignalAdaptive),
+                icon: const Icon(Icons.monitor_heart_outlined),
+                label: const Text('Biosignal-Adaptive Demo'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                 ),
               ),
             ),
@@ -648,18 +514,23 @@ class _MeditationViewState extends State<MeditationView> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => _selectDemoMode(DemoConfig.modeBiosignalAdaptive),
-                icon: const Icon(Icons.sensors_outlined),
-                label: const Text('Biosignal-Adaptive Demo'),
+                onPressed: () =>
+                    _selectDemoMode(DemoConfig.modePersonalizedOnly),
+                icon: const Icon(Icons.account_circle_outlined),
+                label: const Text('Personalized Meditation Only'),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                 ),
               ),
             ),
           ],
         );
         break;
-      
+
       case DemoPhase.settingPreferences:
         phaseTitle = _demoSubMode == DemoConfig.modeBiosignalAdaptive
             ? 'Step 1 of 5 · Demo Preferences'
@@ -668,17 +539,16 @@ class _MeditationViewState extends State<MeditationView> {
             'Settings are session-only and won\'t change your saved profile.';
         phaseIcon = Icons.spa_outlined;
 
-        actionButton = SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _openDemoPreferences,
-            icon: const Icon(Icons.tune_outlined),
-            label: const Text('Set Preferences →'),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        );
+        actionButton = _buildDemoPreferencesStepCard();
+        break;
+
+      case DemoPhase.sealCheck:
+        phaseTitle = 'Step 2 of 5 · Seal Check';
+        phaseInstructions =
+            'Confirm the earable has a good acoustic seal before calibration starts.';
+        phaseIcon = Icons.verified_outlined;
+
+        actionButton = _buildDemoSealCheckStepCard();
         break;
 
       case DemoPhase.calibration:
@@ -691,15 +561,17 @@ class _MeditationViewState extends State<MeditationView> {
         }
         // Personalized-only keeps the full card for meditationSession
         phaseTitle = 'Meditation In Progress';
-        phaseInstructions = 'Enjoying personalized meditation session (3 segments)...';
+        phaseInstructions =
+            'Enjoying personalized meditation session (3 segments)...';
         phaseIcon = Icons.self_improvement_outlined;
         break;
-      
+
       case DemoPhase.analytics:
         phaseTitle = 'Demo Complete!';
-        phaseInstructions = 'Session analytics have been displayed. Ready for another demo?';
+        phaseInstructions =
+            'Session analytics have been displayed. Ready for another demo?';
         phaseIcon = Icons.check_circle;
-        
+
         actionButton = SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
@@ -712,11 +584,14 @@ class _MeditationViewState extends State<MeditationView> {
           ),
         );
         break;
-      
+
       default:
         return const SizedBox.shrink();
     }
-    
+
+    final showUbicompBadgeLogo =
+        _demoPhase == DemoPhase.none || _demoPhase == DemoPhase.modeSelection;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -726,12 +601,18 @@ class _MeditationViewState extends State<MeditationView> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: showUbicompBadgeLogo
+                      ? EdgeInsets.zero
+                      : const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
+                    color: showUbicompBadgeLogo
+                        ? Colors.transparent
+                        : colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(phaseIcon, color: colorScheme.primary, size: 28),
+                  child: showUbicompBadgeLogo
+                      ? _buildUbicompLogoIcon()
+                      : Icon(phaseIcon, color: colorScheme.primary, size: 28),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -765,124 +646,37 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
-  Widget _buildDemoPhaseIndicator() {
+  Widget _buildDemoPreferencesStepCard() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final currentPrefs =
+        _demoPreferences ?? DemoMeditationPreferences.defaults();
+    final nextLabel = _demoSubMode == DemoConfig.modeBiosignalAdaptive
+        ? 'Continue to Seal Check'
+        : 'Start Meditation';
 
-    String phaseTitle;
-    String phaseMessage;
-    IconData phaseIcon;
-    Color phaseColor;
-    Widget? progressWidget;
-
-    switch (_demoPhase) {
-      case DemoPhase.sealCheck:
-        phaseTitle = 'Demo: Seal Check';
-        phaseMessage = DemoConfig.sealCheckMessage;
-        phaseIcon = Icons.verified_outlined;
-        phaseColor = colorScheme.primary;
-        break;
-      
-      case DemoPhase.calibration:
-        phaseTitle = 'Demo: Calibration Phase';
-        phaseMessage = DemoConfig.calibrationMessage;
-        phaseIcon = Icons.settings_outlined;
-        phaseColor = Colors.orange;
-        
-        if (_demoPhaseStartTime != null) {
-          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
-          final remaining = DemoConfig.calibrationDuration - elapsed;
-          final progress = elapsed.inSeconds / DemoConfig.calibrationDuration.inSeconds;
-          
-          progressWidget = Column(
-            children: [
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
-              const SizedBox(height: 4),
-              Text(
-                '${remaining.inSeconds} seconds remaining',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          );
-        }
-        break;
-      
-      case DemoPhase.baselineMeasurement:
-        phaseTitle = 'Demo: Baseline Measurement';
-        phaseMessage = DemoConfig.baselineMessage;
-        phaseIcon = Icons.straighten_outlined;
-        phaseColor = Colors.blue;
-        
-        if (_demoPhaseStartTime != null) {
-          final elapsed = DateTime.now().difference(_demoPhaseStartTime!);
-          final remaining = DemoConfig.baselineDuration - elapsed;
-          final progress = elapsed.inSeconds / DemoConfig.baselineDuration.inSeconds;
-          
-          progressWidget = Column(
-            children: [
-              const SizedBox(height: 8),
-              LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
-              const SizedBox(height: 4),
-              Text(
-                '${remaining.inSeconds} seconds remaining',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          );
-        }
-        break;
-      
-      case DemoPhase.monitoring:
-        phaseTitle = 'Demo: Stress Monitoring';
-        phaseMessage = DemoConfig.monitoringMessage;
-        phaseIcon = Icons.monitor_heart_outlined;
-        phaseColor = Colors.green;
-        
-        if (_demoBaselineHr != null && _demoBaselineRmssd != null) {
-          progressWidget = Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(
-              'Baseline: HR ${_demoBaselineHr!.toStringAsFixed(0)} BPM, '
-              'RMSSD ${_demoBaselineRmssd!.toStringAsFixed(0)} ms',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          );
-        }
-        break;
-      
-      case DemoPhase.settingPreferences:
-        phaseTitle = 'Demo: Personalized Meditation';
-        phaseMessage = 'Starting meditation with your preferences...';
-        phaseIcon = Icons.spa_outlined;
-        phaseColor = colorScheme.primary;
-        break;
-      
-      case DemoPhase.meditationSession:
-        phaseTitle = 'Demo: Meditation In Progress';
-        phaseMessage = _demoSubMode == DemoConfig.modePersonalizedOnly
-            ? 'Personalized meditation (3 segments)'
-            : 'Biosignal-adaptive meditation (max 4 segments)';
-        phaseIcon = Icons.self_improvement_outlined;
-        phaseColor = Colors.purple;
-        break;
-      
-      case DemoPhase.analytics:
-        phaseTitle = 'Demo: Session Complete';
-        phaseMessage = 'Showing session analytics...';
-        phaseIcon = Icons.analytics_outlined;
-        phaseColor = Colors.green;
-        break;
-      
-      default:
-        return const SizedBox.shrink();
+    void updatePreferences({
+      String? meditationStyle,
+      String? voiceGender,
+      String? speakingSpeed,
+      String? meditationEnvironment,
+    }) {
+      setState(() {
+        _demoPreferences = DemoMeditationPreferences(
+          meditationStyle: meditationStyle ?? currentPrefs.meditationStyle,
+          voiceGender: voiceGender ?? currentPrefs.voiceGender,
+          speakingSpeed: speakingSpeed ?? currentPrefs.speakingSpeed,
+          meditationEnvironment:
+              meditationEnvironment ?? currentPrefs.meditationEnvironment,
+          voiceTone: currentPrefs.voiceTone,
+          durationMinutes: currentPrefs.durationMinutes,
+          useBackgroundSounds: currentPrefs.useBackgroundSounds,
+        );
+      });
     }
 
     return Card(
-      color: phaseColor.withOpacity(0.1),
-      elevation: 3,
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -890,14 +684,13 @@ class _MeditationViewState extends State<MeditationView> {
           children: [
             Row(
               children: [
-                Icon(phaseIcon, color: phaseColor, size: 28),
-                const SizedBox(width: 12),
+                Icon(Icons.tune_outlined, color: colorScheme.primary, size: 24),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    phaseTitle,
+                    'Choose your demo meditation experience',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: phaseColor,
                     ),
                   ),
                 ),
@@ -905,17 +698,304 @@ class _MeditationViewState extends State<MeditationView> {
             ),
             const SizedBox(height: 8),
             Text(
-              phaseMessage,
+              'These settings are session-only and won\'t affect your saved preferences.',
               style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
                 height: 1.4,
               ),
             ),
-            if (progressWidget != null) progressWidget,
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _demoPreferences = DemoMeditationPreferences.random();
+                  });
+                },
+                icon: const Icon(Icons.casino_outlined),
+                label: const Text('Surprise me'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Voice Gender',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: currentPrefs.voiceGender,
+              decoration: _demoDropdownDecoration(),
+              items: const [
+                DropdownMenuItem(value: 'female', child: Text('Female')),
+                DropdownMenuItem(value: 'male', child: Text('Male')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  updatePreferences(voiceGender: value);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text('Speaking Speed',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: currentPrefs.speakingSpeed,
+              decoration: _demoDropdownDecoration(),
+              items: const [
+                DropdownMenuItem(value: 'very_slow', child: Text('Very Slow')),
+                DropdownMenuItem(value: 'slow', child: Text('Slow')),
+                DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                DropdownMenuItem(value: 'fast', child: Text('Fast')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  updatePreferences(speakingSpeed: value);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text('Meditation Type',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: currentPrefs.meditationStyle,
+              decoration: _demoDropdownDecoration(),
+              items: const [
+                DropdownMenuItem(
+                    value: 'mindfulness', child: Text('Mindfulness')),
+                DropdownMenuItem(value: 'breathing', child: Text('Breathing')),
+                DropdownMenuItem(value: 'body_scan', child: Text('Body Scan')),
+                DropdownMenuItem(
+                  value: 'visualization_journey',
+                  child: Text('Visualization Journey'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  updatePreferences(meditationStyle: value);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text('Environment',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: currentPrefs.meditationEnvironment,
+              decoration: _demoDropdownDecoration(),
+              items: const [
+                DropdownMenuItem(
+                  value: 'peaceful nature',
+                  child: Text('Peaceful Nature'),
+                ),
+                DropdownMenuItem(
+                  value: 'calm ocean beach',
+                  child: Text('Ocean Beach'),
+                ),
+                DropdownMenuItem(
+                  value: 'quiet mountain',
+                  child: Text('Mountain'),
+                ),
+                DropdownMenuItem(
+                  value: 'serene forest',
+                  child: Text('Forest'),
+                ),
+                DropdownMenuItem(
+                  value: 'gentle garden',
+                  child: Text('Garden'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  updatePreferences(meditationEnvironment: value);
+                }
+              },
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _returnToDemoSelection,
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Back'),
+                ),
+                const Spacer(),
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: _continueFromDemoPreferences,
+                      icon: const Icon(Icons.arrow_forward),
+                      label: Text(
+                        nextLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildDemoSealCheckStepCard() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.hearing_outlined,
+                    color: colorScheme.primary, size: 24),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Run the seal check',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Put on the OpenEarable, then tap the button below. A short tone will be played and analysed to confirm a good acoustic seal.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _isSealCheckRunning ? null : _runSealCheckInline,
+                icon: _isSealCheckRunning
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow),
+                label: Text(_isSealCheckRunning
+                    ? 'Checking seal...'
+                    : 'Run Seal Check'),
+              ),
+            ),
+            if (_sealCheckCompleted && _sealCheckResult != null) ...[
+              const SizedBox(height: 16),
+              _buildSealCheckResultSummary(_sealCheckResult!),
+            ],
+            if (_sealCheckError != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Seal check failed: $_sealCheckError',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.error,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _demoPhase = DemoPhase.settingPreferences;
+                    });
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Back'),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: _isSealCheckRunning ? null : _proceedToCalibration,
+                  child: const Text('Skip'),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: _sealCheckCompleted && !_isSealCheckRunning
+                          ? _proceedToCalibration
+                          : null,
+                      icon: const Icon(Icons.arrow_forward),
+                      label: const Text('Next'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSealCheckResultSummary(Map<String, dynamic> result) {
+    final theme = Theme.of(context);
+    final version = (result['version'] as int?) ?? -1;
+    final quality = (result['quality'] as int?) ?? -1;
+    final meanMagnitude = (result['mean_magnitude'] as num?)?.toDouble() ?? -1;
+    final points = (result['points'] as List?)?.length ?? 0;
+
+    return Card(
+      color: Colors.green.withOpacity(0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          runSpacing: 8,
+          spacing: 16,
+          children: [
+            _sealCheckStat(theme, 'Version', '$version'),
+            _sealCheckStat(theme, 'Quality', '$quality'),
+            _sealCheckStat(
+              theme,
+              'Mean Magnitude',
+              meanMagnitude.toStringAsFixed(1),
+            ),
+            _sealCheckStat(theme, 'Points', '$points'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sealCheckStat(ThemeData theme, String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: theme.textTheme.labelMedium),
+        Text(value, style: theme.textTheme.titleMedium),
+      ],
+    );
+  }
+
+  InputDecoration _demoDropdownDecoration() => InputDecoration(
+        filled: true,
+        fillColor: Colors.grey[100],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      );
 
   /// Compact status pill shown in biosignal-adaptive demo during active phases
   /// (calibration, baseline, monitoring, meditation).
@@ -1141,7 +1221,7 @@ class _MeditationViewState extends State<MeditationView> {
     // Fallback: Use highest available if 200 Hz not supported
     double sampleFreq = BiosignalConfig.ppgSamplingFrequency; // Target 200 Hz
     bool found200Hz = false;
-    
+
     if (widget.sensorConfigProvider != null) {
       for (final config in widget.ppgSensor!.relatedConfigurations) {
         final value =
@@ -1150,17 +1230,21 @@ class _MeditationViewState extends State<MeditationView> {
           sampleFreq = value.frequencyHz;
           if (sampleFreq >= 200.0) {
             found200Hz = true;
-            print('Using sample frequency: $sampleFreq Hz (≥200 Hz target achieved)');
+            print(
+                'Using sample frequency: $sampleFreq Hz (≥200 Hz target achieved)');
           } else {
-            print('Using sample frequency: $sampleFreq Hz (below 200 Hz target)');
+            print(
+                'Using sample frequency: $sampleFreq Hz (below 200 Hz target)');
           }
           break;
         }
       }
-      
+
       if (!found200Hz) {
-        print('WARNING: 200 Hz PPG sampling not available. Using $sampleFreq Hz.');
-        print('HRV accuracy may be reduced. Recommend configuring sensor for ≥200 Hz.');
+        print(
+            'WARNING: 200 Hz PPG sampling not available. Using $sampleFreq Hz.');
+        print(
+            'HRV accuracy may be reduced. Recommend configuring sensor for ≥200 Hz.');
       }
     }
 
@@ -1205,7 +1289,8 @@ class _MeditationViewState extends State<MeditationView> {
         _startMonitoring();
         print('✓ Earable sensor started and monitoring resumed');
       } else {
-        print('✓ Earable sensor created — measurements start when EarStream is activated');
+        print(
+            '✓ Earable sensor created — measurements start when EarStream is activated');
       }
 
       print('Switched to earable sensor! _useMockSensor = $_useMockSensor');
@@ -1292,15 +1377,15 @@ class _MeditationViewState extends State<MeditationView> {
     _hrSubscription = _sensor!.hrStream.listen((hr) {
       setState(() {
         _currentHr = hr;
-        
+
         // Add to HR history with timestamp
         final now = DateTime.now();
         _hrHistory.add(HrDataPoint(timestamp: now, hr: hr));
-        
+
         // Keep only last 5 minutes of data (300 seconds)
         final cutoffTime = now.subtract(const Duration(seconds: 300));
         _hrHistory.removeWhere((point) => point.timestamp.isBefore(cutoffTime));
-        
+
         // HR becomes stable after 30 seconds of measurements
         if (!_hrIsStable && _measurementDurationSeconds >= 30) {
           _hrIsStable = true;
@@ -1320,8 +1405,7 @@ class _MeditationViewState extends State<MeditationView> {
           _hrvIsStable = true;
           print(
               '✅ HRV measurements now stable ($_hrvMeasurementCount measurements received)');
-          print(
-              '   RMSSD: ${_currentHrv.toStringAsFixed(1)} ms');
+          print('   RMSSD: ${_currentHrv.toStringAsFixed(1)} ms');
         }
 
         // Log HRV updates for debugging
@@ -1637,7 +1721,8 @@ class _MeditationViewState extends State<MeditationView> {
       return;
     }
 
-    final audioManager = widget.wearable!.requireCapability<AudioResponseManager>();
+    final audioManager =
+        widget.wearable!.requireCapability<AudioResponseManager>();
 
     await Navigator.push(
       context,
@@ -1718,39 +1803,47 @@ class _MeditationViewState extends State<MeditationView> {
                 body: ListView(
                   padding: EarStreamStyle.pagePadding(context),
                   children: [
-                      _buildModeSelector(
-                        selectedMode: localSelectedMode,
-                        onModeSelected: changeMode,
+                    _buildModeSelector(
+                      selectedMode: localSelectedMode,
+                      onModeSelected: changeMode,
+                    ),
+                    const SizedBox(height: 12),
+                    if (localSelectedMode == MeditationAppMode.test)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'Demo mode is active on the main screen. Return there to start a demo.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  height: 1.4,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      if (localSelectedMode == MeditationAppMode.test)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              'Demo mode is active on the main screen. Return there to start a demo.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    height: 1.4,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
+                    if (localSelectedMode != MeditationAppMode.test)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            _getModeDescription(localSelectedMode),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  height: 1.4,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
                           ),
                         ),
-                      if (localSelectedMode != MeditationAppMode.test)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              _getModeDescription(localSelectedMode),
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    height: 1.4,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                            ),
-                          ),
-                        ),
+                      ),
                   ],
                 ),
               );
@@ -1761,20 +1854,10 @@ class _MeditationViewState extends State<MeditationView> {
     );
 
     // Handle selected demo mode
-    if (selectedDemoMode != null && 
-        selectedDemoMode != DemoConfig.modeNone && 
+    if (selectedDemoMode != null &&
+        selectedDemoMode != DemoConfig.modeNone &&
         mounted) {
-      setState(() {
-        _demoSubMode = selectedDemoMode;
-        _demoPhase = DemoPhase.modeSelection;
-      });
-      
-      // Start the appropriate demo flow
-      if (selectedDemoMode == DemoConfig.modePersonalizedOnly) {
-        _startPersonalizedOnlyDemo();
-      } else if (selectedDemoMode == DemoConfig.modeBiosignalAdaptive) {
-        _startBiosignalAdaptiveDemo();
-      }
+      _selectDemoMode(selectedDemoMode);
     }
   }
 
@@ -1788,42 +1871,6 @@ class _MeditationViewState extends State<MeditationView> {
       // Both modes start with preference selection
       _demoPhase = DemoPhase.settingPreferences;
     });
-  }
-
-  Future<void> _openDemoPreferences() async {
-    final prefs = await Navigator.push<DemoMeditationPreferences>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _DemoPreferencesPage(
-          isBiosignalAdaptive:
-              _demoSubMode == DemoConfig.modeBiosignalAdaptive,
-        ),
-      ),
-    );
-
-    if (prefs == null || !mounted) return;
-
-    setState(() {
-      _demoPreferences = prefs;
-    });
-
-    if (_demoSubMode == DemoConfig.modePersonalizedOnly) {
-      _startPersonalizedOnlyMeditation();
-    } else {
-      await _proceedToSealCheck();
-    }
-  }
-
-  Future<void> _proceedToSealCheck() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _SealCheckPage(wearable: widget.wearable),
-      ),
-    );
-    if (!mounted) return;
-    // Start calibration after returning from the seal check page
-    _proceedToCalibration();
   }
 
   void _proceedToCalibration() {
@@ -1858,8 +1905,10 @@ class _MeditationViewState extends State<MeditationView> {
     _demoPhaseTimer?.cancel();
     _demoPhaseTimer = Timer(DemoConfig.baselineDuration, () {
       if (mounted && _demoPhase == DemoPhase.baselineMeasurement) {
-        final capturedHr = _currentHr > 0 ? _currentHr : DemoConfig.fallbackBaselineHr;
-        final capturedRmssd = _currentHrv > 0 ? _currentHrv : DemoConfig.fallbackBaselineRmssd;
+        final capturedHr =
+            _currentHr > 0 ? _currentHr : DemoConfig.fallbackBaselineHr;
+        final capturedRmssd =
+            _currentHrv > 0 ? _currentHrv : DemoConfig.fallbackBaselineRmssd;
         setState(() {
           _demoBaselineHr = capturedHr;
           _demoBaselineRmssd = capturedRmssd;
@@ -1874,18 +1923,20 @@ class _MeditationViewState extends State<MeditationView> {
       _demoPhase = DemoPhase.monitoring;
       _demoPhaseStartTime = DateTime.now();
     });
-    
+
     // Start periodic stress checking (every 3 seconds) with auto-detection
     _demoPhaseTimer?.cancel();
-    _demoPhaseTimer = Timer.periodic(DemoConfig.monitoringCheckInterval, (timer) {
+    _demoPhaseTimer =
+        Timer.periodic(DemoConfig.monitoringCheckInterval, (timer) {
       _checkDemoStressLevel();
     });
-    
+
     // Also trigger automatically after maxMonitoringDuration so every attendee
     // experiences the full demo even when stress threshold is not met.
     Timer(DemoConfig.maxMonitoringDuration, () {
       if (mounted && _demoPhase == DemoPhase.monitoring) {
-        print('Demo: Max monitoring duration reached — auto-triggering meditation');
+        print(
+            'Demo: Max monitoring duration reached — auto-triggering meditation');
         _startBiosignalAdaptiveMeditation();
       }
     });
@@ -1894,23 +1945,26 @@ class _MeditationViewState extends State<MeditationView> {
   void _checkDemoStressLevel() {
     if (_demoPhase != DemoPhase.monitoring) return;
     if (_demoBaselineHr == null || _demoBaselineRmssd == null) return;
-    
+
     final currentHr = _currentHr;
     final currentRmssd = _currentHrv;
-    
+
     if (currentHr <= 0 || currentRmssd <= 0) return;
-    
+
     // Calculate deviation percentages
-    final hrDeviation = ((currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100;
-    final rmssdDeviation = ((_demoBaselineRmssd! - currentRmssd) / _demoBaselineRmssd!) * 100;
-    
+    final hrDeviation =
+        ((currentHr - _demoBaselineHr!) / _demoBaselineHr!) * 100;
+    final rmssdDeviation =
+        ((_demoBaselineRmssd! - currentRmssd) / _demoBaselineRmssd!) * 100;
+
     // Both HR elevation AND HRV decrease must exceed threshold to trigger meditation
     final isStressed = hrDeviation >= DemoConfig.stressThresholdPercent &&
-                       rmssdDeviation >= DemoConfig.stressThresholdPercent;
-    
+        rmssdDeviation >= DemoConfig.stressThresholdPercent;
+
     if (isStressed) {
-      print('Demo Auto-Stress Detected! HR deviation: ${hrDeviation.toStringAsFixed(1)}%, '
-            'RMSSD deviation: ${rmssdDeviation.toStringAsFixed(1)}%');
+      print(
+          'Demo Auto-Stress Detected! HR deviation: ${hrDeviation.toStringAsFixed(1)}%, '
+          'RMSSD deviation: ${rmssdDeviation.toStringAsFixed(1)}%');
       _startBiosignalAdaptiveMeditation();
     }
   }
@@ -1921,11 +1975,12 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   void _startPersonalizedOnlyMeditation() {
-    print('[EARSTREAM] _startPersonalizedOnlyMeditation() — earStreamActivated=$_earStreamActivated, sensor=$_sensor');
+    print(
+        '[EARSTREAM] _startPersonalizedOnlyMeditation() — earStreamActivated=$_earStreamActivated, sensor=$_sensor');
     setState(() {
       _demoPhase = DemoPhase.meditationSession;
     });
-    
+
     // Ensure sensor and monitoring are active
     if (!_earStreamActivated && _sensor != null) {
       _activateEarStream();
@@ -1933,7 +1988,8 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   void _startBiosignalAdaptiveMeditation() {
-    print('[EARSTREAM] _startBiosignalAdaptiveMeditation() — earStreamActivated=$_earStreamActivated, sensor=$_sensor');
+    print(
+        '[EARSTREAM] _startBiosignalAdaptiveMeditation() — earStreamActivated=$_earStreamActivated, sensor=$_sensor');
     _demoPhaseTimer?.cancel();
     setState(() {
       _demoPhase = DemoPhase.meditationSession;
@@ -1944,7 +2000,7 @@ class _MeditationViewState extends State<MeditationView> {
     setState(() {
       _demoPhase = DemoPhase.analytics;
     });
-    
+
     // Show analytics briefly, then wait for manual reset
     // (Analytics are shown by the meditation widget automatically)
   }
@@ -1973,43 +2029,80 @@ class _MeditationViewState extends State<MeditationView> {
       _demoPhaseStartTime = null;
       _demoBaselineHr = null;
       _demoBaselineRmssd = null;
+      _isSealCheckRunning = false;
+      _sealCheckCompleted = false;
+      _sealCheckError = null;
+      _sealCheckResult = null;
     });
     _demoPhaseTimer?.cancel();
     _demoPhaseTimer = null;
   }
 
-  // ============================================================================
-  // LEGACY DEMO MODE FLOWS (TO BE REMOVED)
-  // ============================================================================
+  Future<void> _continueFromDemoPreferences() async {
+    if (_demoPreferences == null) {
+      _demoPreferences = DemoMeditationPreferences.defaults();
+    }
 
-  Future<void> _startPersonalizedOnlyDemo() async {
-    // Legacy method - replaced by _selectDemoMode and manual flow
-    _selectDemoMode(DemoConfig.modePersonalizedOnly);
+    if (_demoSubMode == DemoConfig.modePersonalizedOnly) {
+      _startPersonalizedOnlyMeditation();
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _demoPhase = DemoPhase.sealCheck;
+      _sealCheckCompleted = false;
+      _sealCheckError = null;
+      _sealCheckResult = null;
+    });
   }
 
-  Future<void> _startBiosignalAdaptiveDemo() async {
-    // Legacy method - replaced by _selectDemoMode and manual flow
-    _selectDemoMode(DemoConfig.modeBiosignalAdaptive);
-  }
+  Future<void> _runSealCheckInline() async {
+    if (widget.wearable == null) {
+      if (!mounted) return;
+      setState(() {
+        _sealCheckError = 'Please connect an OpenEarable device first.';
+      });
+      return;
+    }
 
-  Future<DemoMeditationPreferences?> _showDemoPreferencesDialog() async {
-    // Legacy method - now using existing preferences UI
-    return DemoMeditationPreferences.defaults();
-  }
+    if (!widget.wearable!.hasCapability<AudioResponseManager>()) {
+      if (!mounted) return;
+      setState(() {
+        _sealCheckError =
+            'This device does not support seal check (AudioResponseManager not available).';
+      });
+      return;
+    }
 
-  void _startCalibrationPhase() {
-    // Legacy method - now using manual flow with _proceedToCalibration
-    _proceedToCalibration();
-  }
+    final audioManager =
+        widget.wearable!.requireCapability<AudioResponseManager>();
 
-  void _startBaselineMeasurementPhase() {
-    // Legacy method - now using manual flow with _proceedToBaselineMeasurement
-    _proceedToBaselineMeasurement();
-  }
+    setState(() {
+      _isSealCheckRunning = true;
+      _sealCheckError = null;
+      _sealCheckCompleted = false;
+      _sealCheckResult = null;
+    });
 
-  void _captureBaselineAndStartMonitoring() {
-    // Legacy method - baseline capture now happens in timer callback
-    // Monitoring starts with _proceedToMonitoring
+    try {
+      final result = await audioManager.measureAudioResponse(const {});
+      if (!mounted) return;
+      setState(() {
+        _sealCheckResult = Map<String, dynamic>.from(result);
+        _sealCheckCompleted = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _sealCheckError = error;
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isSealCheckRunning = false;
+      });
+    }
   }
 
   bool _hasRequiredPersonalInfo(UserAccount account) {
@@ -2117,134 +2210,139 @@ class _MeditationViewState extends State<MeditationView> {
         }
       },
       child: Scaffold(
-      appBar: EarStreamStyle.appBar(
-        context,
-        title: EarStreamStyle.appName,
-      ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              DrawerHeader(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: Image.asset(
-                        'lib/apps/meditation/assets/earstream_logo.png',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          EarStreamStyle.appName,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer,
-                              ),
+        appBar: EarStreamStyle.appBar(
+          context,
+          title: EarStreamStyle.appName,
+        ),
+        drawer: Drawer(
+          child: SafeArea(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                DrawerHeader(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Meditation Mode: ${_getModeLabel(_selectedMode)}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer,
-                              ),
+                        padding: const EdgeInsets.all(8),
+                        child: Image.asset(
+                          'lib/apps/meditation/assets/earstream_logo.png',
+                          fit: BoxFit.contain,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            EarStreamStyle.appName,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Meditation Mode: ${_getModeLabel(_selectedMode)}',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimaryContainer,
+                                    ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.tune),
-                title: const Text('Meditation Mode'),
-                onTap: () => _closeDrawerAnd(_openDemoModePage),
-              ),
-              ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: const Text('Personal Info'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(EarStreamAccountSection.personalInfo)
-                      .then((_) {}),
+                ListTile(
+                  leading: const Icon(Icons.tune),
+                  title: const Text('Meditation Mode'),
+                  onTap: () => _closeDrawerAnd(_openDemoModePage),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.spa_outlined),
-                title: const Text('Meditation Preferences'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(
-                    EarStreamAccountSection.meditationPreferences,
-                  ).then((_) {}),
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: const Text('Personal Info'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(
+                            EarStreamAccountSection.personalInfo)
+                        .then((_) {}),
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.insights_outlined),
-                title: const Text('Weekly Analytics'),
-                onTap: () => _closeDrawerAnd(_openWeeklyAnalyticsPage),
-              ),
-              ListTile(
-                leading: const Icon(Icons.calendar_today_outlined),
-                title: const Text('Outlook Calendar Integration'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(
-                    EarStreamAccountSection.outlookCalendar,
-                  ).then((_) {}),
+                ListTile(
+                  leading: const Icon(Icons.spa_outlined),
+                  title: const Text('Meditation Preferences'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(
+                      EarStreamAccountSection.meditationPreferences,
+                    ).then((_) {}),
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.verified_outlined),
-                title: const Text('OpenEarable 2.0 Seal Check'),
-                onTap: () => _closeDrawerAnd(_openSealCheckPage),
-              ),
-              ListTile(
-                leading: const Icon(Icons.key_outlined),
-                title: const Text('API Keys'),
-                onTap: () => _closeDrawerAnd(
-                  () => _openAccountSection(EarStreamAccountSection.apiKeys)
-                      .then((_) {}),
+                ListTile(
+                  leading: const Icon(Icons.insights_outlined),
+                  title: const Text('Weekly Analytics'),
+                  onTap: () => _closeDrawerAnd(_openWeeklyAnalyticsPage),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.bug_report_outlined),
-                title: const Text('Debug Info'),
-                onTap: () => _closeDrawerAnd(_openDebugInfoPage),
-              ),
-            ],
+                ListTile(
+                  leading: const Icon(Icons.calendar_today_outlined),
+                  title: const Text('Outlook Calendar Integration'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(
+                      EarStreamAccountSection.outlookCalendar,
+                    ).then((_) {}),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.verified_outlined),
+                  title: const Text('OpenEarable 2.0 Seal Check'),
+                  onTap: () => _closeDrawerAnd(_openSealCheckPage),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.key_outlined),
+                  title: const Text('API Keys'),
+                  onTap: () => _closeDrawerAnd(
+                    () => _openAccountSection(EarStreamAccountSection.apiKeys)
+                        .then((_) {}),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.bug_report_outlined),
+                  title: const Text('Debug Info'),
+                  onTap: () => _closeDrawerAnd(_openDebugInfoPage),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
-                child: IntrinsicHeight(
-                  child: Padding(
-                    padding: EarStreamStyle.pagePadding(context),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding: EarStreamStyle.pagePadding(context),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                           _buildSelectedModeSummary(),
                           const SizedBox(height: 12),
 
@@ -2280,13 +2378,18 @@ class _MeditationViewState extends State<MeditationView> {
                                   : null,
                               activityDescription: _sensor is EarableHrSensor
                                   ? _getActivityDescription(
-                                      (_sensor as EarableHrSensor).activityLevel)
+                                      (_sensor as EarableHrSensor)
+                                          .activityLevel)
                                   : null,
-                              showMonitoring: _selectedMode == MeditationAppMode.normal && _earStreamActivated,
-                              isMeditationSessionActive: _isMeditationSessionActive,
+                              showMonitoring:
+                                  _selectedMode == MeditationAppMode.normal &&
+                                      _earStreamActivated,
+                              isMeditationSessionActive:
+                                  _isMeditationSessionActive,
                             ),
-                          if (!_isDemoModeActive || 
-                              (_demoPhase != DemoPhase.none && _demoPhase != DemoPhase.modeSelection))
+                          if (!_isDemoModeActive ||
+                              (_demoPhase != DemoPhase.none &&
+                                  _demoPhase != DemoPhase.modeSelection))
                             const SizedBox(height: 16),
 
                           // Meditation Widget - Only shown during meditation session
@@ -2298,8 +2401,8 @@ class _MeditationViewState extends State<MeditationView> {
                               sensor: _sensor!,
                               onBeforeStartMeditation:
                                   _ensureMeditationCanStart,
-                              stressDetectionEnabled:
-                                  _demoSubMode == DemoConfig.modeBiosignalAdaptive,
+                              stressDetectionEnabled: _demoSubMode ==
+                                  DemoConfig.modeBiosignalAdaptive,
                               onReset: _onDemoSessionEnd,
                               onStressLevelChanged: (level) {
                                 if (mounted) {
@@ -2318,12 +2421,13 @@ class _MeditationViewState extends State<MeditationView> {
                                 }
                               },
                             ),
-                          
+
                           // Normal mode meditation widget
                           if (_sensor != null &&
                               !_isDemoModeActive &&
                               _selectedMode != MeditationAppMode.test &&
-                              (_earStreamActivated || _selectedMode == MeditationAppMode.timer))
+                              (_earStreamActivated ||
+                                  _selectedMode == MeditationAppMode.timer))
                             LlmMeditationWidget(
                               key: _meditationWidgetKey,
                               sensor: _sensor!,
@@ -2358,20 +2462,25 @@ class _MeditationViewState extends State<MeditationView> {
                           const SizedBox(height: 16),
 
                           // Timer mode card — shown inline on main screen when Timed mode is selected
-                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer && !_isMeditationSessionActive)
+                          if (!_isDemoModeActive &&
+                              _selectedMode == MeditationAppMode.timer &&
+                              !_isMeditationSessionActive)
                             _buildTimerModeCard(
                               scheduledTime: _timerModeScheduledTime,
                               onScheduleAfter: (delay) async {
-                                final scheduled = await _scheduleTimerModeAfter(delay);
+                                final scheduled =
+                                    await _scheduleTimerModeAfter(delay);
                                 if (scheduled != null && mounted) {
-                                  setState(() {}); // Refresh to show scheduled time
+                                  setState(
+                                      () {}); // Refresh to show scheduled time
                                   _showSuccessSnackbar(
                                     'Timer meditation scheduled in ${delay.inMinutes} minutes.',
                                   );
                                 }
                               },
                               onPickTime: () async {
-                                final scheduled = await _pickAndScheduleTimerModeTime();
+                                final scheduled =
+                                    await _pickAndScheduleTimerModeTime();
                                 if (scheduled != null && mounted) {
                                   setState(() {});
                                   _showSuccessSnackbar(
@@ -2382,38 +2491,51 @@ class _MeditationViewState extends State<MeditationView> {
                               onCancelSchedule: () {
                                 _clearTimerModeSchedule();
                                 setState(() {});
-                                _showSuccessSnackbar('Scheduled timer cleared.');
+                                _showSuccessSnackbar(
+                                    'Scheduled timer cleared.');
                               },
                               onStartNow: () => unawaited(_startTimerNow()),
                             ),
-                          if (!_isDemoModeActive && _selectedMode == MeditationAppMode.timer && !_isMeditationSessionActive)
+                          if (!_isDemoModeActive &&
+                              _selectedMode == MeditationAppMode.timer &&
+                              !_isMeditationSessionActive)
                             const SizedBox(height: 8),
 
                           if (!_isDemoModeActive &&
                               _selectedMode == MeditationAppMode.timer &&
                               !_isMeditationSessionActive &&
-                              !(_meditationWidgetKey.currentState?.hasConfiguredApiKey ?? true))
+                              !(_meditationWidgetKey
+                                      .currentState?.hasConfiguredApiKey ??
+                                  true))
                             Card(
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
                                     Icon(Icons.info_outline_rounded,
-                                        color: Theme.of(context).colorScheme.primary),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'API Not Configured',
-                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleSmall
+                                                ?.copyWith(
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                           ),
                                           Text(
                                             'Open API Keys from the menu to configure Gemini for timed meditation sessions.',
-                                            style: Theme.of(context).textTheme.bodySmall,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
                                           ),
                                         ],
                                       ),
@@ -2423,13 +2545,14 @@ class _MeditationViewState extends State<MeditationView> {
                               ),
                             ),
 
-                          if (!_isDemoModeActive && _selectedMode != MeditationAppMode.test && _selectedMode != MeditationAppMode.timer) ...[
+                          if (!_isDemoModeActive &&
+                              _selectedMode != MeditationAppMode.test &&
+                              _selectedMode != MeditationAppMode.timer) ...[
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: _sensor == null
-                                    ? null
-                                    : _toggleEarStream,
+                                onPressed:
+                                    _sensor == null ? null : _toggleEarStream,
                                 child: Text(
                                   _earStreamActivated
                                       ? 'Stop ${EarStreamStyle.appName}'
@@ -2440,29 +2563,30 @@ class _MeditationViewState extends State<MeditationView> {
                             const SizedBox(height: 8),
                           ],
 
-                          if (!_isDemoModeActive && _selectedMode != MeditationAppMode.timer)
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed:
-                                      _useMockSensor && _sensor is MockHrSensor
-                                          ? _simulateStress
-                                          : null,
-                                  child: const Text('Simulate Stress'),
+                          if (!_isDemoModeActive &&
+                              _selectedMode != MeditationAppMode.timer)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: _useMockSensor &&
+                                            _sensor is MockHrSensor
+                                        ? _simulateStress
+                                        : null,
+                                    child: const Text('Simulate Stress'),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    unawaited(_resetSession());
-                                  },
-                                  child: const Text('Reset'),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      unawaited(_resetSession());
+                                    },
+                                    child: const Text('Reset'),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                           /*
                           Legacy controls retained temporarily for rollback safety
                           Column(
@@ -2581,17 +2705,17 @@ class _MeditationViewState extends State<MeditationView> {
                           ),
                           const SizedBox(height: 16),
                           */
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-    ), // Scaffold
-  ); // PopScope
+      ), // Scaffold
+    ); // PopScope
   }
 
   @override
@@ -2607,363 +2731,3 @@ class _MeditationViewState extends State<MeditationView> {
     super.dispose();
   }
 }
-
-// ================================================================================
-// DEMO PREFERENCES DIALOG
-// ================================================================================
-
-class _DemoPreferencesPage extends StatefulWidget {
-  final bool isBiosignalAdaptive;
-  const _DemoPreferencesPage({required this.isBiosignalAdaptive});
-
-  @override
-  State<_DemoPreferencesPage> createState() => _DemoPreferencesPageState();
-}
-
-class _DemoPreferencesPageState extends State<_DemoPreferencesPage> {
-  String _meditationType = 'mindfulness';
-  String _voiceGender = 'female';
-  String _speakingSpeed = 'slow';
-  String _environment = 'peaceful nature';
-
-  static const _types = [
-    ('mindfulness', '🧘 Mindfulness'),
-    ('breathing', '🌬️ Breathing'),
-    ('body_scan', '💆 Body Scan'),
-    ('visualization_journey', '🌅 Visualization Journey'),
-  ];
-  static const _environments = [
-    ('peaceful nature', '🌳 Peaceful Nature'),
-    ('calm ocean beach', '🌊 Ocean Beach'),
-    ('quiet mountain', '⛰️ Mountain'),
-    ('serene forest', '🌲 Forest'),
-    ('gentle garden', '🌸 Garden'),
-  ];
-
-  void _surpriseMe() {
-    final prefs = DemoMeditationPreferences.random();
-    setState(() {
-      _meditationType = prefs.meditationStyle;
-      _voiceGender = prefs.voiceGender;
-      _speakingSpeed = prefs.speakingSpeed;
-      _environment = prefs.meditationEnvironment;
-    });
-  }
-
-  void _confirm() {
-    Navigator.of(context).pop(DemoMeditationPreferences(
-      meditationStyle: _meditationType,
-      voiceGender: _voiceGender,
-      speakingSpeed: _speakingSpeed,
-      meditationEnvironment: _environment,
-    ));
-  }
-
-  static InputDecoration _dropdownDecoration() => InputDecoration(
-        filled: true,
-        fillColor: Colors.grey[100],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final nextLabel = widget.isBiosignalAdaptive
-        ? 'Proceed to Seal Check →'
-        : 'Start Meditation →';
-
-    return Scaffold(
-      appBar: EarStreamStyle.appBar(context, title: 'Demo Preferences'),
-      body: ListView(
-        padding: EarStreamStyle.pagePadding(context),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Choose your demo meditation experience',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'These settings are session-only and won\'t affect your saved preferences.',
-                    style: TextStyle(color: Colors.grey[700], height: 1.4),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _surpriseMe,
-                      icon: const Icon(Icons.casino_outlined),
-                      label: const Text('🎲  Surprise me!'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Voice Gender',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _voiceGender,
-                    decoration: _dropdownDecoration(),
-                    items: const [
-                      DropdownMenuItem(value: 'female', child: Text('👩 Female')),
-                      DropdownMenuItem(value: 'male', child: Text('👨 Male')),
-                    ],
-                    onChanged: (v) => setState(() => _voiceGender = v!),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Speaking Speed',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _speakingSpeed,
-                    decoration: _dropdownDecoration(),
-                    items: const [
-                      DropdownMenuItem(value: 'very_slow', child: Text('🐌 Very Slow')),
-                      DropdownMenuItem(value: 'slow', child: Text('🐢 Slow (Recommended)')),
-                      DropdownMenuItem(value: 'medium', child: Text('🚶 Medium')),
-                      DropdownMenuItem(value: 'fast', child: Text('🏃 Fast')),
-                    ],
-                    onChanged: (v) => setState(() => _speakingSpeed = v!),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Meditation Type',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _meditationType,
-                    decoration: _dropdownDecoration(),
-                    items: _types
-                        .map((t) => DropdownMenuItem(
-                            value: t.$1, child: Text(t.$2)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _meditationType = v!),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Environment',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _environment,
-                    decoration: _dropdownDecoration(),
-                    items: _environments
-                        .map((e) => DropdownMenuItem(
-                            value: e.$1, child: Text(e.$2)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _environment = v!),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _confirm,
-              icon: const Icon(Icons.arrow_forward),
-              label: Text(nextLabel),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-}
-
-// ================================================================================
-// SEAL CHECK PAGE (Biosignal-Adaptive demo — Step 2 of 5)
-// ================================================================================
-
-class _SealCheckPage extends StatefulWidget {
-  final Wearable? wearable;
-  const _SealCheckPage({required this.wearable});
-
-  @override
-  State<_SealCheckPage> createState() => _SealCheckPageState();
-}
-
-class _SealCheckPageState extends State<_SealCheckPage> {
-  bool _sealCheckRan = false;
-
-  Future<void> _runSealCheck() async {
-    if (widget.wearable == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please connect an OpenEarable device first.'),
-        ),
-      );
-      return;
-    }
-
-    if (!widget.wearable!.hasCapability<AudioResponseManager>()) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'This device does not support seal check (AudioResponseManager not available).',
-          ),
-        ),
-      );
-      return;
-    }
-
-    final audioManager =
-        widget.wearable!.requireCapability<AudioResponseManager>();
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AudioResponseMeasurementView(
-          manager: audioManager,
-          title: 'OpenEarable 2.0 Seal Check',
-          parameters: const {},
-        ),
-      ),
-    );
-    if (mounted) {
-      setState(() => _sealCheckRan = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: EarStreamStyle.appBar(context, title: 'Step 2 of 5 · Seal Check'),
-      body: ListView(
-        padding: EarStreamStyle.pagePadding(context),
-        children: [
-          // Why seal check
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.verified_outlined,
-                          color: colorScheme.primary, size: 28),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Why run a seal check?',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'A good acoustic seal is essential for accurate heart rate and HRV measurements. '
-                    'The seal check plays a brief tone through the earable and analyses the acoustic '
-                    'response to confirm that the earable sits correctly in your ear.',
-                    style: TextStyle(color: Colors.grey[700], height: 1.5),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Run seal check action
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Run the seal check',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Put on the OpenEarable, then tap the button below. '
-                    'A short tone will be played — stay still during the measurement. '
-                    'You can run the check as many times as needed.',
-                    style: TextStyle(color: Colors.grey[700], height: 1.4),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _runSealCheck,
-                      icon: const Icon(Icons.hearing_outlined),
-                      label: const Text('Run Seal Check'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  if (_sealCheckRan) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Icon(Icons.check_circle,
-                            color: Colors.green.shade600, size: 20),
-                        const SizedBox(width: 8),
-                        const Text('Seal check completed successfully.'),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Primary CTA
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.sensors_outlined),
-              label: const Text('Start EarStream →'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Skip seal check'),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-}
-

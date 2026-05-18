@@ -67,7 +67,7 @@ class ImprovedMeditationController {
   DateTime? _calibrationStartTime;
   final List<double> _hrMeasurements = [];
   final List<double> _hrvMeasurements = [];
-  
+
   // Calibration duration - demo mode uses 30s, normal uses 300s (5 min)
   int get _calibrationDurationSeconds {
     if (demoMode == DemoConfig.modeBiosignalAdaptive) {
@@ -75,7 +75,7 @@ class ImprovedMeditationController {
     }
     return 300; // 5 minutes for robust baseline calibration
   }
-  
+
   // Max meditation iterations - varies by mode
   int get _maxMeditationIterations {
     if (demoMode == DemoConfig.modePersonalizedOnly) {
@@ -95,7 +95,8 @@ class ImprovedMeditationController {
   DateTime? _lastSensorDataTime; // Track when we last received sensor data
   static const int _sensorTimeoutSeconds =
       45; // Stop if no data for 45 seconds (increased from 15 to prevent false timeouts)
-  bool _isCompletingSession = false; // Guard flag to prevent concurrent completion calls
+  bool _isCompletingSession =
+      false; // Guard flag to prevent concurrent completion calls
 
   // Monitoring
   Timer? _stressMonitorTimer;
@@ -139,7 +140,7 @@ class ImprovedMeditationController {
   }) {
     stressDetector = PersonalizedStressDetector(userAccount: userAccount);
     llmService.setUserAccount(userAccount);
-    
+
     // Configure LLM service for demo mode
     if (demoMode != DemoConfig.modeNone) {
       llmService.setDemoMode(
@@ -170,7 +171,8 @@ class ImprovedMeditationController {
 
     try {
       _logger.i('Starting meditation session');
-      print('[EARSTREAM] ▶ startSession() — demoMode=$demoMode, sensor=${sensor.runtimeType}');
+      print(
+          '[EARSTREAM] ▶ startSession() — demoMode=$demoMode, sensor=${sensor.runtimeType}');
       _sessionStartTime = DateTime.now();
       _lastSensorDataTime =
           DateTime.now(); // Initialize sensor timeout tracking
@@ -273,32 +275,32 @@ class ImprovedMeditationController {
     _setState(MeditationState.measuringBaseline);
 
     // In demo mode with provided baselines, use those directly
-    if (demoMode == DemoConfig.modeBiosignalAdaptive && 
-        demoBaselineHr != null && 
+    if (demoMode == DemoConfig.modeBiosignalAdaptive &&
+        demoBaselineHr != null &&
         demoBaselineRmssd != null) {
       _baselineHr = demoBaselineHr!;
       _baselineHrv = demoBaselineRmssd!;
-      
+
       _logger.i(
           'Using demo baseline: HR=${_baselineHr.toStringAsFixed(1)}, RMSSD=${_baselineHrv.toStringAsFixed(1)}');
       _logger.i('   Demo mode: No demographic data used');
-      
+
       // Skip calibration entirely for demo mode - baseline already measured
       _isCalibrating = false;
       _isBaselineReady = true;
       _sendStatus('Demo baseline applied');
       return;
     }
-    
+
     // For personalized-only demo mode, use lighter calibration
     if (demoMode == DemoConfig.modePersonalizedOnly) {
       // Use fallback values for personalized-only (no biosignal adaptation needed)
       _baselineHr = DemoConfig.fallbackBaselineHr;
       _baselineHrv = DemoConfig.fallbackBaselineRmssd;
-      
+
       _logger.i(
           'Personalized-Only Demo: Using fallback baseline: HR=${_baselineHr.toStringAsFixed(1)}, RMSSD=${_baselineHrv.toStringAsFixed(1)}');
-      
+
       _isCalibrating = false;
       _isBaselineReady = true;
       _sendStatus('Starting personalized meditation...');
@@ -347,7 +349,8 @@ class ImprovedMeditationController {
 
     // Send calibration progress status message
     final progress = (elapsed / _calibrationDurationSeconds * 100).round();
-    _sendStatus('Calibrating baseline... ${progress}% (${elapsed}s / ${_calibrationDurationSeconds}s)');
+    _sendStatus(
+        'Calibrating baseline... ${progress}% (${elapsed}s / ${_calibrationDurationSeconds}s)');
 
     // Adaptive refinement during calibration
     if (_hrMeasurements.isEmpty || _hrvMeasurements.isEmpty) return;
@@ -549,7 +552,8 @@ class ImprovedMeditationController {
   Future<void> _speak(String text) async {
     if (_state == MeditationState.idle) return;
 
-    print('[EARSTREAM TTS] _speak() — "${text.substring(0, text.length > 60 ? 60 : text.length)}..."');
+    print(
+        '[EARSTREAM TTS] _speak() — "${text.substring(0, text.length > 60 ? 60 : text.length)}..."');
     _setState(MeditationState.speaking);
     _sendStatus('Guiding you...');
 
@@ -594,12 +598,12 @@ class ImprovedMeditationController {
   Future<void> _completeSession() async {
     // Ensure idempotency for session completion - prevent race conditions
     if (_isCompletingSession) {
-      _logger.w('_completeSession() already in progress - skipping concurrent call');
+      _logger.w(
+          '_completeSession() already in progress - skipping concurrent call');
       return;
     }
-    
-    if (_state == MeditationState.completed ||
-        _state == MeditationState.idle) {
+
+    if (_state == MeditationState.completed || _state == MeditationState.idle) {
       _logger.w(
           '_completeSession() blocked - already completed or idle (state: $_state)');
       return;
@@ -607,7 +611,7 @@ class ImprovedMeditationController {
 
     // Set guard flag
     _isCompletingSession = true;
-    
+
     _logger.i('Starting session completion...');
     _setState(MeditationState.generatingContent);
 
@@ -643,7 +647,7 @@ class ImprovedMeditationController {
     _setState(MeditationState.completed);
     _sendStatus('Session complete!');
     _meditationAutoStarted = false;
-    
+
     // Cancel session timer
     _sessionTimer?.cancel();
     _sessionTimer = null;
@@ -656,7 +660,7 @@ class ImprovedMeditationController {
     _logger.i('Session complete - HR/HRV monitoring continues');
 
     onSessionComplete?.call();
-    
+
     // Call demo complete callback if in demo mode
     if (demoMode != DemoConfig.modeNone) {
       onDemoComplete?.call();
@@ -672,6 +676,9 @@ class ImprovedMeditationController {
     _setState(MeditationState.idle);
     _isPaused = false;
     _meditationAutoStarted = false;
+
+    // Stop stress monitoring as part of an explicit stop.
+    stopMonitoring();
 
     // Cancel session timer
     _sessionTimer?.cancel();
@@ -729,8 +736,9 @@ class ImprovedMeditationController {
 
     // Refine with measured values after 5 minutes (only if still monitoring)
     Future.delayed(Duration(seconds: 300), () {
-      if (!_isMonitoringStress) return; // Guard: only refine if still monitoring
-      
+      if (!_isMonitoringStress)
+        return; // Guard: only refine if still monitoring
+
       if (_currentHr > 40 && _currentHrv > 10) {
         // Weighted average: 60% measured + 40% research
         _baselineHr = (_currentHr * 0.6) + (_baselineHr * 0.4);
@@ -782,7 +790,7 @@ class ImprovedMeditationController {
   void stopMonitoring() {
     _stressMonitorTimer?.cancel();
     _isMonitoringStress = false;
-    
+
     // Clear activity history to prevent memory leak
     _activityHistory.clear();
   }
@@ -790,23 +798,23 @@ class ImprovedMeditationController {
   /// Update activity history with new reading and prune old entries
   void _updateActivityHistory(ActivityLevel currentLevel) {
     final now = DateTime.now();
-    
+
     // Add current reading
     _activityHistory.add((timestamp: now, level: currentLevel));
-    
+
     // Prune entries older than 5 minutes
     final cutoff = now.subtract(_activityBufferDuration);
     _activityHistory.removeWhere((entry) => entry.timestamp.isBefore(cutoff));
   }
 
   /// Check if recent activity should suppress meditation triggering
-  /// 
+  ///
   /// Returns true if:
   /// - ANY intense activity detected in time window
   /// - OR Vigorous activity ≥5% of time window
   /// - OR Moderate activity ≥20% of time window
   /// - OR Light activity ≥40% of time window
-  /// 
+  ///
   /// Percentages apply to whatever time window is available (adapts before 5 minutes filled)
   bool _shouldSuppressMeditationDueToActivity() {
     // Disable activity suppression in demo mode for conference presentations
@@ -814,23 +822,23 @@ class ImprovedMeditationController {
     if (demoMode != null && demoMode != DemoConfig.modeNone) {
       return false;
     }
-    
+
     if (_activityHistory.isEmpty) return false;
-    
+
     // Calculate total time window (use actual time available, not fixed 5 minutes)
     final now = DateTime.now();
     final oldestEntry = _activityHistory.first.timestamp;
     final timeWindowSeconds = now.difference(oldestEntry).inSeconds;
-    
+
     if (timeWindowSeconds == 0) return false; // Avoid division by zero
-    
+
     // Count duration at each activity level
     // Assuming measurements every ~3 seconds, each entry represents ~3 seconds
     int intenseCount = 0;
     int vigorousCount = 0;
     int moderateCount = 0;
     int lightCount = 0;
-    
+
     for (final entry in _activityHistory) {
       switch (entry.level) {
         case ActivityLevel.intense:
@@ -850,28 +858,28 @@ class ImprovedMeditationController {
           break;
       }
     }
-    
+
     // ANY intense activity blocks meditation (sprinting, very intense exercise)
     if (intenseCount > 0) {
       return true;
     }
-    
+
     // Each entry represents ~3 seconds (Timer.periodic interval)
     const secondsPerEntry = 3;
     final vigorousSeconds = vigorousCount * secondsPerEntry;
     final moderateSeconds = moderateCount * secondsPerEntry;
     final lightSeconds = lightCount * secondsPerEntry;
-    
+
     // Calculate percentages relative to actual time window
     final vigorousPercent = (vigorousSeconds / timeWindowSeconds) * 100;
     final moderatePercent = (moderateSeconds / timeWindowSeconds) * 100;
     final lightPercent = (lightSeconds / timeWindowSeconds) * 100;
-    
+
     // Check suppression criteria
     final suppressedByVigorous = vigorousPercent >= 5.0;
     final suppressedByModerate = moderatePercent >= 20.0;
     final suppressedByLight = lightPercent >= 40.0;
-    
+
     return suppressedByVigorous || suppressedByModerate || suppressedByLight;
   }
 
@@ -926,11 +934,13 @@ class ImprovedMeditationController {
     final assetPath = 'lib/apps/meditation/assets/$fileName';
     print('[EARSTREAM AUDIO] Loading asset: $assetPath');
     final bytes = await rootBundle.load(assetPath);
-    print('[EARSTREAM AUDIO] Asset loaded (${bytes.lengthInBytes} bytes), starting playback');
+    print(
+        '[EARSTREAM AUDIO] Asset loaded (${bytes.lengthInBytes} bytes), starting playback');
     await backgroundMusicPlayer.play(
       BytesSource(bytes.buffer.asUint8List()),
     );
-    print('[EARSTREAM AUDIO] backgroundMusicPlayer.play() called for $fileName');
+    print(
+        '[EARSTREAM AUDIO] backgroundMusicPlayer.play() called for $fileName');
   }
 
   /// Play background ambience based on user's environment preference
@@ -942,7 +952,8 @@ class ImprovedMeditationController {
               : userAccount.meditationEnvironment)
           .toLowerCase();
       _logger.i('Starting background ambience for environment: "$environment"');
-      print('[EARSTREAM AUDIO] _playBackgroundAmbience() — environment="$environment" (source: ${demoPreferences != null ? "demoPreferences" : "userAccount"})');
+      print(
+          '[EARSTREAM AUDIO] _playBackgroundAmbience() — environment="$environment" (source: ${demoPreferences != null ? "demoPreferences" : "userAccount"})');
 
       // Map environment preference to audio file
       if (environment.contains('ocean') || environment.contains('beach')) {

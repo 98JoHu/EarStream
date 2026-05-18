@@ -61,7 +61,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _fitnessLevel = account?.fitnessLevel ?? 'moderate';
     _voiceGender = account?.voiceGender ?? 'female';
     _meditationType = account?.meditationType ?? 'mindfulness';
-    _meditationEnvironment = account?.meditationEnvironment ?? 'peaceful nature';
+    _meditationEnvironment =
+        account?.meditationEnvironment ?? 'peaceful nature';
     _speakingSpeed = account?.speakingSpeed ?? 'slow';
     _stressThreshold = account?.stressThreshold ?? 0.10;
     _usePremiumVoice = account?.usePremiumVoice ?? false;
@@ -507,8 +508,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                       child: Text('👨 Male'),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _voiceGender = value!),
+                  onChanged: (value) => setState(() => _voiceGender = value!),
                 ),
                 const SizedBox(height: 24),
 
@@ -545,8 +545,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                       child: Text('🏃 Fast'),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _speakingSpeed = value!),
+                  onChanged: (value) => setState(() => _speakingSpeed = value!),
                 ),
                 const SizedBox(height: 24),
 
@@ -615,7 +614,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     DropdownMenuItem(
                         value: 'gentle garden', child: Text('🌸 Garden')),
                   ],
-                  onChanged: (value) => setState(() => _meditationEnvironment = value!),
+                  onChanged: (value) =>
+                      setState(() => _meditationEnvironment = value!),
                 ),
                 const SizedBox(height: 24),
 
@@ -627,7 +627,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   controller: _additionalPreferencesController,
                   maxLines: 3,
                   decoration: InputDecoration(
-                    hintText: 'E.g., "I prefer longer pauses" or "Focus on calming imagery"',
+                    hintText:
+                        'E.g., "I prefer longer pauses" or "Focus on calming imagery"',
                     filled: true,
                     fillColor: Colors.grey[100],
                     border: OutlineInputBorder(
@@ -739,9 +740,9 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                 const SizedBox(height: 24),
                 const Divider(),
                 const SizedBox(height: 16),
-                if (_usePremiumVoice) ...[
+                ...[
                   const Text(
-                    'Premium Voice Configuration',
+                    'ElevenLabs Voice Configuration',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
@@ -749,7 +750,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'These fields are used only for premium voice generation and are stored locally on this device.',
+                    'These fields are stored locally and used whenever valid ElevenLabs credentials are available.',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[600],
