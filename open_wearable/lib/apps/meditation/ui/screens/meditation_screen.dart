@@ -74,6 +74,7 @@ class _MeditationViewState extends State<MeditationView> {
   int _hrvMeasurementCount = 0; // Count HRV measurements received
   int _measurementDurationSeconds = 0; // Track how long we've been measuring
   Timer? _measurementTimer; // Timer to track measurement duration
+  DateTime? _lastChartTimestamp; // Gate: last time a point was added to the chart
 
   StreamSubscription<double>? _hrSubscription;
   StreamSubscription<Map<String, double>>? _hrvSubscription;
@@ -1414,6 +1415,7 @@ class _MeditationViewState extends State<MeditationView> {
       _hrvIsStable = _useMockSensor; // Mock sensor is always stable
       _hrvMeasurementCount = 0;
       _measurementDurationSeconds = 0;
+      _lastChartTimestamp = null;
     });
 
     // Start timer to track measurement duration
@@ -1439,11 +1441,21 @@ class _MeditationViewState extends State<MeditationView> {
         // and would show a misleading spike at the start of the chart.
         if (_hrIsStable) {
           final now = DateTime.now();
-          _hrHistory.add(HrDataPoint(timestamp: now, hr: hr));
+          // Throttle chart data for the mock sensor to match the real earable's
+          // natural ~5-second non-overlapping window cadence (buffer.clear() in
+          // ppg_filter_meditation.dart).  Real earable is left unthrottled.
+          final gateSeconds = _useMockSensor ? 5 : 0;
+          final elapsed = _lastChartTimestamp == null
+              ? gateSeconds + 1 // first point always passes
+              : now.difference(_lastChartTimestamp!).inSeconds;
+          if (elapsed >= gateSeconds) {
+            _lastChartTimestamp = now;
+            _hrHistory.add(HrDataPoint(timestamp: now, hr: hr));
 
-          // Keep only last 5 minutes of data (300 seconds)
-          final cutoffTime = now.subtract(const Duration(seconds: 300));
-          _hrHistory.removeWhere((point) => point.timestamp.isBefore(cutoffTime));
+            // Keep only last 5 minutes of data (300 seconds)
+            final cutoffTime = now.subtract(const Duration(seconds: 300));
+            _hrHistory.removeWhere((point) => point.timestamp.isBefore(cutoffTime));
+          }
         }
       });
     });
@@ -1544,31 +1556,55 @@ class _MeditationViewState extends State<MeditationView> {
   /// Sets up the 5-minute backdated history and starts the deterministic
   /// 2-minute scripted stress build-up on the mock sensor.
   void _launchStressScenario(MockHrSensor mock) {
-    // Generate 5-minute pre-fill using the same oscillation as the live sensor
-    // so both phases look visually identical:
-    //   HR = base + 1.5 * sin(t * 2π / 80)   (80 s period)
-    //   noise ±0.2 BPM
+    // Generate 5-minute pre-fill using the same Ornstein-Uhlenbeck process as
+    // the live sensor so both phases share the same statistical character.
+    //   alpha = 0.9672  (30 s time constant, same as sensor)
+    //   sigma_step = 0.763 BPM  (gives +-3 BPM steady-state range)
     //
-    // t = i − 299 so the last sample sits at t = 0 where sin(0) = 0.
-    // That means the last pre-fill value = exactly kScenarioBaseHr, giving a
-    // seamless join with the live scenario which also starts there.
+    // The OU state is tapered to 0 over the final 15 samples so the last point
+    // lands at exactly kScenarioBaseHr, giving a seamless join with the live
+    // scenario (which also starts with OU state = 0 at kScenarioBaseHr).
+    //
+    // Local Box-Muller Gaussian sampler — same algorithm as MockHrSensor.
+    double gaussSpare = 0.0;
+    bool   gaussHasSpare = false;
+    double nextG(Random r) {
+      if (gaussHasSpare) { gaussHasSpare = false; return gaussSpare; }
+      double u, v, s;
+      do { u = r.nextDouble() * 2 - 1; v = r.nextDouble() * 2 - 1; s = u*u+v*v; }
+      while (s >= 1.0 || s == 0.0);
+      final m = sqrt(-2.0 * log(s) / s);
+      gaussSpare = v * m; gaussHasSpare = true;
+      return u * m;
+    }
+
     final now = DateTime.now();
     final rng = Random();
+    double ouState = 0.0;
+    const double ouAlpha = 0.9672;
+    const double ouSigma = 0.763;
     final List<HrDataPoint> preFill = [];
     for (int i = 0; i < 300; i++) {
-      final t = (i - 299).toDouble(); // -299 … 0
-      final osc   = 1.5 * sin(t * 2 * pi / 80.0);
-      final noise = (rng.nextDouble() * 2 - 1) * 0.2;
-      preFill.add(HrDataPoint(
-        timestamp: now.subtract(Duration(seconds: 300 - i)),
-        hr: (MockHrSensor.kScenarioBaseHr + osc + noise).clamp(62.0, 74.0),
-      ));
+      ouState = ouAlpha * ouState + ouSigma * nextG(rng);
+      // Taper OU deviation to 0 over the last 15 steps for a clean seam.
+      if (i >= 285) ouState *= (299 - i) / 14.0;
+      // Only keep every 5th step (5-second spacing) to match the real earable's
+      // natural ~5-second non-overlapping window cadence.
+      if (i % 5 == 4) {
+        preFill.add(HrDataPoint(
+          timestamp: now.subtract(Duration(seconds: 300 - i)),
+          hr: (MockHrSensor.kScenarioBaseHr + ouState).clamp(62.0, 80.0),
+        ));
+      }
     }
 
     // Mark measurements as stable and pre-populate the current readings
     //    so the screen widgets stop showing the "warming up" state.
     setState(() {
       _hrHistory = preFill;
+      // Seed the gate timestamp so live mock-sensor ticks continue from
+      // the last pre-fill point without an immediate duplicate.
+      _lastChartTimestamp = preFill.isNotEmpty ? preFill.last.timestamp : null;
       _hrIsStable = true;
       _hrvIsStable = true;
       _measurementDurationSeconds = 300;

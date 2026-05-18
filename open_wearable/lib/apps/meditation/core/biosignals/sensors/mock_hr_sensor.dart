@@ -43,20 +43,58 @@ class MockHrSensor implements HrSensorInterface {
   DateTime? _scenarioStartTime;
   void Function()? _onScenarioPeakReached;
   bool _scenarioPeakFired = false;
+  // ── Ornstein-Uhlenbeck process for natural HR/HRV wandering ───────────────
+  // Both pre-fill and live scenario use the same OU parameters so the chart
+  // looks identical in character across all phases.
+  //
+  // The parameters are derived from the user's real resting PPG recording:
+  //   • time constant τ = 30 s  →  α = exp(-1/30) ≈ 0.9672 per 1-second tick
+  //   • steady-state std σ_hr  = 3.0 BPM  (matches Kalman-smoothed ±1.4 BPM
+  //     measured from recording; 3 BPM gives visible but realistic wandering)
+  //   • σ_step = σ * sqrt(1 - α²) ≈ 0.763 BPM per tick
+  //
+  // HRV uses a proportional 10 % steady-state band around the current target.
+  double _hrOuState  = 0.0;
+  double _hrvOuState = 0.0;
+  // Box-Muller spare value
+  double _gaussianSpare = 0.0;
+  bool   _gaussianHasSpare = false;
 
+  static const double _kOuAlpha    = 0.9672; // exp(-1/30)
+  static const double _kOuSigmaStep = 0.763;  // σ_step for ±3 BPM steady-state
+
+  /// Polar form of Box-Muller transform — returns standard-normal samples.
+  double _nextGaussian() {
+    if (_gaussianHasSpare) {
+      _gaussianHasSpare = false;
+      return _gaussianSpare;
+    }
+    double u, v, s;
+    do {
+      u = _random.nextDouble() * 2 - 1;
+      v = _random.nextDouble() * 2 - 1;
+      s = u * u + v * v;
+    } while (s >= 1.0 || s == 0.0);
+    final mul = sqrt(-2.0 * log(s) / s);
+    _gaussianSpare = v * mul;
+    _gaussianHasSpare = true;
+    return u * mul;
+  }
   // ── Relaxation scenario (gradual calm-down during meditation) ─────────────
   bool _relaxationActive = false;
   DateTime? _relaxationStartTime;
   double _relaxationStartHr = 75.0;
   double _relaxationStartHrv = 42.0;
-  static const double _kRelaxationTargetHr = 58.0;  // end-goal BPM
+  static const double _kRelaxationTargetHr = 62.0;  // end-goal BPM (~12% below resting 71)
   static const double _kRelaxationTargetHrv = 90.0; // end-goal RMSSD ms
   static const int _kRelaxationDurationSec = 360;   // 6-minute ramp
 
   // Scenario baseline / peak constants (public so the screen can pre-seed UI)
-  static const double kScenarioBaseHr = 67.0;
-  static const double kScenarioBaseHrv = 78.0;
-  static const double _kScenarioPeakHr = 97.0;
+  // Baseline derived from a real 110-second PPG recording (resting, not stressed):
+  //   median HR = 71.4 BPM, median 8-beat rolling RMSSD = 79.8 ms
+  static const double kScenarioBaseHr  = 71.0;
+  static const double kScenarioBaseHrv = 80.0;
+  static const double _kScenarioPeakHr  = 97.0;
   static const double _kScenarioPeakHrv = 12.0;
 
   /// Compute the scenario HR and HRV at the given elapsed seconds.
@@ -66,19 +104,22 @@ class MockHrSensor implements HrSensorInterface {
     double hr, hrv;
     // Phase 1 ends at 50 ms HRV; Phase 2 continues from there to peak.
     // (Keeping end-values in named locals avoids any discontinuity.)
+    // Phase 1 (0–90 s): HR 71→80, HRV 80→50  (neither threshold crossed yet)
+    // Phase 2 (90–120 s): HR 80→97, HRV 50→12  (both thresholds crossed at ~100 s)
+    const double phase1EndHr  = 80.0;
     const double phase1EndHrv = 50.0;
     if (tSec <= 90) {
       final frac = tSec / 90.0;
-      hr  = kScenarioBaseHr + 6.0 * frac; // 67 → 73
-      hrv = kScenarioBaseHrv - (kScenarioBaseHrv - phase1EndHrv) * frac; // 78 → 50
+      hr  = kScenarioBaseHr + (phase1EndHr - kScenarioBaseHr) * frac; // 71 -> 80
+      hrv = kScenarioBaseHrv - (kScenarioBaseHrv - phase1EndHrv) * frac; // 80 -> 50
     } else {
       final frac = ((tSec - 90) / 30.0).clamp(0.0, 1.0);
-      hr  = 73.0 + (_kScenarioPeakHr - 73.0) * frac; // 73 → 97
-      hrv = phase1EndHrv - (phase1EndHrv - _kScenarioPeakHrv) * frac; // 50 → 12
+      hr  = phase1EndHr + (_kScenarioPeakHr - phase1EndHr) * frac; // 80 -> 97
+      hrv = phase1EndHrv - (phase1EndHrv - _kScenarioPeakHrv) * frac; // 50 -> 12
     }
-    // Same 80 s oscillation as the pre-fill — phase is continuous at t = 0
-    hr  += 1.5 * sin(tSec * 2 * pi / 80.0);
-    hrv += hrv * 0.10 * sin(tSec * 2 * pi / 80.0);
+    // Same 80 s oscillation as the pre-fill — amplitude ±2 BPM matches the
+    // ±1.4 BPM Kalman-smoothed variation measured from the real recording.
+    // (Oscillation removed — OU process in the timer tick replaces it.)
     return (hr.clamp(40.0, 120.0), hrv.clamp(5.0, 200.0));
   }
 
@@ -92,11 +133,14 @@ class MockHrSensor implements HrSensorInterface {
     _scenarioStartTime = DateTime.now();
     _onScenarioPeakReached = onPeakReached;
     _scenarioPeakFired = false;
-    // Snap current values to scenario baseline so the chart starts clean
-    _currentHr = kScenarioBaseHr;
+    // Snap current values to scenario baseline so the chart starts clean.
+    // Reset OU state so the wandering starts fresh at zero deviation.
+    _currentHr  = kScenarioBaseHr;
     _currentHrv = kScenarioBaseHrv;
-    _targetHr = kScenarioBaseHr;
-    _targetHrv = kScenarioBaseHrv;
+    _targetHr   = kScenarioBaseHr;
+    _targetHrv  = kScenarioBaseHrv;
+    _hrOuState  = 0.0;
+    _hrvOuState = 0.0;
   }
 
   /// Stop the scripted scenario, reverting to target-based behaviour.
@@ -147,11 +191,14 @@ class MockHrSensor implements HrSensorInterface {
         final tSec =
             DateTime.now().difference(_scenarioStartTime!).inSeconds;
         final (sHr, sHrv) = _scenarioValues(tSec);
-        // Tiny per-tick noise — same magnitude as pre-fill
-        final hrNoise  = (_random.nextDouble() * 2 - 1) * 0.2; // ±0.2 BPM
-        final hrvNoise = (_random.nextDouble() * 2 - 1) * (sHrv * 0.12).clamp(3.0, 10.0);
-        _currentHr  = (sHr  + hrNoise ).clamp(40.0, 120.0);
-        _currentHrv = (sHrv + hrvNoise).clamp(5.0, 200.0);
+        // OU process: mean-reverting random walk around the deterministic
+        // trend.  Replicates the correlated slow wandering seen in real
+        // Kalman-filtered HR data (τ=30 s, ±3 BPM steady-state).
+        _hrOuState  = _kOuAlpha * _hrOuState  + _kOuSigmaStep * _nextGaussian();
+        final hrvOuSigma = (sHrv * 0.025).clamp(0.5, 3.0); // 2.5 % of target
+        _hrvOuState = _kOuAlpha * _hrvOuState + hrvOuSigma  * _nextGaussian();
+        _currentHr  = (sHr  + _hrOuState ).clamp(40.0, 120.0);
+        _currentHrv = (sHrv + _hrvOuState).clamp(5.0, 200.0);
         hr    = _currentHr;
         rmssd = _currentHrv;
 
@@ -171,15 +218,13 @@ class MockHrSensor implements HrSensorInterface {
             (_kRelaxationTargetHr  - _relaxationStartHr)  * ease;
         final baseHrv = _relaxationStartHrv +
             (_kRelaxationTargetHrv - _relaxationStartHrv) * ease;
-        // Same 80 s oscillation as stress scenario and pre-fill
-        final hrOscill  = 1.5 * sin(tSec * 2 * pi / 80.0);
-        final hrvOscill = baseHrv * 0.10 * sin(tSec * 2 * pi / 80.0);
-        // Tiny noise — same magnitude as the other phases
-        final hrNoise  = (_random.nextDouble() * 2 - 1) * 0.2;
-        final hrvNoise = (_random.nextDouble() * 2 - 1) *
-            (baseHrv * 0.10).clamp(3.0, 9.0);
-        _currentHr  = (baseHr  + hrOscill + hrNoise ).clamp(40.0, 120.0);
-        _currentHrv = (baseHrv + hrvOscill + hrvNoise).clamp(5.0, 200.0);
+        // Continue OU wandering around the relaxation ramp (OU state NOT
+        // reset so the transition from stress is smooth).
+        _hrOuState  = _kOuAlpha * _hrOuState  + _kOuSigmaStep * _nextGaussian();
+        final relaxHrvOuSigma = (baseHrv * 0.025).clamp(0.5, 3.0);
+        _hrvOuState = _kOuAlpha * _hrvOuState + relaxHrvOuSigma * _nextGaussian();
+        _currentHr  = (baseHr  + _hrOuState ).clamp(40.0, 120.0);
+        _currentHrv = (baseHrv + _hrvOuState).clamp(5.0, 200.0);
         hr    = _currentHr;
         rmssd = _currentHrv;
       } else {
