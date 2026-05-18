@@ -662,31 +662,95 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
     final double stressReduction = (hrChange + hrvChange) / 2;
 
+    final isDemo = widget.demoMode != DemoConfig.modeNone;
+    final isTimerMode = !widget.stressDetectionEnabled && !isDemo;
+
+    if (isDemo) {
+      // Full white-background screen for demo mode — cleaner for screenshots.
+      Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32.0, vertical: 48.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.celebration, color: Colors.green, size: 36),
+                        SizedBox(width: 12),
+                        Text(
+                          'Great!',
+                          style: TextStyle(
+                              fontSize: 26, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Your body has calmed down.',
+                      style: TextStyle(fontSize: 15),
+                    ),
+                    const SizedBox(height: 40),
+                    const Divider(),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'How do you feel right now?',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 18),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildMoodButton('😌', 'Very Relaxed',
+                            MoodRating.veryRelaxed, stressReduction),
+                        _buildMoodButton('😊', 'Relaxed',
+                            MoodRating.relaxed, stressReduction),
+                        _buildMoodButton('😐', 'Neutral',
+                            MoodRating.neutral, stressReduction),
+                        _buildMoodButton('😟', 'Stressed',
+                            MoodRating.stressed, stressReduction),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        final isDemo = widget.demoMode != DemoConfig.modeNone;
-        final isTimerMode = !widget.stressDetectionEnabled && !isDemo;
         return AlertDialog(
           title: Row(
             children: [
               const Icon(Icons.celebration, color: Colors.green),
               const SizedBox(width: 8),
-              Text(isDemo ? 'Great!' : 'Great, ${_userAccount?.name ?? ""}!'),
+              Text('Great, ${_userAccount?.name ?? ""}!'),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Your body has calmed down.',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               const SizedBox(height: 16),
-              if (!isDemo && !isTimerMode) ...[
+              if (!isTimerMode) ...[
                 const Text(
                   '💭 Stress monitoring is paused for 2 minutes to let you enjoy this calm state.',
                   style: TextStyle(
@@ -695,8 +759,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                       color: Colors.grey),
                 ),
                 const SizedBox(height: 20),
-              ],
-              if (!isDemo && !isTimerMode) ...[
                 Row(
                   children: [
                     Expanded(
@@ -746,13 +808,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                   children: [
                     _buildMoodButton('😌', 'Very Relaxed',
                         MoodRating.veryRelaxed, stressReduction),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     _buildMoodButton(
                         '😊', 'Relaxed', MoodRating.relaxed, stressReduction),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     _buildMoodButton(
                         '😐', 'Neutral', MoodRating.neutral, stressReduction),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     _buildMoodButton(
                         '😟', 'Stressed', MoodRating.stressed, stressReduction),
                   ],
@@ -931,6 +993,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Session info card with smooth transitions
+          if (!widget.stressDetectionEnabled)
           AnimatedSwitcher(
             duration: const Duration(
                 milliseconds: 150), // Reduced from 300ms for consistency

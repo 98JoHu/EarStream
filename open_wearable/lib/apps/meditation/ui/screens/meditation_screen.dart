@@ -485,9 +485,9 @@ class _MeditationViewState extends State<MeditationView> {
     switch (_demoPhase) {
       case DemoPhase.none:
       case DemoPhase.modeSelection:
-        phaseTitle = 'ACM UbiComp 2026 Demo Mode';
+        phaseTitle = 'ACM UbiComp 2026 Demo';
         phaseInstructions =
-            'Welcome to EarStream! This demo lets you experience a closed-loop earable system for stress-adaptive meditation. EarStream uses in-ear physiological sensing to monitor stress-related changes and can generate personalized guided meditations based on your preferences and current state. Please choose between two demo modes: a biosignal-adaptive meditation or a personalized meditation-only experience.';
+            'Welcome to EarStream! This demo lets you experience a closed-loop earable system for stress-adaptive meditation. Please choose between two demo modes to start your experience.';
         phaseIcon = Icons.campaign_outlined;
 
         // Mode selection buttons (Biosignal is primary)
@@ -532,11 +532,9 @@ class _MeditationViewState extends State<MeditationView> {
         break;
 
       case DemoPhase.settingPreferences:
-        phaseTitle = _demoSubMode == DemoConfig.modeBiosignalAdaptive
-            ? 'Meditation Preferences'
-            : 'Meditation Preferences';
-        phaseInstructions = 'Choose how the demo session should feel. '
-            'Settings are session-only and won\'t change your saved profile.';
+        phaseTitle = 'Meditation Preferences';
+        phaseInstructions =
+            'Please put in your preferences for your upcoming personalized meditation.';
         phaseIcon = Icons.spa_outlined;
 
         actionButton = _buildDemoPreferencesStepCard();
@@ -675,176 +673,150 @@ class _MeditationViewState extends State<MeditationView> {
       });
     }
 
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              setState(() {
+                _demoPreferences = DemoMeditationPreferences.random();
+              });
+            },
+            icon: const Icon(Icons.casino_outlined),
+            label: const Text('Surprise me'),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const Text('Voice Gender',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: currentPrefs.voiceGender,
+          decoration: _demoDropdownDecoration(),
+          items: const [
+            DropdownMenuItem(value: 'female', child: Text('👩 Female')),
+            DropdownMenuItem(value: 'male', child: Text('👨 Male')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              updatePreferences(voiceGender: value);
+            }
+          },
+        ),
+        const SizedBox(height: 24),
+        const Text('Speaking Speed',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: currentPrefs.speakingSpeed,
+          decoration: _demoDropdownDecoration(),
+          items: const [
+            DropdownMenuItem(value: 'very_slow', child: Text('🐌 Very Slow')),
+            DropdownMenuItem(
+                value: 'slow', child: Text('🐢 Slow (Recommended)')),
+            DropdownMenuItem(value: 'medium', child: Text('🚶 Medium')),
+            DropdownMenuItem(value: 'fast', child: Text('🏃 Fast')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              updatePreferences(speakingSpeed: value);
+            }
+          },
+        ),
+        const SizedBox(height: 24),
+        const Text('Meditation Type',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: currentPrefs.meditationStyle,
+          decoration: _demoDropdownDecoration(),
+          items: const [
+            DropdownMenuItem(
+                value: 'mindfulness', child: Text('🧘 Mindfulness')),
+            DropdownMenuItem(
+                value: 'breathing', child: Text('🌬️ Breathing')),
+            DropdownMenuItem(
+                value: 'body_scan', child: Text('💆 Body Scan')),
+            DropdownMenuItem(
+              value: 'visualization_journey',
+              child: Text('🌅 Visualization Journey'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              updatePreferences(meditationStyle: value);
+            }
+          },
+        ),
+        const SizedBox(height: 24),
+        const Text('Meditation Environment',
+            style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: currentPrefs.meditationEnvironment,
+          decoration: _demoDropdownDecoration(),
+          items: const [
+            DropdownMenuItem(
+              value: 'peaceful nature',
+              child: Text('🌳 Peaceful nature'),
+            ),
+            DropdownMenuItem(
+              value: 'calm ocean beach',
+              child: Text('🌊 Ocean beach'),
+            ),
+            DropdownMenuItem(
+              value: 'quiet mountain',
+              child: Text('⛰️ Mountain'),
+            ),
+            DropdownMenuItem(
+              value: 'serene forest',
+              child: Text('🌲 Forest'),
+            ),
+            DropdownMenuItem(
+              value: 'gentle garden',
+              child: Text('🌸 Garden'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              updatePreferences(meditationEnvironment: value);
+            }
+          },
+        ),
+        const SizedBox(height: 24),
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(Icons.tune_outlined, color: colorScheme.primary, size: 24),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Choose your demo meditation experience',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+            OutlinedButton.icon(
+              onPressed: _returnToDemoSelection,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back'),
+            ),
+            const Spacer(),
+            Flexible(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: _continueFromDemoPreferences,
+                  icon: const Icon(Icons.arrow_forward),
+                  label: Text(
+                    nextLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'These settings are session-only and won\'t affect your saved preferences.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                height: 1.4,
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _demoPreferences = DemoMeditationPreferences.random();
-                  });
-                },
-                icon: const Icon(Icons.casino_outlined),
-                label: const Text('Surprise me'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Voice Gender',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: currentPrefs.voiceGender,
-              decoration: _demoDropdownDecoration(),
-              items: const [
-                DropdownMenuItem(value: 'female', child: Text('👩 Female')),
-                DropdownMenuItem(value: 'male', child: Text('👨 Male')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  updatePreferences(voiceGender: value);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            const Text('Speaking Speed',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: currentPrefs.speakingSpeed,
-              decoration: _demoDropdownDecoration(),
-              items: const [
-                DropdownMenuItem(value: 'very_slow', child: Text('🐌 Very Slow')),
-                DropdownMenuItem(value: 'slow', child: Text('🐢 Slow')),
-                DropdownMenuItem(value: 'medium', child: Text('🚶 Medium')),
-                DropdownMenuItem(value: 'fast', child: Text('🏃 Fast')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  updatePreferences(speakingSpeed: value);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            const Text('Meditation Type',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: currentPrefs.meditationStyle,
-              decoration: _demoDropdownDecoration(),
-              items: const [
-                DropdownMenuItem(
-                    value: 'mindfulness', child: Text('🧘 Mindfulness')),
-                DropdownMenuItem(value: 'breathing', child: Text('🌬️ Breathing')),
-                DropdownMenuItem(value: 'body_scan', child: Text('💆 Body Scan')),
-                DropdownMenuItem(
-                  value: 'visualization_journey',
-                  child: Text('🌅 Visualization Journey'),
-                ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  updatePreferences(meditationStyle: value);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            const Text('Environment',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: currentPrefs.meditationEnvironment,
-              decoration: _demoDropdownDecoration(),
-              items: const [
-                DropdownMenuItem(
-                  value: 'peaceful nature',
-                  child: Text('🌳 Peaceful nature'),
-                ),
-                DropdownMenuItem(
-                  value: 'calm ocean beach',
-                  child: Text('🌊 Ocean beach'),
-                ),
-                DropdownMenuItem(
-                  value: 'quiet mountain',
-                  child: Text('⛰️ Mountain'),
-                ),
-                DropdownMenuItem(
-                  value: 'serene forest',
-                  child: Text('🌲 Forest'),
-                ),
-                DropdownMenuItem(
-                  value: 'gentle garden',
-                  child: Text('🌸 Garden'),
-                ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  updatePreferences(meditationEnvironment: value);
-                }
-              },
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _returnToDemoSelection,
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Back'),
-                ),
-                const Spacer(),
-                Flexible(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.icon(
-                      onPressed: _continueFromDemoPreferences,
-                      icon: const Icon(Icons.arrow_forward),
-                      label: Text(
-                        nextLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
