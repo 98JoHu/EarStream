@@ -88,12 +88,10 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - lib/apps/meditation/config/.env
+    - .env
     - lib/apps/posture_tracker/assets/
     - lib/apps/heart_tracker/assets/
-    - lib/apps/meditation/assets/
-    - lib/apps/meditation/assets/audio/
-    - lib/apps/meditation/assets/audio/backgrounds/
+    - lib/apps/meditation_app/assets/
     - android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
   # An image asset can refer to one or more resolution-specific "variants", seeq
