@@ -41,7 +41,7 @@ enum MeditationAppMode { normal, timer, test }
 
 class _MeditationViewState extends State<MeditationView> {
   static const String _ubicompLogoAsset =
-      'lib/apps/meditation/assets/Ubicomp_2025_Finland_Logo-300x169.jpg';
+      'lib/apps/meditation/assets/UbiComp26_Logo.png';
 
   Widget _buildUbicompLogoIcon({double height = 28}) {
     // Preserve original logo ratio (300x169) so the full width is visible.
@@ -487,7 +487,7 @@ class _MeditationViewState extends State<MeditationView> {
       case DemoPhase.modeSelection:
         phaseTitle = 'ACM UbiComp 2026 Demo Mode';
         phaseInstructions =
-            'Welcome! Please select a demo experience to showcase EarStream\'s capabilities:';
+            'Welcome to EarStream! This demo lets you experience a closed-loop earable system for stress-adaptive meditation. EarStream uses in-ear physiological sensing to monitor stress-related changes and can generate personalized guided meditations based on your preferences and current state. Please choose between two demo modes: a biosignal-adaptive meditation or a personalized meditation-only experience.';
         phaseIcon = Icons.campaign_outlined;
 
         // Mode selection buttons (Biosignal is primary)
@@ -533,8 +533,8 @@ class _MeditationViewState extends State<MeditationView> {
 
       case DemoPhase.settingPreferences:
         phaseTitle = _demoSubMode == DemoConfig.modeBiosignalAdaptive
-            ? 'Step 1 of 5 · Demo Preferences'
-            : 'Step 1 of 2 · Demo Preferences';
+            ? 'Meditation Preferences'
+            : 'Meditation Preferences';
         phaseInstructions = 'Choose how the demo session should feel. '
             'Settings are session-only and won\'t change your saved profile.';
         phaseIcon = Icons.spa_outlined;
@@ -543,7 +543,7 @@ class _MeditationViewState extends State<MeditationView> {
         break;
 
       case DemoPhase.sealCheck:
-        phaseTitle = 'Step 2 of 5 · Seal Check';
+        phaseTitle = 'Seal Check';
         phaseInstructions =
             'Confirm the earable has a good acoustic seal before calibration starts.';
         phaseIcon = Icons.verified_outlined;
