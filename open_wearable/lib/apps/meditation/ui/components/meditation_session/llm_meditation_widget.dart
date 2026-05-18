@@ -678,6 +678,27 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        child: Text.rich(
+                          TextSpan(
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            children: [
+                              const TextSpan(text: 'Meditation Mode: '),
+                              TextSpan(
+                                text: 'Demo',
+                                style: TextStyle(
+                                    color: theme.colorScheme.primary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
@@ -1250,8 +1271,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       widget.onStressLevelChanged?.call('stressed');
       print('✓ Set _stressDetected=true');
       if (!inCooldown && !beforeScheduledTime) {
-        print('✓✓✓ SHOWING STRESS PROMPT!');
-        _showStressPrompt();
+        print('✓✓✓ AUTO-STARTING MEDITATION (stress detected)!');
+        _attemptMeditationStart();
       } else {
         print(
             '✗ Not showing prompt - inCooldown=$inCooldown, beforeScheduledTime=$beforeScheduledTime');

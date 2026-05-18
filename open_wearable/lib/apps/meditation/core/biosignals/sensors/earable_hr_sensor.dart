@@ -546,20 +546,7 @@ class EarableHrSensor implements HrSensorInterface {
           final z = data.values[2];
 
           accelCount++;
-
-          // Log first 5 readings to verify data flow
-          if (accelCount <= 5) {
-            _logger.i(
-                'ACCEL #$accelCount: x=${x.toStringAsFixed(2)}, y=${y.toStringAsFixed(2)}, z=${z.toStringAsFixed(2)} m/s²');
-          }
-
           activityDetector.addAccelReading(x, y, z);
-
-          // Log activity level every 50 readings to verify detector is working
-          if (accelCount % 50 == 0) {
-            _logger.d(
-                'Activity level after $accelCount accel readings: ${activityDetector.activityLevel.name}');
-          }
         }
       }, onError: (error) {
         _logger.e('Accelerometer stream error: $error');
@@ -574,13 +561,6 @@ class EarableHrSensor implements HrSensorInterface {
           final z = data.values[2];
 
           gyroCount++;
-
-          // Log first 5 readings to verify data flow
-          if (gyroCount <= 5) {
-            _logger.i(
-                'GYRO #$gyroCount: x=${x.toStringAsFixed(2)}, y=${y.toStringAsFixed(2)}, z=${z.toStringAsFixed(2)} rad/s');
-          }
-
           activityDetector.addGyroReading(x, y, z);
         }
       }, onError: (error) {

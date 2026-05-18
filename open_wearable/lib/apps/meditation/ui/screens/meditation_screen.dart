@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_platform_widgets/flutter_platform_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,6 +93,7 @@ class _MeditationViewState extends State<MeditationView> {
   double? _demoBaselineRmssd;
   bool _isSealCheckRunning = false;
   bool _sealCheckCompleted = false;
+  bool _isStressScenarioActive = false; // True while the scripted demo scenario runs
   Object? _sealCheckError;
   Map<String, dynamic>? _sealCheckResult;
 
@@ -1059,6 +1061,82 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
+  /// Compact phase-status chip for the normal (biosignal-adaptive) mode.
+  /// Mirrors [_buildDemoStatusChip] so both modes have a consistent look.
+  Widget _buildNormalModeStatusChip() {
+    final theme = Theme.of(context);
+    final dur = _measurementDurationSeconds;
+    const calibrationEnd = 30;
+    const baselineEnd = 330; // 30 s calibration + 5 min baseline
+
+    IconData icon;
+    String label;
+    Color color;
+    Widget? trailing;
+
+    if (_isMeditationSessionActive) {
+      icon = Icons.self_improvement_outlined;
+      label = 'Meditation';
+      color = Colors.purple;
+    } else if (dur < calibrationEnd) {
+      icon = Icons.settings_outlined;
+      label = 'Calibration';
+      color = Colors.orange;
+      final progress = (dur / calibrationEnd).clamp(0.0, 1.0);
+      trailing = SizedBox(
+        width: 120,
+        child: LinearProgressIndicator(
+          value: progress,
+          color: color,
+          backgroundColor: color.withOpacity(0.2),
+        ),
+      );
+    } else if (dur < baselineEnd) {
+      icon = Icons.straighten_outlined;
+      label = 'Baseline Adjustment';
+      color = Colors.blue;
+      final progress =
+          ((dur - calibrationEnd) / (baselineEnd - calibrationEnd))
+              .clamp(0.0, 1.0);
+      trailing = SizedBox(
+        width: 120,
+        child: LinearProgressIndicator(
+          value: progress,
+          color: color,
+          backgroundColor: color.withOpacity(0.2),
+        ),
+      );
+    } else {
+      icon = Icons.monitor_heart_outlined;
+      label = 'Monitoring';
+      color = Colors.green;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 12), trailing],
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1435,28 +1513,75 @@ class _MeditationViewState extends State<MeditationView> {
     });
   }
 
-  void _simulateStress() async {
-    if (_sensor is MockHrSensor) {
-      // First reset to baseline to ensure stress values change significantly
-      (_sensor as MockHrSensor).reset();
-      print('Resetting to baseline first...');
-      _showSuccessSnackbar('Resetting to baseline...');
-
-      // Reset stress level display immediately
+  void _simulateStress() {
+    // If not using a MockHrSensor, switch to one now (e.g. earable is connected
+    // but user wants to run the deterministic demo scenario).
+    if (_sensor is! MockHrSensor) {
+      if (_earStreamActivated) {
+        _deactivateEarStream();
+      }
+      _sensor?.dispose();
       setState(() {
-        _stressLevel = 'relaxed';
+        _sensor = MockHrSensor();
+        _useMockSensor = true;
       });
-
-      // Wait for values to normalize - 3 seconds should be enough
-      // Mock sensor moves at 95% per second, so after 3s it's very close to target
-      await Future.delayed(const Duration(seconds: 3));
-
-      // Now simulate stress
-      (_sensor as MockHrSensor).simulateStress();
-      print(
-          'Simulating stress: HR -> 100 BPM, HRV -> 12 ms (triggers stress detection!)');
-      _showSuccessSnackbar('Simulating stress: HR↑100, HRV↓12ms');
     }
+    final mock = _sensor as MockHrSensor;
+
+    // Activate EarStream if not already running, then proceed
+    if (!_earStreamActivated) {
+      _activateEarStream().then((_) {
+        // Give streams a moment to connect before launching scenario
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) _launchStressScenario(mock);
+        });
+      });
+      return;
+    }
+    _launchStressScenario(mock);
+  }
+
+  /// Sets up the 5-minute backdated history and starts the deterministic
+  /// 2-minute scripted stress build-up on the mock sensor.
+  void _launchStressScenario(MockHrSensor mock) {
+    // Generate 5-minute pre-fill using the same oscillation as the live sensor
+    // so both phases look visually identical:
+    //   HR = base + 1.5 * sin(t * 2π / 80)   (80 s period)
+    //   noise ±0.2 BPM
+    //
+    // t = i − 299 so the last sample sits at t = 0 where sin(0) = 0.
+    // That means the last pre-fill value = exactly kScenarioBaseHr, giving a
+    // seamless join with the live scenario which also starts there.
+    final now = DateTime.now();
+    final rng = Random();
+    final List<HrDataPoint> preFill = [];
+    for (int i = 0; i < 300; i++) {
+      final t = (i - 299).toDouble(); // -299 … 0
+      final osc   = 1.5 * sin(t * 2 * pi / 80.0);
+      final noise = (rng.nextDouble() * 2 - 1) * 0.2;
+      preFill.add(HrDataPoint(
+        timestamp: now.subtract(Duration(seconds: 300 - i)),
+        hr: (MockHrSensor.kScenarioBaseHr + osc + noise).clamp(62.0, 74.0),
+      ));
+    }
+
+    // Mark measurements as stable and pre-populate the current readings
+    //    so the screen widgets stop showing the "warming up" state.
+    setState(() {
+      _hrHistory = preFill;
+      _hrIsStable = true;
+      _hrvIsStable = true;
+      _measurementDurationSeconds = 300;
+      _currentHr = MockHrSensor.kScenarioBaseHr;
+      _currentHrv = MockHrSensor.kScenarioBaseHrv;
+      _stressLevel = 'relaxed';
+      _isStressScenarioActive = true;
+    });
+
+    // 3. Start the scripted scenario on the sensor.
+    mock.startStressScenario();
+    print('[SCENARIO] Scripted stress build-up started (2 min to peak stress)');
+    _showSuccessSnackbar('Stress scenario started — watch HR rise over 2 min');
   }
 
   void _simulateRelaxation() {
@@ -2088,53 +2213,8 @@ class _MeditationViewState extends State<MeditationView> {
   }
 
   Future<bool> _ensureMeditationCanStart() async {
-    final account = await UserAccount.load();
-    if (_hasRequiredPersonalInfo(account)) {
-      return true;
-    }
-
-    if (!mounted) {
-      return false;
-    }
-
-    final shouldOpenSettings = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Personal Info Required'),
-        content: const Text(
-          'EarStream still needs a valid name and age before a meditation can start. Please complete Personal Info first.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not Now'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Open Personal Info'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldOpenSettings != true || !mounted) {
-      return false;
-    }
-
-    final updatedAccount =
-        await _openAccountSection(EarStreamAccountSection.personalInfo);
-    if (updatedAccount == null) {
-      return false;
-    }
-
-    final isReady = _hasRequiredPersonalInfo(updatedAccount);
-    if (!isReady && mounted) {
-      _showErrorDialog(
-        'Meditation cannot start until Personal Info contains a valid name and age.',
-      );
-    }
-
-    return isReady;
+    // Personal info is optional – always allow meditation to start.
+    return true;
   }
 
   Future<void> _closeDrawerAnd(Future<void> Function() action) async {
@@ -2331,6 +2411,17 @@ class _MeditationViewState extends State<MeditationView> {
                           if (_isDemoModeActive && _demoPhase != DemoPhase.none)
                             const SizedBox(height: 16),
 
+                          // Normal-mode status chip (mirrors _buildDemoStatusChip
+                          // for visual consistency with the demo biosignal-adaptive mode)
+                          if (!_isDemoModeActive &&
+                              _selectedMode == MeditationAppMode.normal &&
+                              _earStreamActivated)
+                            _buildNormalModeStatusChip(),
+                          if (!_isDemoModeActive &&
+                              _selectedMode == MeditationAppMode.normal &&
+                              _earStreamActivated)
+                            const SizedBox(height: 16),
+
                           // HR/HRV Display — only rendered once EarStream is active.
                           // Never shown in personalized-only demo mode or during
                           // mode selection.
@@ -2354,18 +2445,19 @@ class _MeditationViewState extends State<MeditationView> {
                                   ? (_sensor as EarableHrSensor)
                                       .activityLevel
                                       .name
-                                  : null,
+                                  : (_sensor is MockHrSensor ? 'resting' : null),
                               activityDescription: _sensor is EarableHrSensor
                                   ? _getActivityDescription(
                                       (_sensor as EarableHrSensor)
                                           .activityLevel)
-                                  : null,
-                              showMonitoring:
-                                  _selectedMode == MeditationAppMode.normal &&
-                                      _earStreamActivated,
+                                  : (_sensor is MockHrSensor ? 'Resting' : null),
+                              // Phase badge is now shown outside the widget
+                              // (as _buildNormalModeStatusChip / _buildDemoStatusChip)
+                              showMonitoring: false,
                               isMeditationSessionActive:
                                   _isMeditationSessionActive,
-                              maxDisplaySeconds: _isDemoModeActive ? 120 : 300,
+                              // 2-minute rolling window, matching demo mode
+                              maxDisplaySeconds: 120,
                             ),
                           if (!_isDemoModeActive ||
                               (_demoPhase != DemoPhase.none &&
@@ -2426,10 +2518,24 @@ class _MeditationViewState extends State<MeditationView> {
                                 }
                               },
                               onMeditationSessionActive: (active) {
-                                if (mounted) {
+                                if (!mounted) return;
+                                setState(() {
+                                  _isMeditationSessionActive = active;
+                                });
+                                // When the meditation session starts during a
+                                // scripted stress scenario, immediately switch
+                                // the mock sensor to relaxed values so the
+                                // session ends naturally after one segment.
+                                if (active &&
+                                    _isStressScenarioActive &&
+                                    _sensor is MockHrSensor) {
                                   setState(() {
-                                    _isMeditationSessionActive = active;
+                                    _isStressScenarioActive = false;
                                   });
+                                  (_sensor as MockHrSensor)
+                                      .startRelaxationScenario();
+                                  print(
+                                      '[SCENARIO] Meditation started — gradual 6-min relaxation ramp begun');
                                 }
                               },
                               demoMode: DemoConfig.modeNone,
@@ -2549,10 +2655,7 @@ class _MeditationViewState extends State<MeditationView> {
                               children: [
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: _useMockSensor &&
-                                            _sensor is MockHrSensor
-                                        ? _simulateStress
-                                        : null,
+                                    onPressed: _simulateStress,
                                     child: const Text('Simulate Stress'),
                                   ),
                                 ),

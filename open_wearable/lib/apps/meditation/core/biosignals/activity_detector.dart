@@ -70,13 +70,6 @@ class ActivityDetector {
     // When moving, magnitude deviates from 1g
     final deviation = (totalMagnitude - 1.0).abs();
 
-    // Occasional summary (every 100 readings ~10 seconds)
-    if (_accelReadingCount % 100 == 0) {
-      _logger.d(
-        'ACCEL #$_accelReadingCount: dev=${deviation.toStringAsFixed(3)}g (thresh=${_restingAccelThreshold}g)',
-      );
-    }
-
     _accelMagnitudeHistory.add(deviation);
     if (_accelMagnitudeHistory.length > _windowSize) {
       _accelMagnitudeHistory.removeAt(0);
@@ -98,13 +91,6 @@ class ActivityDetector {
 
     // Calculate angular velocity magnitude
     final magnitude = sqrt(degX * degX + degY * degY + degZ * degZ);
-
-    // Occasional summary (every 100 readings ~10 seconds)
-    if (_gyroReadingCount % 100 == 0) {
-      _logger.d(
-        'GYRO #$_gyroReadingCount: mag=${magnitude.toStringAsFixed(1)}°/s (thresh=$_restingGyroThreshold°/s)',
-      );
-    }
 
     _gyroMagnitudeHistory.add(magnitude);
     if (_gyroMagnitudeHistory.length > _windowSize) {
@@ -156,10 +142,7 @@ class ActivityDetector {
       }
     }
 
-    // Update if changed (ONLY log when activity level changes)
     if (newLevel != _currentActivityLevel) {
-      _logger.i('Activity: ${_currentActivityLevel.name} → ${newLevel.name} '
-          '(accel=${avgAccel.toStringAsFixed(3)}g, gyro=${avgGyro.toStringAsFixed(1)}°/s) - $reason');
       _currentActivityLevel = newLevel;
     }
   }

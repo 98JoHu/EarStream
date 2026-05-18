@@ -86,6 +86,7 @@ class PpgFilter {
   final double _hrMeasurementNoise = 5.0;
 
   double _hrvEstimateMs = 35.0;
+  bool _hrvInitialized = false; // seed from first real measurement, not 35ms prior
   final double _hrvSmoothingAlpha = 0.18;
 
   StreamSubscription<PpgMotionSample>? _motionSubscription;
@@ -311,6 +312,13 @@ class PpgFilter {
   double _smoothHrv(double measurementMs) {
     if (!measurementMs.isFinite || measurementMs <= 0) {
       return _hrvEstimateMs;
+    }
+    // On the first valid measurement, seed directly instead of blending from
+    // the 35ms prior — eliminates the initial drift artifact.
+    if (!_hrvInitialized) {
+      _hrvInitialized = true;
+      _hrvEstimateMs = measurementMs;
+      return measurementMs;
     }
     _hrvEstimateMs = (_hrvEstimateMs * (1.0 - _hrvSmoothingAlpha)) +
         (measurementMs * _hrvSmoothingAlpha);

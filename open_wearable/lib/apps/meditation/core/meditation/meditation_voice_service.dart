@@ -14,11 +14,10 @@ import 'package:path_provider/path_provider.dart';
 
 import '../storage/meditation_cache.dart';
 import '../../config/meditation_config.dart';
-import '../../config/meditation_runtime_config.dart';
 
 final _logger = Logger();
 
-/// High-quality voice service with ElevenLabs TTS.
+/// High-quality voice service with Qwen3-TTS (Alibaba DashScope).
 class MeditationVoiceService {
   final FlutterTts _flutterTts = FlutterTts();
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -27,8 +26,8 @@ class MeditationVoiceService {
   bool _isSpeaking = false;
   bool _usePremiumVoice = false;
   String _speakingSpeed = 'slow'; // 'very_slow', 'slow', 'medium', 'fast'
-  String _elevenLabsApiKey = MeditationConfig.elevenLabsApiKey;
-  String _elevenLabsVoiceId = MeditationConfig.elevenLabsVoiceId;
+  String _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
+  String _qwenVoice = 'Seren'; // Qwen3-TTS voice name; updated in initialize()
 
   // Map speaking speed to TTS rate values
   static const Map<String, double> _speedToRate = {
@@ -46,17 +45,16 @@ class MeditationVoiceService {
     String? elevenLabsVoiceId,
   }) async {
     _speakingSpeed = speakingSpeed;
-    _elevenLabsApiKey = MeditationRuntimeConfig.elevenLabsApiKey(
-          localValue: elevenLabsApiKey,
-        ).value ??
-        MeditationConfig.elevenLabsApiKey;
-    _elevenLabsVoiceId = MeditationRuntimeConfig.resolveElevenLabsVoiceId(
-      localValue: elevenLabsVoiceId,
-    );
+    // DashScope API key is read from .env (not per-user account)
+    _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
+    // Map voiceGender to Qwen3-TTS voice name
+    // Kai = "soothing audio spa for your ears" (male)
+    // Seren = "gentle, soothing voice to help you fall asleep faster" (female)
+    _qwenVoice = voiceGender == 'male' ? 'Kai' : 'Seren';
     _usePremiumVoice = usePremiumVoice || _hasValidPremiumVoiceConfig;
 
     _logger.i(
-      'Initializing voice (speed: $_speakingSpeed, premium: $_usePremiumVoice)',
+      'Initializing voice (speed: $_speakingSpeed, premium: $_usePremiumVoice, qwenVoice: $_qwenVoice)',
     );
 
     await _initializeFlutterTts();
@@ -64,12 +62,12 @@ class MeditationVoiceService {
 
     final willUsePremium = _usePremiumVoice && _hasValidPremiumVoiceConfig;
     _logger.i(
-      'Voice ready (${willUsePremium ? "using PREMIUM ElevenLabs TTS (\$\$\$)" : "using FREE Flutter TTS"})',
+      'Voice ready (${willUsePremium ? "using PREMIUM Qwen3-TTS" : "using FREE Flutter TTS"})',
     );
   }
 
   bool get _hasValidPremiumVoiceConfig =>
-      _elevenLabsApiKey != 'NONE' && _elevenLabsApiKey.length > 20;
+      _dashScopeApiKey != 'NONE' && _dashScopeApiKey.length > 10;
 
   Future<void> _initializeFlutterTts() async {
     try {
@@ -150,7 +148,7 @@ class MeditationVoiceService {
     }
   }
 
-  /// Speak text with ElevenLabs TTS (high quality).
+  /// Speak text using Qwen3-TTS (high quality) with Flutter TTS fallback.
   Future<void> speak(String text) async {
     print(
         '[EARSTREAM TTS] speak() called — initialized=$_isInitialized, speaking=$_isSpeaking, premium=$_usePremiumVoice');
@@ -173,7 +171,7 @@ class MeditationVoiceService {
 
     try {
       if (usePremiumVoiceNow) {
-        final success = await _tryElevenLabsTts(cleanedText);
+        final success = await _tryQwenTts(cleanedText);
         if (!success) {
           _logger.w('Premium voice failed, falling back to free voice');
           await _speakWithFlutterTts(cleanedText);
@@ -221,79 +219,92 @@ class MeditationVoiceService {
     return cleaned;
   }
 
-  Future<bool> _tryElevenLabsTts(String text) async {
+  Future<bool> _tryQwenTts(String text) async {
     try {
       final cachedFile =
           await MeditationCache.getCachedAudio(text, isPremiumVoice: true);
       if (cachedFile != null) {
-        _logger.i('Using cached premium TTS audio (saves 1 API request)');
-        await _audioPlayer.setAudioContext(
-          AudioContext(
-            iOS: AudioContextIOS(
-              category: AVAudioSessionCategory.playback,
-              options: {
-                AVAudioSessionOptions.mixWithOthers,
-                AVAudioSessionOptions.duckOthers,
-              },
-            ),
-            android: AudioContextAndroid(
-              isSpeakerphoneOn: false,
-              stayAwake: false,
-              contentType: AndroidContentType.speech,
-              usageType: AndroidUsageType.media,
-              audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-            ),
-          ),
-        );
-
-        await _audioPlayer.play(DeviceFileSource(cachedFile.path));
-        await _audioPlayer.onPlayerComplete.first;
+        _logger.i('Using cached Qwen3-TTS audio (saves 1 API request)');
+        await _playAudioFile(cachedFile);
         return true;
       }
 
-      final voiceId = _elevenLabsVoiceId;
-
-      _logger.i('ElevenLabs TTS: $voiceId - API REQUEST');
-
       if (!_hasValidPremiumVoiceConfig) {
-        _logger.i('No API key configured -> Using Flutter TTS fallback');
+        _logger.i('No DashScope API key configured -> Flutter TTS fallback');
         return false;
       }
 
-      final response = await http
+      _logger.i('Qwen3-TTS: voice=$_qwenVoice — API REQUEST');
+
+      // Step 1: Request audio generation from DashScope
+      final ttsResponse = await http
           .post(
-            Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/$voiceId'),
+            Uri.parse(
+              // International (Singapore) region endpoint
+              'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+            ),
             headers: {
-              'xi-api-key': _elevenLabsApiKey,
+              'Authorization': 'Bearer $_dashScopeApiKey',
               'Content-Type': 'application/json',
-              'Accept': 'audio/mpeg',
             },
             body: jsonEncode({
-              'text': text,
-              'model_id': 'eleven_turbo_v2',
-              'voice_settings': {
-                'stability': 0.65, // Meditation-optimized: calm and stable
-                'similarity_boost': 0.80, // Maintain voice consistency
-                'style': 0.35,
-                'use_speaker_boost': true,
+              'model': 'qwen3-tts-flash', // stable alias
+              'input': {
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {'type': 'text', 'text': text}
+                    ]
+                  }
+                ]
+              },
+              'parameters': {
+                'voice': _qwenVoice,
+                'language_type': 'English',
               },
             }),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30));
 
-      if (response.statusCode != 200) {
+      if (ttsResponse.statusCode != 200) {
         _logger.w(
-          'ElevenLabs TTS API error: ${response.statusCode} - ${response.body}',
+          'Qwen3-TTS API error: ${ttsResponse.statusCode} — ${ttsResponse.body}',
         );
         return false;
       }
 
-      if (response.bodyBytes.isEmpty) {
-        _logger.w('No audio bytes in ElevenLabs response');
+      final responseJson =
+          jsonDecode(ttsResponse.body) as Map<String, dynamic>;
+      final audioUrl =
+          ((responseJson['output'] as Map<String, dynamic>?)?['audio']
+                  as Map<String, dynamic>?)?['url'] as String?;
+
+      if (audioUrl == null || audioUrl.isEmpty) {
+        _logger.w(
+            'Qwen3-TTS: no audio URL in response: ${ttsResponse.body}');
         return false;
       }
 
-      final audioBytes = response.bodyBytes;
+      // Step 2: Download the audio from the returned URL
+      _logger.i('Qwen3-TTS: downloading audio...');
+      final audioResponse = await http
+          .get(Uri.parse(audioUrl))
+          .timeout(const Duration(seconds: 30));
+
+      if (audioResponse.statusCode != 200) {
+        _logger.w(
+          'Qwen3-TTS audio download failed: ${audioResponse.statusCode}',
+        );
+        return false;
+      }
+
+      if (audioResponse.bodyBytes.isEmpty) {
+        _logger.w('Qwen3-TTS: empty audio bytes in download');
+        return false;
+      }
+
+      final audioBytes = audioResponse.bodyBytes;
       final cachedAudioFile = await MeditationCache.cacheAudio(
         text,
         audioBytes,
@@ -301,32 +312,8 @@ class MeditationVoiceService {
       );
 
       final playFile = cachedAudioFile ?? await _createTempFile(audioBytes);
-
-      _logger.i('Playing high-quality ElevenLabs TTS audio');
-
-      await _audioPlayer.setAudioContext(
-        AudioContext(
-          iOS: AudioContextIOS(
-            category: AVAudioSessionCategory.playback,
-            options: {
-              AVAudioSessionOptions.mixWithOthers,
-              AVAudioSessionOptions.duckOthers,
-            },
-          ),
-          android: AudioContextAndroid(
-            isSpeakerphoneOn: false,
-            stayAwake: false,
-            contentType: AndroidContentType.speech,
-            usageType: AndroidUsageType.media,
-            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-          ),
-        ),
-      );
-
-      await _audioPlayer.setReleaseMode(ReleaseMode.release);
-      await _audioPlayer.play(DeviceFileSource(playFile.path));
-      await _audioPlayer.onPlayerComplete.first;
-
+      _logger.i('Playing Qwen3-TTS audio');
+      await _playAudioFile(playFile);
       await Future.delayed(const Duration(milliseconds: 100));
 
       if (cachedAudioFile == null) {
@@ -337,12 +324,36 @@ class MeditationVoiceService {
         }
       }
 
-      _logger.i('ElevenLabs TTS playback complete');
+      _logger.i('Qwen3-TTS playback complete');
       return true;
     } catch (e) {
-      _logger.w('ElevenLabs TTS error: $e - Using fallback');
+      _logger.w('Qwen3-TTS error: $e — Using Flutter TTS fallback');
       return false;
     }
+  }
+
+  Future<void> _playAudioFile(File file) async {
+    await _audioPlayer.setAudioContext(
+      AudioContext(
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: {
+            AVAudioSessionOptions.mixWithOthers,
+            AVAudioSessionOptions.duckOthers,
+          },
+        ),
+        android: AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: false,
+          contentType: AndroidContentType.speech,
+          usageType: AndroidUsageType.media,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        ),
+      ),
+    );
+    await _audioPlayer.setReleaseMode(ReleaseMode.release);
+    await _audioPlayer.play(DeviceFileSource(file.path));
+    await _audioPlayer.onPlayerComplete.first;
   }
 
   Future<File> _createTempFile(List<int> audioBytes) async {

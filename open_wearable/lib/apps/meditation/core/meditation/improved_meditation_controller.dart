@@ -60,7 +60,7 @@ class ImprovedMeditationController {
   double _baselineHr = 75.0;
   double _baselineHrv = 50.0;
   double _currentHr = 75.0;
-  double _currentHrv = 50.0;
+  double _currentHrv = -1.0; // -1 = no data yet; seeded from first real measurement
 
   // Calibration state
   bool _isCalibrating = true;
