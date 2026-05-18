@@ -181,6 +181,12 @@ class HrHrvDisplayNew extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          // Heartbeat history chart (shows when we have HR history data)
+          if (hrHistory.isNotEmpty) ...[
+            _HrHistoryChart(hrHistory: hrHistory),
+            const SizedBox(height: 8),
+          ],
         ],
       ),
     );
