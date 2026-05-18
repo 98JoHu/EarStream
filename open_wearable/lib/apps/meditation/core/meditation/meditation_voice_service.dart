@@ -46,7 +46,6 @@ class MeditationVoiceService {
     String? elevenLabsVoiceId,
   }) async {
     _speakingSpeed = speakingSpeed;
-    _usePremiumVoice = usePremiumVoice;
     _elevenLabsApiKey = MeditationRuntimeConfig.elevenLabsApiKey(
           localValue: elevenLabsApiKey,
         ).value ??
@@ -54,6 +53,7 @@ class MeditationVoiceService {
     _elevenLabsVoiceId = MeditationRuntimeConfig.resolveElevenLabsVoiceId(
       localValue: elevenLabsVoiceId,
     );
+    _usePremiumVoice = usePremiumVoice || _hasValidPremiumVoiceConfig;
 
     _logger.i(
       'Initializing voice (speed: $_speakingSpeed, premium: $_usePremiumVoice)',
@@ -95,7 +95,6 @@ class MeditationVoiceService {
       _logger.w('iOS audio category setup failed (non-iOS?): $e');
     }
     try {
-
       final voices = await _flutterTts.getVoices;
       if (voices != null && voices.isNotEmpty) {
         final enVoices = voices
@@ -153,7 +152,8 @@ class MeditationVoiceService {
 
   /// Speak text with ElevenLabs TTS (high quality).
   Future<void> speak(String text) async {
-    print('[EARSTREAM TTS] speak() called — initialized=$_isInitialized, speaking=$_isSpeaking, premium=$_usePremiumVoice');
+    print(
+        '[EARSTREAM TTS] speak() called — initialized=$_isInitialized, speaking=$_isSpeaking, premium=$_usePremiumVoice');
     if (!_isInitialized) {
       print('[EARSTREAM TTS] Not yet initialized — calling initialize()');
       await initialize();
@@ -169,9 +169,10 @@ class MeditationVoiceService {
 
     _isSpeaking = true;
     final cleanedText = _cleanTextForTTS(text);
+    final usePremiumVoiceNow = _hasValidPremiumVoiceConfig;
 
     try {
-      if (_usePremiumVoice) {
+      if (usePremiumVoiceNow) {
         final success = await _tryElevenLabsTts(cleanedText);
         if (!success) {
           _logger.w('Premium voice failed, falling back to free voice');
@@ -355,7 +356,8 @@ class MeditationVoiceService {
 
   Future<void> _speakWithFlutterTts(String text) async {
     _logger.i('Using Flutter TTS fallback');
-    print('[EARSTREAM TTS] _speakWithFlutterTts() — text length=${text.length}');
+    print(
+        '[EARSTREAM TTS] _speakWithFlutterTts() — text length=${text.length}');
 
     try {
       if (!kIsWeb && Platform.isIOS) {
@@ -399,9 +401,11 @@ class MeditationVoiceService {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 
-      print('[EARSTREAM TTS] Calling flutterTts.speak() with ${cleanText.length} chars, focus=true');
+      print(
+          '[EARSTREAM TTS] Calling flutterTts.speak() with ${cleanText.length} chars, focus=true');
       final result = await _flutterTts.speak(cleanText, focus: true);
-      print('[EARSTREAM TTS] flutterTts.speak() returned: $result (1=queued, 0=already speaking)');
+      print(
+          '[EARSTREAM TTS] flutterTts.speak() returned: $result (1=queued, 0=already speaking)');
 
       try {
         await completer.future.timeout(const Duration(seconds: 45));

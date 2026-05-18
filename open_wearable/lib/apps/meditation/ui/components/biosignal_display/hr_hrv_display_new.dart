@@ -14,7 +14,8 @@ class HrHrvDisplayNew extends StatelessWidget {
   final String? activityLevel; // Activity level from accelerometer/gyroscope
   final String? activityDescription; // Human-readable activity description
   final bool showMonitoring; // Show monitoring indicator
-  final bool isMeditationSessionActive; // True when a meditation session is running
+  final bool
+      isMeditationSessionActive; // True when a meditation session is running
 
   const HrHrvDisplayNew({
     super.key,
@@ -23,7 +24,8 @@ class HrHrvDisplayNew extends StatelessWidget {
     this.hrHistory = const [], // HR history for chart display
     this.isHrStable = false, // Default to false - require explicit stable state
     required this.stressLevel,
-    this.isHrvStable = false, // Default to false - require explicit stable state
+    this.isHrvStable =
+        false, // Default to false - require explicit stable state
     this.measurementDurationSeconds,
     this.activityLevel,
     this.activityDescription,
@@ -78,13 +80,16 @@ class HrHrvDisplayNew extends StatelessWidget {
                   icon: Icons.favorite,
                   iconColor: const Color(0xFFFF6B6B),
                   label: 'Heart Rate',
-                  value: (measurementDurationSeconds == null || measurementDurationSeconds! < 30)
+                  value: (measurementDurationSeconds == null ||
+                          measurementDurationSeconds! < 30)
                       ? 'Loading...'
-                      : (isHrStable 
+                      : (isHrStable
                           ? '${hr.toStringAsFixed(0)} BPM'
                           : 'Measuring...'),
                   iconBackground: const Color(0xFFFFE5E5),
-                  isLoading: measurementDurationSeconds == null || measurementDurationSeconds! < 30 || !isHrStable,
+                  isLoading: measurementDurationSeconds == null ||
+                      measurementDurationSeconds! < 30 ||
+                      !isHrStable,
                 ),
               ),
               const SizedBox(width: 8),
@@ -93,7 +98,8 @@ class HrHrvDisplayNew extends StatelessWidget {
                   icon: Icons.show_chart,
                   iconColor: const Color(0xFF4ECDC4),
                   label: 'RMSSD',
-                  value: (measurementDurationSeconds == null || measurementDurationSeconds! < 60)
+                  value: (measurementDurationSeconds == null ||
+                          measurementDurationSeconds! < 60)
                       ? 'Loading...'
                       : (hrv < 0
                           ? 'Loading...'
@@ -101,7 +107,10 @@ class HrHrvDisplayNew extends StatelessWidget {
                               ? '${hrv.toStringAsFixed(1)} ms'
                               : 'Measuring...')),
                   iconBackground: const Color(0xFFE0F7F6),
-                  isLoading: measurementDurationSeconds == null || measurementDurationSeconds! < 60 || hrv < 0 || !isHrvStable,
+                  isLoading: measurementDurationSeconds == null ||
+                      measurementDurationSeconds! < 60 ||
+                      hrv < 0 ||
+                      !isHrvStable,
                 ),
               ),
             ],
@@ -109,22 +118,6 @@ class HrHrvDisplayNew extends StatelessWidget {
           if (showMonitoring) ...[
             const SizedBox(height: 8),
             _buildMonitoringChip(),
-          ],
-          // HR History Chart below the metrics - only show after 30 seconds
-          // and exclude data from the loading phase (first 30 seconds)
-          if (hrHistory.isNotEmpty && 
-              measurementDurationSeconds != null && 
-              measurementDurationSeconds! >= 30 && 
-              isHrStable) ...[
-            const SizedBox(height: 12),
-            _HrHistoryChart(
-              hrHistory: hrHistory.where((point) {
-                final cutoffTime = DateTime.now().subtract(
-                  Duration(seconds: measurementDurationSeconds! - 30)
-                );
-                return point.timestamp.isAfter(cutoffTime);
-              }).toList(),
-            ),
           ],
           const SizedBox(height: 10),
           Container(
@@ -188,6 +181,12 @@ class HrHrvDisplayNew extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          // Heartbeat history chart (shows when we have HR history data)
+          if (hrHistory.isNotEmpty) ...[
+            _HrHistoryChart(hrHistory: hrHistory),
+            const SizedBox(height: 8),
+          ],
         ],
       ),
     );
@@ -216,7 +215,8 @@ class HrHrvDisplayNew extends StatelessWidget {
       icon = Icons.straighten_outlined;
       label = 'Monitoring \u00b7 Baseline Adjustment';
       color = Colors.blue;
-      progress = ((dur - calibrationEnd) / (baselineEnd - calibrationEnd)).clamp(0.0, 1.0);
+      progress = ((dur - calibrationEnd) / (baselineEnd - calibrationEnd))
+          .clamp(0.0, 1.0);
     } else {
       icon = Icons.monitor_heart;
       label = 'Monitoring';
@@ -435,30 +435,31 @@ class _HrChartPainter extends CustomPainter {
     final hrValues = hrHistory.map((e) => e.hr).toList();
     final minHr = hrValues.reduce((a, b) => a < b ? a : b);
     final maxHr = hrValues.reduce((a, b) => a > b ? a : b);
-    
+
     // Add padding to the range
     final hrRange = maxHr - minHr;
     final paddedMin = (minHr - hrRange * 0.1).floorToDouble();
     final paddedMax = (maxHr + hrRange * 0.1).ceilToDouble();
     final range = paddedMax - paddedMin;
-    
+
     if (range == 0) return;
 
     // Dynamic time range: calculate actual data span
     final oldestPoint = hrHistory.first.timestamp;
     final newestPoint = hrHistory.last.timestamp;
     final dataSpanSeconds = newestPoint.difference(oldestPoint).inSeconds;
-    
+
     // Determine time window to display (at least 1 minute, up to 5 minutes)
-    final displaySeconds = dataSpanSeconds < 60 
+    final displaySeconds = dataSpanSeconds < 60
         ? 60 // Show at least 1 minute window even if less data
         : (dataSpanSeconds > 300 ? 300 : dataSpanSeconds); // Cap at 5 minutes
-    
+
     // Use newest data point as reference (not current time) to prevent leftward drift
     final startTime = newestPoint.subtract(Duration(seconds: displaySeconds));
 
     // Define chart area (leave space for labels)
-    const double yAxisWidth = 28; // Space for y-axis labels on the left (reduced to maximize chart area)
+    const double yAxisWidth =
+        28; // Space for y-axis labels on the left (reduced to maximize chart area)
     const double bottomMargin = 20; // Space for x-axis labels
     final chartWidth = size.width - yAxisWidth;
     final chartHeight = size.height - bottomMargin;
@@ -475,7 +476,7 @@ class _HrChartPainter extends CustomPainter {
       text: TextSpan(text: '${paddedMin.toInt()}', style: textStyle),
       textDirection: TextDirection.ltr,
     )..layout();
-    
+
     final maxHrText = TextPainter(
       text: TextSpan(text: '${paddedMax.toInt()}', style: textStyle),
       textDirection: TextDirection.ltr,
@@ -487,7 +488,7 @@ class _HrChartPainter extends CustomPainter {
     // Draw x-axis time labels - dynamic based on time window
     final List<String> labels;
     final List<double> positions;
-    
+
     if (displaySeconds <= 60) {
       // 0-60s: show 60s, 30s, 0s
       labels = ['1m', '0.5m', '0m'];
@@ -516,7 +517,7 @@ class _HrChartPainter extends CustomPainter {
         text: TextSpan(text: label, style: textStyle),
         textDirection: TextDirection.ltr,
       )..layout();
-      
+
       final x = yAxisWidth + positions[i] * chartWidth - textPainter.width / 2;
       final y = chartHeight + 4;
       textPainter.paint(canvas, Offset(x, y));
@@ -532,13 +533,13 @@ class _HrChartPainter extends CustomPainter {
       Offset(size.width, 0),
       gridPaint,
     );
-    
+
     canvas.drawLine(
       Offset(yAxisWidth, chartHeight / 2),
       Offset(size.width, chartHeight / 2),
       gridPaint,
     );
-    
+
     canvas.drawLine(
       Offset(yAxisWidth, chartHeight),
       Offset(size.width, chartHeight),
@@ -581,19 +582,19 @@ class _HrChartPainter extends CustomPainter {
 
     final path = Path();
     bool firstPoint = true;
-    
+
     final displayMilliseconds = displaySeconds * 1000.0;
 
     for (var i = 0; i < hrHistory.length; i++) {
       final dataPoint = hrHistory[i];
-      
+
       // Skip data points outside the time window (before startTime)
       if (dataPoint.timestamp.isBefore(startTime)) continue;
-      
+
       // Calculate x position based on timestamp (relative to dynamic time window)
       final timeDiff = dataPoint.timestamp.difference(startTime).inMilliseconds;
       final x = yAxisWidth + (timeDiff / displayMilliseconds) * chartWidth;
-      
+
       // Calculate y position based on HR value
       final normalizedHr = (dataPoint.hr - paddedMin) / range;
       final y = chartHeight - (normalizedHr * chartHeight);
@@ -616,13 +617,13 @@ class _HrChartPainter extends CustomPainter {
     for (var dataPoint in hrHistory) {
       // Skip data points outside the time window (before startTime)
       if (dataPoint.timestamp.isBefore(startTime)) continue;
-      
+
       final timeDiff = dataPoint.timestamp.difference(startTime).inMilliseconds;
       final x = yAxisWidth + (timeDiff / displayMilliseconds) * chartWidth;
-      
+
       final normalizedHr = (dataPoint.hr - paddedMin) / range;
       final y = chartHeight - (normalizedHr * chartHeight);
-      
+
       canvas.drawCircle(Offset(x, y), 3, dotPaint);
     }
   }

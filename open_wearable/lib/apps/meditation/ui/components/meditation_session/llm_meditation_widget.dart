@@ -1,5 +1,7 @@
 // ignore_for_file: require_trailing_commas
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/meditation/improved_meditation_controller.dart';
 import '../../../core/meditation/improved_meditation_llm_service.dart';
@@ -19,7 +21,7 @@ class LlmMeditationWidget extends StatefulWidget {
   final Future<bool> Function()? onBeforeStartMeditation;
   final void Function(String stressLevel)? onStressLevelChanged;
   final bool stressDetectionEnabled;
-  
+
   // Demo mode support
   final String demoMode;
   final DemoMeditationPreferences? demoPreferences;
@@ -63,6 +65,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   bool _isInitializing = true;
   DateTime? _lastMeditationCompletionTime;
   DateTime? _scheduledMeditationTime; // Track when meditation is scheduled
+  Timer? _pendingStressPromptTimer;
   int _currentSegment = 0;
   int _totalSegments = 10;
   Duration _sessionElapsed = Duration.zero;
@@ -91,6 +94,26 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       return false;
     }
     return _attemptMeditationStart();
+  }
+
+  Future<void> stopMeditationAndClearPendingActions() async {
+    _pendingStressPromptTimer?.cancel();
+    _pendingStressPromptTimer = null;
+
+    if (_controller != null) {
+      await _controller!.stopSession();
+      _controller!.stopMonitoring();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stressDetected = false;
+      _scheduledMeditationTime = null;
+      _lastMeditationCompletionTime = null;
+    });
   }
 
   @override
@@ -136,14 +159,18 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
     // Initialize services
     _voiceService = MeditationVoiceService();
+    final hasValidPremiumVoice =
+        _userAccount!.elevenLabsApiKey.trim().length > 20 &&
+            _userAccount!.elevenLabsVoiceId.trim().isNotEmpty;
     await _voiceService!.initialize(
       voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
           ? widget.demoPreferences!.voiceGender
           : _userAccount!.voiceGender,
-      speakingSpeed: (widget.demoMode != 'none' && widget.demoPreferences != null)
-          ? widget.demoPreferences!.speakingSpeed
-          : _userAccount!.speakingSpeed,
-      usePremiumVoice: _userAccount!.usePremiumVoice,
+      speakingSpeed:
+          (widget.demoMode != 'none' && widget.demoPreferences != null)
+              ? widget.demoPreferences!.speakingSpeed
+              : _userAccount!.speakingSpeed,
+      usePremiumVoice: _userAccount!.usePremiumVoice || hasValidPremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
     );
@@ -239,13 +266,18 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // because stress-detection-based auto-start is disabled (personalised) or
     // already satisfied in the monitoring phase (biosignal-adaptive).
     if (widget.demoMode != 'none') {
-      print('[EARSTREAM] Demo mode (${widget.demoMode}) – scheduling auto-start of meditation session');
+      print(
+          '[EARSTREAM] Demo mode (${widget.demoMode}) – scheduling auto-start of meditation session');
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _currentState == MeditationState.idle && _controller != null) {
-          print('[EARSTREAM] Auto-starting meditation session for demo mode: ${widget.demoMode}');
+        if (mounted &&
+            _currentState == MeditationState.idle &&
+            _controller != null) {
+          print(
+              '[EARSTREAM] Auto-starting meditation session for demo mode: ${widget.demoMode}');
           _startMeditation();
         } else {
-          print('[EARSTREAM] Auto-start skipped: mounted=$mounted, state=$_currentState, controller=$_controller');
+          print(
+              '[EARSTREAM] Auto-start skipped: mounted=$mounted, state=$_currentState, controller=$_controller');
         }
       });
     }
@@ -292,12 +324,14 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
       _voiceService = MeditationVoiceService();
       await _voiceService!.initialize(
-        voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
-            ? widget.demoPreferences!.voiceGender
-            : _userAccount!.voiceGender,
-        speakingSpeed: (widget.demoMode != 'none' && widget.demoPreferences != null)
-            ? widget.demoPreferences!.speakingSpeed
-            : _userAccount!.speakingSpeed,
+        voiceGender:
+            (widget.demoMode != 'none' && widget.demoPreferences != null)
+                ? widget.demoPreferences!.voiceGender
+                : _userAccount!.voiceGender,
+        speakingSpeed:
+            (widget.demoMode != 'none' && widget.demoPreferences != null)
+                ? widget.demoPreferences!.speakingSpeed
+                : _userAccount!.speakingSpeed,
         usePremiumVoice: _userAccount!.usePremiumVoice,
         elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
         elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
@@ -328,7 +362,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
             setState(() {
               _currentState = state;
             });
-            widget.onMeditationSessionActive?.call(state != MeditationState.idle);
+            widget.onMeditationSessionActive
+                ?.call(state != MeditationState.idle);
           }
         },
         onStatusMessage: (message) {
@@ -416,9 +451,10 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
           ? widget.demoPreferences!.voiceGender
           : _userAccount!.voiceGender,
-      speakingSpeed: (widget.demoMode != 'none' && widget.demoPreferences != null)
-          ? widget.demoPreferences!.speakingSpeed
-          : _userAccount!.speakingSpeed,
+      speakingSpeed:
+          (widget.demoMode != 'none' && widget.demoPreferences != null)
+              ? widget.demoPreferences!.speakingSpeed
+              : _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
@@ -578,13 +614,14 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
 
   void _scheduleDelayedMeditation(Duration delay) {
     final scheduledTime = DateTime.now().add(delay);
+    _pendingStressPromptTimer?.cancel();
     setState(() {
       _statusMessage = 'Meditation scheduled in ${delay.inMinutes} minutes';
       _stressDetected = false;
       _scheduledMeditationTime = scheduledTime;
     });
 
-    Future.delayed(delay, () {
+    _pendingStressPromptTimer = Timer(delay, () {
       if (mounted && _currentState == MeditationState.idle) {
         // Clear the scheduled time and show prompt
         setState(() {
@@ -592,6 +629,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         });
         _showStressPrompt();
       }
+      _pendingStressPromptTimer = null;
     });
   }
 
@@ -631,99 +669,98 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         final isDemo = widget.demoMode != DemoConfig.modeNone;
         final isTimerMode = !widget.stressDetectionEnabled && !isDemo;
         return AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.celebration, color: Colors.green),
-            const SizedBox(width: 8),
-            Text(isDemo
-                ? 'Great!'
-                : 'Great, ${_userAccount?.name ?? ""}!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Your body has calmed down.',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-            const SizedBox(height: 16),
-            if (!isDemo && !isTimerMode) ...[
+          title: Row(
+            children: [
+              const Icon(Icons.celebration, color: Colors.green),
+              const SizedBox(width: 8),
+              Text(isDemo ? 'Great!' : 'Great, ${_userAccount?.name ?? ""}!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Your body has calmed down.',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              const SizedBox(height: 16),
+              if (!isDemo && !isTimerMode) ...[
+                const Text(
+                  '💭 Stress monitoring is paused for 2 minutes to let you enjoy this calm state.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+              ],
+              if (!isDemo && !isTimerMode) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Before:',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text('❤️  ${_baselineHr.toStringAsFixed(0)} BPM',
+                              style: const TextStyle(fontSize: 13)),
+                          Text('📊 ${_baselineHrv.toStringAsFixed(0)} ms',
+                              style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('After:',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text('❤️  ${_currentHr.toStringAsFixed(0)} BPM',
+                              style: const TextStyle(fontSize: 13)),
+                          Text('📊 ${_currentHrv.toStringAsFixed(0)} ms',
+                              style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+              const Divider(),
+              const SizedBox(height: 12),
               const Text(
-                '💭 Stress monitoring is paused for 2 minutes to let you enjoy this calm state.',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey),
+                'How do you feel right now?',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildMoodButton('😌', 'Very Relaxed',
+                        MoodRating.veryRelaxed, stressReduction),
+                    SizedBox(width: 4),
+                    _buildMoodButton(
+                        '😊', 'Relaxed', MoodRating.relaxed, stressReduction),
+                    SizedBox(width: 4),
+                    _buildMoodButton(
+                        '😐', 'Neutral', MoodRating.neutral, stressReduction),
+                    SizedBox(width: 4),
+                    _buildMoodButton(
+                        '😟', 'Stressed', MoodRating.stressed, stressReduction),
+                  ],
+                ),
+              ),
             ],
-            if (!isDemo && !isTimerMode) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Before:',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text('❤️  ${_baselineHr.toStringAsFixed(0)} BPM',
-                            style: const TextStyle(fontSize: 13)),
-                        Text('📊 ${_baselineHrv.toStringAsFixed(0)} ms',
-                            style: const TextStyle(fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('After:',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text('❤️  ${_currentHr.toStringAsFixed(0)} BPM',
-                            style: const TextStyle(fontSize: 13)),
-                        Text('📊 ${_currentHrv.toStringAsFixed(0)} ms',
-                            style: const TextStyle(fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-            ],
-            const Divider(),
-            const SizedBox(height: 12),
-            const Text(
-              'How do you feel right now?',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildMoodButton('😌', 'Very Relaxed', MoodRating.veryRelaxed,
-                      stressReduction),
-                  SizedBox(width: 4),
-                  _buildMoodButton(
-                      '😊', 'Relaxed', MoodRating.relaxed, stressReduction),
-                  SizedBox(width: 4),
-                  _buildMoodButton(
-                      '😐', 'Neutral', MoodRating.neutral, stressReduction),
-                  SizedBox(width: 4),
-                  _buildMoodButton(
-                      '😟', 'Stressed', MoodRating.stressed, stressReduction),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+          ),
+        );
       },
     );
   }
@@ -815,12 +852,13 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // Check if controller is calibrating
     final calibrationInfo = _controller?.getCurrentBiosignals();
     final isCalibrating = calibrationInfo?['isCalibrating'] == true;
-    final calibrationProgress = calibrationInfo?['calibrationProgress']?.toInt() ?? 0;
-    
+    final calibrationProgress =
+        calibrationInfo?['calibrationProgress']?.toInt() ?? 0;
+
     if (!isCalibrating) {
       return []; // No indicator if not calibrating
     }
-    
+
     return [
       const SizedBox(height: 12),
       Container(
@@ -931,7 +969,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                           const SizedBox(height: 8),
 
                           // Calibration progress indicator (biosignal modes only)
-                          if (widget.stressDetectionEnabled && _controller != null)
+                          if (widget.stressDetectionEnabled &&
+                              _controller != null)
                             ..._buildCalibrationIndicator(),
 
                           Row(
@@ -940,8 +979,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                               // Timer
                               Icon(Icons.timer,
                                   size: 16,
-                                  color:
-                                      colorScheme.onPrimary.withValues(alpha: 0.9)),
+                                  color: colorScheme.onPrimary
+                                      .withValues(alpha: 0.9)),
                               const SizedBox(width: 4),
                               Text(
                                 _formatDuration(_sessionElapsed),
@@ -955,8 +994,8 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                               // Segment counter
                               Icon(Icons.layers,
                                   size: 16,
-                                  color:
-                                      colorScheme.onPrimary.withValues(alpha: 0.9)),
+                                  color: colorScheme.onPrimary
+                                      .withValues(alpha: 0.9)),
                               const SizedBox(width: 4),
                               Text(
                                 _currentSegment > 0
@@ -1056,7 +1095,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                 ],
               ),
             ),
-
         ],
       ),
     );
