@@ -725,8 +725,8 @@ class _MeditationViewState extends State<MeditationView> {
               value: currentPrefs.voiceGender,
               decoration: _demoDropdownDecoration(),
               items: const [
-                DropdownMenuItem(value: 'female', child: Text('Female')),
-                DropdownMenuItem(value: 'male', child: Text('Male')),
+                DropdownMenuItem(value: 'female', child: Text('👩 Female')),
+                DropdownMenuItem(value: 'male', child: Text('👨 Male')),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -742,10 +742,10 @@ class _MeditationViewState extends State<MeditationView> {
               value: currentPrefs.speakingSpeed,
               decoration: _demoDropdownDecoration(),
               items: const [
-                DropdownMenuItem(value: 'very_slow', child: Text('Very Slow')),
-                DropdownMenuItem(value: 'slow', child: Text('Slow')),
-                DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                DropdownMenuItem(value: 'fast', child: Text('Fast')),
+                DropdownMenuItem(value: 'very_slow', child: Text('🐌 Very Slow')),
+                DropdownMenuItem(value: 'slow', child: Text('🐢 Slow')),
+                DropdownMenuItem(value: 'medium', child: Text('🚶 Medium')),
+                DropdownMenuItem(value: 'fast', child: Text('🏃 Fast')),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -762,12 +762,12 @@ class _MeditationViewState extends State<MeditationView> {
               decoration: _demoDropdownDecoration(),
               items: const [
                 DropdownMenuItem(
-                    value: 'mindfulness', child: Text('Mindfulness')),
-                DropdownMenuItem(value: 'breathing', child: Text('Breathing')),
-                DropdownMenuItem(value: 'body_scan', child: Text('Body Scan')),
+                    value: 'mindfulness', child: Text('🧘 Mindfulness')),
+                DropdownMenuItem(value: 'breathing', child: Text('🌬️ Breathing')),
+                DropdownMenuItem(value: 'body_scan', child: Text('💆 Body Scan')),
                 DropdownMenuItem(
                   value: 'visualization_journey',
-                  child: Text('Visualization Journey'),
+                  child: Text('🌅 Visualization Journey'),
                 ),
               ],
               onChanged: (value) {
@@ -786,23 +786,23 @@ class _MeditationViewState extends State<MeditationView> {
               items: const [
                 DropdownMenuItem(
                   value: 'peaceful nature',
-                  child: Text('Peaceful Nature'),
+                  child: Text('🌳 Peaceful nature'),
                 ),
                 DropdownMenuItem(
                   value: 'calm ocean beach',
-                  child: Text('Ocean Beach'),
+                  child: Text('🌊 Ocean beach'),
                 ),
                 DropdownMenuItem(
                   value: 'quiet mountain',
-                  child: Text('Mountain'),
+                  child: Text('⛰️ Mountain'),
                 ),
                 DropdownMenuItem(
                   value: 'serene forest',
-                  child: Text('Forest'),
+                  child: Text('🌲 Forest'),
                 ),
                 DropdownMenuItem(
                   value: 'gentle garden',
-                  child: Text('Garden'),
+                  child: Text('🌸 Garden'),
                 ),
               ],
               onChanged: (value) {
