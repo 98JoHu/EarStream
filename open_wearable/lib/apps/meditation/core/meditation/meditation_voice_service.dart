@@ -76,6 +76,14 @@ class MeditationVoiceService {
     _qwenVoice = voiceGender == 'male' ? 'Kai' : 'Seren';
     _usePremiumVoice = usePremiumVoice || _hasValidPremiumVoiceConfig;
 
+    // ── Diagnostic: print resolved TTS config so it's visible in console ──
+    print('[EARSTREAM TTS CONFIG]');
+    print('  provider   : $_ttsProvider');
+    print('  EL key     : ${_elevenLabsApiKey == "NONE" ? "NONE (no key loaded!)" : "${_elevenLabsApiKey.length} chars ✅"}');
+    print('  EL voice   : $_elevenLabsVoiceId');
+    print('  DS key     : ${_dashScopeApiKey == "NONE" ? "NONE" : "${_dashScopeApiKey.length} chars"}');
+    print('  premium    : $_usePremiumVoice (config valid: $_hasValidPremiumVoiceConfig)');
+
     _logger.i(
       'Initializing voice (provider: $_ttsProvider, speed: $_speakingSpeed, premium: $_usePremiumVoice)',
     );
@@ -292,8 +300,9 @@ class MeditationVoiceService {
 
       if (response.statusCode != 200) {
         _logger.w(
-          'ElevenLabs TTS API error: ${response.statusCode} — ${response.body}',
+          'ElevenLabs TTS API error: ${response.statusCode} \u2014 ${response.body}',
         );
+        print('[EARSTREAM TTS ERROR] ElevenLabs ${response.statusCode}: ${response.body}');
         return false;
       }
 
@@ -303,14 +312,22 @@ class MeditationVoiceService {
       }
 
       final audioBytes = response.bodyBytes;
-      final cachedAudioFile = await MeditationCache.cacheAudio(
-        text,
-        audioBytes,
-        isPremiumVoice: true,
-      );
+      print('[EARSTREAM TTS] ✅ API 200 — received ${audioBytes.length} bytes');
+
+      File? cachedAudioFile;
+      try {
+        cachedAudioFile = await MeditationCache.cacheAudio(
+          text,
+          audioBytes,
+          isPremiumVoice: true,
+        );
+        print('[EARSTREAM TTS] Cache write: ${cachedAudioFile?.path ?? "null (cache failed)"}');
+      } catch (cacheErr) {
+        print('[EARSTREAM TTS ERROR] Cache write failed: $cacheErr');
+      }
 
       final playFile = cachedAudioFile ?? await _createTempFile(audioBytes);
-      _logger.i('Playing ElevenLabs TTS audio');
+      print('[EARSTREAM TTS] Playing file: ${playFile.path} (exists=${await playFile.exists()}, size=${await playFile.length()})');
       await _playAudioFile(playFile);
       await Future.delayed(const Duration(milliseconds: 100));
 
@@ -322,10 +339,11 @@ class MeditationVoiceService {
         }
       }
 
-      _logger.i('ElevenLabs TTS playback complete');
+      print('[EARSTREAM TTS] ✅ ElevenLabs playback complete');
       return true;
     } catch (e) {
-      _logger.w('ElevenLabs TTS error: $e — Using Flutter TTS fallback');
+      _logger.w('ElevenLabs TTS error: $e \u2014 Using Flutter TTS fallback');
+      print('[EARSTREAM TTS ERROR] ElevenLabs exception: $e');
       return false;
     }
   }
