@@ -645,19 +645,19 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   items: const [
                     DropdownMenuItem(
                       value: 0.05,
-                      child: Text('📊 5% - Very Sensitive'),
+                      child: Text('📊 5% (Very Sensitive)'),
                     ),
                     DropdownMenuItem(
                       value: 0.10,
-                      child: Text('📊 10% - Recommended'),
+                      child: Text('📊 10% (Recommended)'),
                     ),
                     DropdownMenuItem(
                       value: 0.15,
-                      child: Text('📊 15% - Moderate'),
+                      child: Text('📊 15% (Moderate)'),
                     ),
                     DropdownMenuItem(
                       value: 0.20,
-                      child: Text('📊 20% - Less Sensitive'),
+                      child: Text('📊 20% (Less Sensitive)'),
                     ),
                   ],
                   onChanged: (value) =>
