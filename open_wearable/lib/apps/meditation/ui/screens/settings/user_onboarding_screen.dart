@@ -32,12 +32,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   late TextEditingController _additionalPreferencesController;
   double _stressThreshold = 0.10; // 10% by default
   bool _usePremiumVoice = false; // Premium voice toggle
-  String _selectedElevenLabsVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
-
-  static const List<Map<String, String>> _elevenLabsStandardVoices = [
-    {'id': 'hpp4J3VqNfWAUOO0d1Us', 'name': 'Bella (Female, Bright, Warm)'},
-    {'id': 'CwhRBWXzGAHq8TQ4Fs17', 'name': 'Roger (Male, Laid-Back, Resonant)'},
-  ];
 
   @override
   void initState() {
@@ -63,12 +57,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _speakingSpeed = account?.speakingSpeed ?? 'slow';
     _stressThreshold = account?.stressThreshold ?? 0.10;
     _usePremiumVoice = account?.usePremiumVoice ?? false;
-
-    final savedVoiceId = account?.elevenLabsVoiceId ?? '';
-    final hasSavedVoice =
-        _elevenLabsStandardVoices.any((voice) => voice['id'] == savedVoiceId);
-    _selectedElevenLabsVoiceId =
-        hasSavedVoice ? savedVoiceId : 'hpp4J3VqNfWAUOO0d1Us';
   }
 
   @override
@@ -135,7 +123,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       stressThreshold: _stressThreshold,
       usePremiumVoice: _usePremiumVoice,
       elevenLabsApiKey: _elevenLabsApiKeyController.text.trim(),
-      elevenLabsVoiceId: _selectedElevenLabsVoiceId,
       microsoftGraphAccessToken: _microsoftGraphTokenController.text.trim(),
     );
 
@@ -757,39 +744,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     label: 'ElevenLabs API Key',
                     controller: _elevenLabsApiKeyController,
                     hintText: 'Enter your ElevenLabs API key',
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'ElevenLabs Voice',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _selectedElevenLabsVoiceId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    items: _elevenLabsStandardVoices
-                        .map(
-                          (voice) => DropdownMenuItem<String>(
-                            value: voice['id'],
-                            child: Text(
-                              voice['name']!,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _selectedElevenLabsVoiceId = value);
-                    },
                   ),
                   const SizedBox(height: 24),
                   const Divider(),

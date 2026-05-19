@@ -62,29 +62,12 @@ class MeditationRuntimeConfig {
     return MeditationConfig.ttsProvider;
   }
 
-  static String resolveElevenLabsVoiceId({String? localValue}) {
-    return sanitizeElevenLabsVoiceId(localValue) ??
-        MeditationConfig.elevenLabsVoiceId;
-  }
-
   static String? sanitizeLongSecret(String? value) {
     final secret = value?.trim() ?? '';
     if (secret.length > 20) {
       return secret;
     }
     return null;
-  }
-
-  static String? sanitizeElevenLabsVoiceId(String? value) {
-    final voiceId = value?.trim() ?? '';
-    if (voiceId.isEmpty ||
-        voiceId == 'NONE' ||
-        voiceId == 'YOUR_ELEVENLABS_VOICE_ID_HERE' ||
-        voiceId.contains('YOUR_') ||
-        voiceId.contains('your_')) {
-      return null;
-    }
-    return voiceId;
   }
 
   static MeditationRuntimeValue _resolve({

@@ -152,8 +152,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
     // Initialize services
     _voiceService = MeditationVoiceService();
     final hasValidPremiumVoice =
-        _userAccount!.elevenLabsApiKey.trim().length > 20 &&
-            _userAccount!.elevenLabsVoiceId.trim().isNotEmpty;
+        _userAccount!.elevenLabsApiKey.trim().length > 20;
     await _voiceService!.initialize(
       voiceGender: (widget.demoMode != 'none' && widget.demoPreferences != null)
           ? widget.demoPreferences!.voiceGender
@@ -164,7 +163,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
               : _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice || hasValidPremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
-      elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
       ttsProvider: _userAccount!.ttsProvider,
       dashScopeApiKey: _userAccount!.dashScopeApiKey,
     );
@@ -328,7 +326,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
                 : _userAccount!.speakingSpeed,
         usePremiumVoice: _userAccount!.usePremiumVoice,
         elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
-        elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
         ttsProvider: _userAccount!.ttsProvider,
         dashScopeApiKey: _userAccount!.dashScopeApiKey,
       );
@@ -453,7 +450,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
               : _userAccount!.speakingSpeed,
       usePremiumVoice: _userAccount!.usePremiumVoice,
       elevenLabsApiKey: _userAccount!.elevenLabsApiKey,
-      elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
       ttsProvider: _userAccount!.ttsProvider,
       dashScopeApiKey: _userAccount!.dashScopeApiKey,
     );

@@ -46,21 +46,15 @@ class _EarStreamAccountSectionPageState
   late String _speakingSpeed;
   late double _stressThreshold;
   late bool _usePremiumVoice;
-  late String _selectedElevenLabsVoiceId;
 
   bool _isSaving = false;
   bool _showElevenLabsApiKey = false;
   bool _showDashScopeApiKey = false;
   bool _showMicrosoftGraphToken = false;
-  String _ttsProvider = 'elevenlabs'; // 'elevenlabs' or 'dashscope'
+  String _ttsProvider = 'elevenlabs';
   bool _isCheckingOutlook = false;
   String? _outlookStatusMessage;
   bool _outlookCheckSucceeded = false;
-
-  static const List<Map<String, String>> _elevenLabsStandardVoices = [
-    {'id': 'hpp4J3VqNfWAUOO0d1Us', 'name': 'Bella (female, warm)'},
-    {'id': 'CwhRBWXzGAHq8TQ4Fs17', 'name': 'Roger (male, resonant)'},
-  ];
 
   @override
   void initState() {
@@ -88,12 +82,6 @@ class _EarStreamAccountSectionPageState
     _speakingSpeed = account.speakingSpeed;
     _stressThreshold = account.stressThreshold;
     _usePremiumVoice = account.usePremiumVoice;
-
-    final savedVoiceId = account.elevenLabsVoiceId;
-    final hasSavedVoice =
-        _elevenLabsStandardVoices.any((voice) => voice['id'] == savedVoiceId);
-    _selectedElevenLabsVoiceId =
-        hasSavedVoice ? savedVoiceId : _elevenLabsStandardVoices.first['id']!;
 
     _elevenLabsApiKeyController.addListener(_handleLiveFieldChange);
     _dashScopeApiKeyController.addListener(_handleLiveFieldChange);
@@ -163,7 +151,6 @@ class _EarStreamAccountSectionPageState
         _additionalPreferencesController.text.trim();
     updatedAccount.stressThreshold = _stressThreshold;
     updatedAccount.usePremiumVoice = _usePremiumVoice;
-    updatedAccount.elevenLabsVoiceId = _selectedElevenLabsVoiceId;
     updatedAccount.elevenLabsApiKey = _elevenLabsApiKeyController.text.trim();
     updatedAccount.ttsProvider = _ttsProvider;
     updatedAccount.dashScopeApiKey = _dashScopeApiKeyController.text.trim();
@@ -851,37 +838,7 @@ class _EarStreamAccountSectionPageState
             ],
           ),
           */
-          ...[
-            const SizedBox(height: 20),
-            const Text(
-              'ElevenLabs voice',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedElevenLabsVoiceId,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.grey[100],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              items: _elevenLabsStandardVoices
-                  .map(
-                    (voice) => DropdownMenuItem<String>(
-                      value: voice['id'],
-                      child: Text(voice['name']!),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _selectedElevenLabsVoiceId = value);
-              },
-            ),
-          ],
+
           // _buildStatusCard(
           //   title: 'Premium voice readiness',
           //   status: _usePremiumVoice ? 'Enabled' : 'Disabled',

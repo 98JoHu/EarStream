@@ -31,7 +31,7 @@ class MeditationVoiceService {
   String _ttsProvider = 'elevenlabs';
   // ElevenLabs fields
   String _elevenLabsApiKey = MeditationConfig.elevenLabsApiKey;
-  String _elevenLabsVoiceId = MeditationConfig.elevenLabsVoiceId;
+  String _elevenLabsVoiceId = 'hpp4J3VqNfWAUOO0d1Us'; // resolved from voiceGender in initialize()
   // DashScope fields (Alibaba, for China)
   String _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
   String _qwenVoice = 'Seren'; // Qwen3-TTS voice name; updated in initialize()
@@ -49,7 +49,6 @@ class MeditationVoiceService {
     String speakingSpeed = 'slow',
     bool usePremiumVoice = false,
     String? elevenLabsApiKey,
-    String? elevenLabsVoiceId,
     String? dashScopeApiKey,
     String ttsProvider = 'elevenlabs',
   }) async {
@@ -63,9 +62,10 @@ class MeditationVoiceService {
           localValue: elevenLabsApiKey,
         ).value ??
         MeditationConfig.elevenLabsApiKey;
-    _elevenLabsVoiceId = MeditationRuntimeConfig.resolveElevenLabsVoiceId(
-      localValue: elevenLabsVoiceId,
-    );
+    // Derive ElevenLabs voice from voiceGender: male=Roger, female=Bella
+    _elevenLabsVoiceId = voiceGender == 'male'
+        ? 'CwhRBWXzGAHq8TQ4Fs17' // Roger (male, resonant)
+        : 'hpp4J3VqNfWAUOO0d1Us'; // Bella (female, warm)
     // Resolve DashScope credentials (in-app override > .env)
     _dashScopeApiKey = MeditationRuntimeConfig.dashScopeApiKey(
           localValue: dashScopeApiKey,

@@ -24,18 +24,6 @@ class MeditationConfig {
     return key;
   }
 
-  static String get elevenLabsVoiceId {
-    final voiceId = _readEnv('ELEVENLABS_VOICE_ID');
-    if (voiceId == 'NONE' ||
-        voiceId == 'YOUR_ELEVENLABS_VOICE_ID_HERE' ||
-        voiceId.contains('YOUR_') ||
-        voiceId.contains('your_')) {
-      // Bella (female) default voice ID
-      return 'EXAVITQu4vr4xnSDxMaL';
-    }
-    return voiceId;
-  }
-
   // Backward-compatible alias to avoid touching all callsites at once.
   static String get googleCloudTtsApiKey => elevenLabsApiKey;
 

@@ -23,7 +23,6 @@ class UserAccount {
   bool usePremiumVoice; // Toggle for ElevenLabs TTS ($$$)
   String ttsProvider; // 'elevenlabs' (default, global) or 'dashscope' (China)
   String elevenLabsApiKey;
-  String elevenLabsVoiceId;
   String dashScopeApiKey; // In-app DashScope key override (Beijing endpoint, globally accessible)
   String microsoftGraphAccessToken;
   List<String> stressTriggers;
@@ -51,7 +50,6 @@ class UserAccount {
     this.usePremiumVoice = false, // Default to FREE voice
     this.ttsProvider = 'elevenlabs',
     this.elevenLabsApiKey = '',
-    this.elevenLabsVoiceId = '',
     this.dashScopeApiKey = '',
     this.microsoftGraphAccessToken = '',
     this.stressTriggers = const [],
@@ -92,7 +90,6 @@ class UserAccount {
         'usePremiumVoice': usePremiumVoice,
         'ttsProvider': ttsProvider,
         'elevenLabsApiKey': elevenLabsApiKey,
-        'elevenLabsVoiceId': elevenLabsVoiceId,
         'dashScopeApiKey': dashScopeApiKey,
         'microsoftGraphAccessToken': microsoftGraphAccessToken,
         'stressTriggers': stressTriggers,
@@ -121,7 +118,6 @@ class UserAccount {
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
       ttsProvider: json['ttsProvider'] ?? 'elevenlabs',
       elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',
-      elevenLabsVoiceId: json['elevenLabsVoiceId'] ?? '',
       dashScopeApiKey: json['dashScopeApiKey'] ?? '',
       microsoftGraphAccessToken: json['microsoftGraphAccessToken'] ?? '',
       stressTriggers: List<String>.from(json['stressTriggers'] ?? []),
