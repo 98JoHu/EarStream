@@ -35,6 +35,8 @@ class _EarStreamAccountSectionPageState
   late final TextEditingController _ageController;
   late final TextEditingController _geminiApiKeyController;
   late final TextEditingController _elevenLabsApiKeyController;
+  late final TextEditingController _dashScopeApiKeyController;
+  late final TextEditingController _dashScopeApiKeyCnController;
   late final TextEditingController _microsoftGraphTokenController;
   late final TextEditingController _additionalPreferencesController;
 
@@ -51,7 +53,10 @@ class _EarStreamAccountSectionPageState
   bool _isSaving = false;
   bool _showGeminiApiKey = false;
   bool _showElevenLabsApiKey = false;
+  bool _showDashScopeApiKey = false;
+  bool _showDashScopeApiKeyCn = false;
   bool _showMicrosoftGraphToken = false;
+  String _ttsProvider = 'elevenlabs'; // 'elevenlabs' or 'dashscope'
   bool _isCheckingOutlook = false;
   String? _outlookStatusMessage;
   bool _outlookCheckSucceeded = false;
@@ -73,6 +78,10 @@ class _EarStreamAccountSectionPageState
     _geminiApiKeyController = TextEditingController(text: account.geminiApiKey);
     _elevenLabsApiKeyController =
         TextEditingController(text: account.elevenLabsApiKey);
+    _dashScopeApiKeyController =
+        TextEditingController(text: account.dashScopeApiKey);
+    _dashScopeApiKeyCnController =
+        TextEditingController(text: account.dashScopeApiKeyCn);
     _microsoftGraphTokenController =
         TextEditingController(text: account.microsoftGraphAccessToken);
     _additionalPreferencesController =
@@ -95,18 +104,25 @@ class _EarStreamAccountSectionPageState
 
     _geminiApiKeyController.addListener(_handleLiveFieldChange);
     _elevenLabsApiKeyController.addListener(_handleLiveFieldChange);
+    _dashScopeApiKeyController.addListener(_handleLiveFieldChange);
+    _dashScopeApiKeyCnController.addListener(_handleLiveFieldChange);
     _microsoftGraphTokenController.addListener(_handleLiveFieldChange);
+    _ttsProvider = account.ttsProvider.isNotEmpty ? account.ttsProvider : 'elevenlabs';
   }
 
   @override
   void dispose() {
     _geminiApiKeyController.removeListener(_handleLiveFieldChange);
     _elevenLabsApiKeyController.removeListener(_handleLiveFieldChange);
+    _dashScopeApiKeyController.removeListener(_handleLiveFieldChange);
+    _dashScopeApiKeyCnController.removeListener(_handleLiveFieldChange);
     _microsoftGraphTokenController.removeListener(_handleLiveFieldChange);
     _nameController.dispose();
     _ageController.dispose();
     _geminiApiKeyController.dispose();
     _elevenLabsApiKeyController.dispose();
+    _dashScopeApiKeyController.dispose();
+    _dashScopeApiKeyCnController.dispose();
     _microsoftGraphTokenController.dispose();
     _additionalPreferencesController.dispose();
     super.dispose();
@@ -163,6 +179,9 @@ class _EarStreamAccountSectionPageState
     updatedAccount.elevenLabsVoiceId = _selectedElevenLabsVoiceId;
     updatedAccount.geminiApiKey = _geminiApiKeyController.text.trim();
     updatedAccount.elevenLabsApiKey = _elevenLabsApiKeyController.text.trim();
+    updatedAccount.ttsProvider = _ttsProvider;
+    updatedAccount.dashScopeApiKey = _dashScopeApiKeyController.text.trim();
+    updatedAccount.dashScopeApiKeyCn = _dashScopeApiKeyCnController.text.trim();
     updatedAccount.microsoftGraphAccessToken =
         _microsoftGraphTokenController.text.trim();
 
@@ -973,6 +992,8 @@ class _EarStreamAccountSectionPageState
   Widget _buildApiKeysPage() {
     final geminiValue = _geminiApiKeyController.text.trim();
     final elevenLabsValue = _elevenLabsApiKeyController.text.trim();
+    final dashScopeValue = _dashScopeApiKeyController.text.trim();
+    final dashScopeCnValue = _dashScopeApiKeyCnController.text.trim();
 
     final geminiStatus = geminiValue.isNotEmpty
         ? (_looksLikeGeminiKey(geminiValue) ? 'In-app key' : 'Check value')
@@ -985,6 +1006,16 @@ class _EarStreamAccountSectionPageState
         : MeditationConfig.hasValidTtsKey
             ? '.env fallback'
             : 'Missing';
+
+    final dashScopeStatus = dashScopeValue.isNotEmpty
+        ? (dashScopeValue.length > 10 ? 'In-app key' : 'Check value')
+        : MeditationConfig.hasValidDashScopeKey
+            ? '.env fallback'
+            : 'Missing';
+
+    final dashScopeCnStatus = dashScopeCnValue.isNotEmpty
+        ? (dashScopeCnValue.length > 10 ? 'In-app key' : 'Check value')
+        : 'Not configured';
 
     return _buildWhiteCard(
       child: Column(
@@ -1003,6 +1034,136 @@ class _EarStreamAccountSectionPageState
             style: TextStyle(color: Colors.grey[700], height: 1.4),
           ),
           const SizedBox(height: 24),
+
+          // ── TTS Provider ──────────────────────────────────────────────────
+          const Text(
+            'TTS Provider',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _ttsProvider,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'elevenlabs',
+                child: Text('ElevenLabs (global — Europe & worldwide)'),
+              ),
+              DropdownMenuItem(
+                value: 'dashscope',
+                child: Text('DashScope / Qwen3-TTS (China demo)'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) setState(() => _ttsProvider = value);
+            },
+          ),
+          const SizedBox(height: 24),
+
+          // ── ElevenLabs ────────────────────────────────────────────────────
+          const Text(
+            'ElevenLabs',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          _buildSecretField(
+            label: 'ElevenLabs API key',
+            controller: _elevenLabsApiKeyController,
+            hintText: 'Paste an ElevenLabs API key',
+            isVisible: _showElevenLabsApiKey,
+            onToggleVisibility: () {
+              setState(() {
+                _showElevenLabsApiKey = !_showElevenLabsApiKey;
+              });
+            },
+          ),
+          _buildStatusCard(
+            title: 'ElevenLabs',
+            status: elevenLabsStatus,
+            description: elevenLabsValue.isNotEmpty
+                ? 'This value will override the bundled .env key for premium voice generation.'
+                : 'Leave this empty to use the bundled .env key instead.',
+            color: elevenLabsStatus == 'Missing'
+                ? Colors.orange
+                : elevenLabsStatus == 'Check value'
+                    ? Colors.red.shade700
+                    : Colors.indigo,
+          ),
+          const SizedBox(height: 24),
+
+          // ── DashScope ─────────────────────────────────────────────────────
+          const Text(
+            'DashScope (Qwen3-TTS)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'International endpoint (Singapore) — works outside China.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _buildSecretField(
+            label: 'DashScope API key (International)',
+            controller: _dashScopeApiKeyController,
+            hintText: 'Paste a DashScope API key',
+            isVisible: _showDashScopeApiKey,
+            onToggleVisibility: () {
+              setState(() {
+                _showDashScopeApiKey = !_showDashScopeApiKey;
+              });
+            },
+          ),
+          _buildStatusCard(
+            title: 'DashScope (International)',
+            status: dashScopeStatus,
+            description: dashScopeValue.isNotEmpty
+                ? 'This value will override the bundled .env key for DashScope TTS.'
+                : 'Leave empty to use the bundled .env key instead.',
+            color: dashScopeStatus == 'Missing'
+                ? Colors.orange
+                : dashScopeStatus == 'Check value'
+                    ? Colors.red.shade700
+                    : Colors.teal,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Chinese Mainland endpoint (Beijing) — fallback for China.',
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _buildSecretField(
+            label: 'DashScope API key (China Mainland)',
+            controller: _dashScopeApiKeyCnController,
+            hintText: 'Paste a DashScope CN API key (optional)',
+            isVisible: _showDashScopeApiKeyCn,
+            onToggleVisibility: () {
+              setState(() {
+                _showDashScopeApiKeyCn = !_showDashScopeApiKeyCn;
+              });
+            },
+          ),
+          _buildStatusCard(
+            title: 'DashScope (China Mainland)',
+            status: dashScopeCnStatus,
+            description: dashScopeCnValue.isNotEmpty
+                ? 'Will be tried as fallback when the International endpoint denies access.'
+                : 'Optional. If provided, used as CN Mainland fallback.',
+            color: dashScopeCnStatus == 'In-app key'
+                ? Colors.teal
+                : Colors.grey,
+          ),
+          const SizedBox(height: 24),
+
+          // ── Gemini ────────────────────────────────────────────────────────
+          const Text(
+            'Gemini (AI content)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
           _buildSecretField(
             label: 'Gemini API key',
             controller: _geminiApiKeyController,
@@ -1023,30 +1184,6 @@ class _EarStreamAccountSectionPageState
             color: geminiStatus == 'Missing'
                 ? Colors.orange
                 : geminiStatus == 'Check value'
-                    ? Colors.red.shade700
-                    : Colors.indigo,
-          ),
-          const SizedBox(height: 20),
-          _buildSecretField(
-            label: 'ElevenLabs API key',
-            controller: _elevenLabsApiKeyController,
-            hintText: 'Paste an ElevenLabs API key',
-            isVisible: _showElevenLabsApiKey,
-            onToggleVisibility: () {
-              setState(() {
-                _showElevenLabsApiKey = !_showElevenLabsApiKey;
-              });
-            },
-          ),
-          _buildStatusCard(
-            title: 'ElevenLabs',
-            status: elevenLabsStatus,
-            description: elevenLabsValue.isNotEmpty
-                ? 'This value will override the bundled .env key for premium voice generation.'
-                : 'Leave this empty if you want EarStream to keep using the bundled .env key instead.',
-            color: elevenLabsStatus == 'Missing'
-                ? Colors.orange
-                : elevenLabsStatus == 'Check value'
                     ? Colors.red.shade700
                     : Colors.indigo,
           ),

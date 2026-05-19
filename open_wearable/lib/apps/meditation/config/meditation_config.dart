@@ -80,12 +80,32 @@ class MeditationConfig {
     return key;
   }
 
+  /// DashScope Chinese Mainland key (Beijing endpoint) for demos in China.
+  static String get dashScopeApiKeyCn {
+    final key = _readEnv('DASHSCOPE_API_KEY_CN');
+    if (key == 'NONE' || key.contains('YOUR_') || key.contains('your_')) {
+      return 'NONE';
+    }
+    return key;
+  }
+
+  /// Active TTS provider: 'elevenlabs' (global default) or 'dashscope' (China).
+  static String get ttsProvider {
+    final val = _readEnv('TTS_PROVIDER');
+    if (val == 'dashscope') return 'dashscope';
+    return 'elevenlabs';
+  }
+
   // Debug helper to check if APIs are configured
   static bool get hasValidGeminiKey =>
       geminiApiKey != 'NONE' && geminiApiKey.length > 20;
   static bool get hasValidDeepSeekKey =>
       deepSeekApiKey != 'NONE' && deepSeekApiKey.length > 20;
+  // ElevenLabs key validity (global default TTS provider)
   static bool get hasValidTtsKey =>
+      elevenLabsApiKey != 'NONE' && elevenLabsApiKey.length > 20;
+  // DashScope key validity (China TTS provider)
+  static bool get hasValidDashScopeKey =>
       dashScopeApiKey != 'NONE' && dashScopeApiKey.length > 10;
   static bool get hasValidMicrosoftGraphToken =>
       microsoftGraphAccessToken != 'NONE' &&

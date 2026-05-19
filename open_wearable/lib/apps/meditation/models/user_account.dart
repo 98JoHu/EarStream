@@ -21,9 +21,12 @@ class UserAccount {
   String additionalPreferences; // Free-form user preferences
   double stressThreshold; // Threshold for stress detection (default 0.10 = 10%)
   bool usePremiumVoice; // Toggle for ElevenLabs TTS ($$$)
+  String ttsProvider; // 'elevenlabs' (default, global) or 'dashscope' (China)
   String geminiApiKey;
   String elevenLabsApiKey;
   String elevenLabsVoiceId;
+  String dashScopeApiKey; // In-app DashScope International key override
+  String dashScopeApiKeyCn; // In-app DashScope Chinese Mainland key override
   String microsoftGraphAccessToken;
   List<String> stressTriggers;
   List<String> relaxationTechniques;
@@ -48,9 +51,12 @@ class UserAccount {
     this.additionalPreferences = '',
     this.stressThreshold = 0.10, // 10% threshold by default
     this.usePremiumVoice = false, // Default to FREE voice
+    this.ttsProvider = 'elevenlabs',
     this.geminiApiKey = '',
     this.elevenLabsApiKey = '',
     this.elevenLabsVoiceId = '',
+    this.dashScopeApiKey = '',
+    this.dashScopeApiKeyCn = '',
     this.microsoftGraphAccessToken = '',
     this.stressTriggers = const [],
     this.relaxationTechniques = const [
@@ -88,9 +94,12 @@ class UserAccount {
         'additionalPreferences': additionalPreferences,
         'stressThreshold': stressThreshold,
         'usePremiumVoice': usePremiumVoice,
+        'ttsProvider': ttsProvider,
         'geminiApiKey': geminiApiKey,
         'elevenLabsApiKey': elevenLabsApiKey,
         'elevenLabsVoiceId': elevenLabsVoiceId,
+        'dashScopeApiKey': dashScopeApiKey,
+        'dashScopeApiKeyCn': dashScopeApiKeyCn,
         'microsoftGraphAccessToken': microsoftGraphAccessToken,
         'stressTriggers': stressTriggers,
         'relaxationTechniques': relaxationTechniques,
@@ -116,9 +125,12 @@ class UserAccount {
       additionalPreferences: json['additionalPreferences'] ?? '',
       stressThreshold: (json['stressThreshold'] ?? 0.10).toDouble(),
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
+      ttsProvider: json['ttsProvider'] ?? 'elevenlabs',
       geminiApiKey: json['geminiApiKey'] ?? '',
       elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',
       elevenLabsVoiceId: json['elevenLabsVoiceId'] ?? '',
+      dashScopeApiKey: json['dashScopeApiKey'] ?? '',
+      dashScopeApiKeyCn: json['dashScopeApiKeyCn'] ?? '',
       microsoftGraphAccessToken: json['microsoftGraphAccessToken'] ?? '',
       stressTriggers: List<String>.from(json['stressTriggers'] ?? []),
       relaxationTechniques: List<String>.from(json['relaxationTechniques'] ??

@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../storage/meditation_cache.dart';
 import '../../config/meditation_config.dart';
+import '../../config/meditation_runtime_config.dart';
 
 final _logger = Logger();
 
@@ -26,7 +27,14 @@ class MeditationVoiceService {
   bool _isSpeaking = false;
   bool _usePremiumVoice = false;
   String _speakingSpeed = 'slow'; // 'very_slow', 'slow', 'medium', 'fast'
+  // Active TTS provider: 'elevenlabs' (global default) or 'dashscope' (China).
+  String _ttsProvider = 'elevenlabs';
+  // ElevenLabs fields
+  String _elevenLabsApiKey = MeditationConfig.elevenLabsApiKey;
+  String _elevenLabsVoiceId = MeditationConfig.elevenLabsVoiceId;
+  // DashScope fields (Alibaba, for China)
   String _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
+  String _dashScopeApiKeyCn = MeditationConfig.dashScopeApiKeyCn;
   String _qwenVoice = 'Seren'; // Qwen3-TTS voice name; updated in initialize()
 
   // Map speaking speed to TTS rate values
@@ -43,18 +51,39 @@ class MeditationVoiceService {
     bool usePremiumVoice = false,
     String? elevenLabsApiKey,
     String? elevenLabsVoiceId,
+    String? dashScopeApiKey,
+    String? dashScopeApiKeyCn,
+    String ttsProvider = 'elevenlabs',
   }) async {
     _speakingSpeed = speakingSpeed;
-    // DashScope API key is read from .env (not per-user account)
-    _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
+    // Resolve TTS provider (in-app value > .env default)
+    _ttsProvider = MeditationRuntimeConfig.resolveTtsProvider(
+      localValue: ttsProvider.isNotEmpty ? ttsProvider : null,
+    );
+    // Resolve ElevenLabs credentials
+    _elevenLabsApiKey = MeditationRuntimeConfig.elevenLabsApiKey(
+          localValue: elevenLabsApiKey,
+        ).value ??
+        MeditationConfig.elevenLabsApiKey;
+    _elevenLabsVoiceId = MeditationRuntimeConfig.resolveElevenLabsVoiceId(
+      localValue: elevenLabsVoiceId,
+    );
+    // Resolve DashScope credentials (in-app override > .env)
+    _dashScopeApiKey = MeditationRuntimeConfig.dashScopeApiKey(
+          localValue: dashScopeApiKey,
+        ).value ??
+        MeditationConfig.dashScopeApiKey;
+    _dashScopeApiKeyCn = MeditationRuntimeConfig.dashScopeApiKeyCn(
+          localValue: dashScopeApiKeyCn,
+        ).value ??
+        MeditationConfig.dashScopeApiKeyCn;
     // Map voiceGender to Qwen3-TTS voice name
-    // Kai = "soothing audio spa for your ears" (male)
-    // Seren = "gentle, soothing voice to help you fall asleep faster" (female)
+    // Kai = male, Seren = female
     _qwenVoice = voiceGender == 'male' ? 'Kai' : 'Seren';
     _usePremiumVoice = usePremiumVoice || _hasValidPremiumVoiceConfig;
 
     _logger.i(
-      'Initializing voice (speed: $_speakingSpeed, premium: $_usePremiumVoice, qwenVoice: $_qwenVoice)',
+      'Initializing voice (provider: $_ttsProvider, speed: $_speakingSpeed, premium: $_usePremiumVoice)',
     );
 
     await _initializeFlutterTts();
@@ -62,12 +91,18 @@ class MeditationVoiceService {
 
     final willUsePremium = _usePremiumVoice && _hasValidPremiumVoiceConfig;
     _logger.i(
-      'Voice ready (${willUsePremium ? "using PREMIUM Qwen3-TTS" : "using FREE Flutter TTS"})',
+      'Voice ready (${willUsePremium ? "using PREMIUM ${_ttsProvider == 'dashscope' ? 'DashScope (Qwen3-TTS)' : 'ElevenLabs TTS'}" : "using FREE Flutter TTS"})',
     );
   }
 
-  bool get _hasValidPremiumVoiceConfig =>
-      _dashScopeApiKey != 'NONE' && _dashScopeApiKey.length > 10;
+  bool get _hasValidPremiumVoiceConfig {
+    if (_ttsProvider == 'dashscope') {
+      return (_dashScopeApiKey != 'NONE' && _dashScopeApiKey.length > 10) ||
+          (_dashScopeApiKeyCn != 'NONE' && _dashScopeApiKeyCn.length > 10);
+    }
+    // ElevenLabs (default)
+    return _elevenLabsApiKey != 'NONE' && _elevenLabsApiKey.length > 20;
+  }
 
   Future<void> _initializeFlutterTts() async {
     try {
@@ -171,7 +206,9 @@ class MeditationVoiceService {
 
     try {
       if (usePremiumVoiceNow) {
-        final success = await _tryQwenTts(cleanedText);
+        final success = _ttsProvider == 'dashscope'
+            ? await _tryQwenTts(cleanedText)
+            : await _tryElevenLabsTts(cleanedText);
         if (!success) {
           _logger.w('Premium voice failed, falling back to free voice');
           await _speakWithFlutterTts(cleanedText);
@@ -219,6 +256,91 @@ class MeditationVoiceService {
     return cleaned;
   }
 
+  /// ElevenLabs TTS — default global provider (works in Europe and worldwide).
+  Future<bool> _tryElevenLabsTts(String text) async {
+    try {
+      final cachedFile =
+          await MeditationCache.getCachedAudio(text, isPremiumVoice: true);
+      if (cachedFile != null) {
+        _logger.i('Using cached ElevenLabs audio (saves 1 API request)');
+        await _playAudioFile(cachedFile);
+        return true;
+      }
+
+      if (!_hasValidPremiumVoiceConfig) {
+        _logger.i('No ElevenLabs API key configured -> Flutter TTS fallback');
+        return false;
+      }
+
+      _logger.i('ElevenLabs TTS: voice=$_elevenLabsVoiceId — API REQUEST');
+
+      final response = await http
+          .post(
+            Uri.parse(
+              'https://api.elevenlabs.io/v1/text-to-speech/$_elevenLabsVoiceId',
+            ),
+            headers: {
+              'xi-api-key': _elevenLabsApiKey,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg',
+            },
+            body: jsonEncode({
+              'text': text,
+              'model_id': 'eleven_turbo_v2',
+              'voice_settings': {
+                'stability': 0.65, // Meditation-optimized: calm and stable
+                'similarity_boost': 0.80, // Maintain voice consistency
+                'style': 0.35,
+                'use_speaker_boost': true,
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        _logger.w(
+          'ElevenLabs TTS API error: ${response.statusCode} — ${response.body}',
+        );
+        return false;
+      }
+
+      if (response.bodyBytes.isEmpty) {
+        _logger.w('ElevenLabs TTS: empty audio bytes in response');
+        return false;
+      }
+
+      final audioBytes = response.bodyBytes;
+      final cachedAudioFile = await MeditationCache.cacheAudio(
+        text,
+        audioBytes,
+        isPremiumVoice: true,
+      );
+
+      final playFile = cachedAudioFile ?? await _createTempFile(audioBytes);
+      _logger.i('Playing ElevenLabs TTS audio');
+      await _playAudioFile(playFile);
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (cachedAudioFile == null) {
+        try {
+          await playFile.delete();
+        } catch (_) {
+          // Ignore cleanup errors.
+        }
+      }
+
+      _logger.i('ElevenLabs TTS playback complete');
+      return true;
+    } catch (e) {
+      _logger.w('ElevenLabs TTS error: $e — Using Flutter TTS fallback');
+      return false;
+    }
+  }
+
+  /// DashScope (Qwen3-TTS) — Alibaba TTS for China demos.
+  /// Tries the International (Singapore) endpoint first; falls back to the
+  /// Chinese Mainland (Beijing) endpoint if access is denied or the network
+  /// fails, so the same build works reliably from both China and abroad.
   Future<bool> _tryQwenTts(String text) async {
     try {
       final cachedFile =
@@ -236,57 +358,97 @@ class MeditationVoiceService {
 
       _logger.i('Qwen3-TTS: voice=$_qwenVoice — API REQUEST');
 
-      // Step 1: Request audio generation from DashScope
-      final ttsResponse = await http
-          .post(
-            Uri.parse(
-              // International (Singapore) region endpoint
+      // Build endpoint list: International first, CN Mainland as fallback.
+      final endpointsToTry = [
+        (
+          url:
               'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-            ),
-            headers: {
-              'Authorization': 'Bearer $_dashScopeApiKey',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'model': 'qwen3-tts-flash', // stable alias
-              'input': {
-                'messages': [
-                  {
-                    'role': 'user',
-                    'content': [
-                      {'type': 'text', 'text': text}
+          key: _dashScopeApiKey,
+          label: 'International (Singapore)',
+        ),
+        if (_dashScopeApiKeyCn != 'NONE' && _dashScopeApiKeyCn.length > 10)
+          (
+            url:
+                'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+            key: _dashScopeApiKeyCn,
+            label: 'Chinese Mainland (Beijing)',
+          ),
+      ];
+
+      // Step 1: Try each endpoint until one succeeds.
+      String? audioUrl;
+      for (final endpoint in endpointsToTry) {
+        _logger.i('Qwen3-TTS: trying ${endpoint.label} endpoint');
+        http.Response ttsResponse;
+        try {
+          ttsResponse = await http
+              .post(
+                Uri.parse(endpoint.url),
+                headers: {
+                  'Authorization': 'Bearer ${endpoint.key}',
+                  'Content-Type': 'application/json',
+                },
+                body: jsonEncode({
+                  'model': 'qwen3-tts-flash',
+                  'input': {
+                    'messages': [
+                      {
+                        'role': 'user',
+                        'content': [
+                          {'type': 'text', 'text': text}
+                        ]
+                      }
                     ]
-                  }
-                ]
-              },
-              'parameters': {
-                'voice': _qwenVoice,
-                'language_type': 'English',
-              },
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
+                  },
+                  'parameters': {
+                    'voice': _qwenVoice,
+                    'language_type': 'English',
+                  },
+                }),
+              )
+              .timeout(const Duration(seconds: 30));
+        } catch (e) {
+          _logger.w(
+              'Qwen3-TTS: ${endpoint.label} network error: $e — trying next');
+          continue;
+        }
 
-      if (ttsResponse.statusCode != 200) {
+        if (ttsResponse.statusCode == 200) {
+          final responseJson =
+              jsonDecode(ttsResponse.body) as Map<String, dynamic>;
+          audioUrl = ((responseJson['output'] as Map<String, dynamic>?)?[
+                  'audio'] as Map<String, dynamic>?)?['url'] as String?;
+          if (audioUrl != null && audioUrl.isNotEmpty) {
+            _logger.i('Qwen3-TTS: audio URL obtained from ${endpoint.label}');
+            break;
+          }
+          _logger.w(
+              'Qwen3-TTS: no audio URL from ${endpoint.label}: ${ttsResponse.body}');
+          break; // Unexpected success without URL — stop
+        }
+
+        // On access-denied or 403, try next endpoint; otherwise hard-fail.
+        Map<String, dynamic>? errorJson;
+        try {
+          errorJson = jsonDecode(ttsResponse.body) as Map<String, dynamic>?;
+        } catch (_) {}
+        final code = errorJson?['code'] as String? ?? '';
+        if (code == 'Model.AccessDenied' || ttsResponse.statusCode == 403) {
+          _logger.w(
+              'Qwen3-TTS: ${endpoint.label} access denied ($code) — trying next');
+          continue;
+        }
         _logger.w(
-          'Qwen3-TTS API error: ${ttsResponse.statusCode} — ${ttsResponse.body}',
-        );
-        return false;
+            'Qwen3-TTS: ${endpoint.label} error ${ttsResponse.statusCode} — ${ttsResponse.body}');
+        break; // Hard error (bad request, invalid key format, etc.)
       }
-
-      final responseJson =
-          jsonDecode(ttsResponse.body) as Map<String, dynamic>;
-      final audioUrl =
-          ((responseJson['output'] as Map<String, dynamic>?)?['audio']
-                  as Map<String, dynamic>?)?['url'] as String?;
 
       if (audioUrl == null || audioUrl.isEmpty) {
-        _logger.w(
-            'Qwen3-TTS: no audio URL in response: ${ttsResponse.body}');
+        _logger.w('Qwen3-TTS: no audio URL from any endpoint');
         return false;
       }
 
-      // Step 2: Download the audio from the returned URL
+      // Step 2: Download the audio from the returned URL.
       _logger.i('Qwen3-TTS: downloading audio...');
       final audioResponse = await http
           .get(Uri.parse(audioUrl))
