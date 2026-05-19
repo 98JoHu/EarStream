@@ -36,13 +36,24 @@ class MeditationVoiceService {
   String _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
   String _qwenVoice = 'Seren'; // Qwen3-TTS voice name; updated in initialize()
 
-  // Map speaking speed to TTS rate values
+  // Map speaking speed to Flutter TTS rate values
   static const Map<String, double> _speedToRate = {
     'very_slow': 0.25,
     'slow': 0.4,
     'medium': 0.6,
     'fast': 0.8,
   };
+
+  // Map speaking speed to ElevenLabs speed parameter (0.7–1.2 range)
+  static const Map<String, double> _speedToElevenLabsRate = {
+    'very_slow': 0.7,
+    'slow': 0.85,
+    'medium': 1.0,
+    'fast': 1.15,
+  };
+
+  double get _elevenLabsSpeed =>
+      _speedToElevenLabsRate[_speakingSpeed] ?? 0.85;
 
   Future<void> initialize({
     String voiceGender = 'female',
@@ -260,10 +271,13 @@ class MeditationVoiceService {
   /// ElevenLabs TTS — default global provider (works in Europe and worldwide).
   Future<bool> _tryElevenLabsTts(String text) async {
     try {
+      // Cache key includes voice ID and speed so stale audio is never reused
+      final elevenlabsCacheKey =
+          '${_elevenLabsVoiceId}_spd${_elevenLabsSpeed.toStringAsFixed(2)}';
       final cachedFile = await MeditationCache.getCachedAudio(
         text,
         isPremiumVoice: true,
-        voiceId: _elevenLabsVoiceId,
+        voiceId: elevenlabsCacheKey,
       );
       if (cachedFile != null) {
         _logger.i('Using cached ElevenLabs audio (saves 1 API request)');
@@ -276,7 +290,7 @@ class MeditationVoiceService {
         return false;
       }
 
-      _logger.i('ElevenLabs TTS: voice=$_elevenLabsVoiceId — API REQUEST');
+      _logger.i('ElevenLabs TTS: voice=$_elevenLabsVoiceId, speed=$_elevenLabsSpeed — API REQUEST');
 
       final response = await http
           .post(
@@ -296,7 +310,7 @@ class MeditationVoiceService {
                 'similarity_boost': 0.80, // Maintain voice consistency
                 'style': 0.20, // Lower expressiveness = slower, more even delivery
                 'use_speaker_boost': true,
-                'speed': 0.85, // 15% slower than default
+                'speed': _elevenLabsSpeed, // Derived from user speaking-speed setting
               },
             }),
           )
@@ -324,7 +338,7 @@ class MeditationVoiceService {
           text,
           audioBytes,
           isPremiumVoice: true,
-          voiceId: _elevenLabsVoiceId,
+          voiceId: elevenlabsCacheKey,
         );
         print('[EARSTREAM TTS] Cache write: ${cachedAudioFile?.path ?? "null (cache failed)"}');
       } catch (cacheErr) {
