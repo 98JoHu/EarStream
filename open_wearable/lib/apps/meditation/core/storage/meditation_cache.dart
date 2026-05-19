@@ -92,8 +92,9 @@ class MeditationCache {
 
   /// Get cached TTS audio file
   /// [isPremiumVoice] ensures premium and free TTS have separate caches
+  /// [voiceId] is included in the cache key so voice changes bust stale entries
   static Future<File?> getCachedAudio(String text,
-      {bool isPremiumVoice = false}) async {
+      {bool isPremiumVoice = false, String voiceId = ''}) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final cacheDir = Directory('${dir.path}/tts_cache');
@@ -102,9 +103,9 @@ class MeditationCache {
         return null;
       }
 
-      // Include voice type in cache key to separate premium/free audio
+      // Include voice type AND voice ID so changing voices busts the cache
       final voiceTypeSuffix = isPremiumVoice ? 'premium' : 'free';
-      final hash = '${text.hashCode.abs().toString()}_$voiceTypeSuffix';
+      final hash = '${text.hashCode.abs().toString()}_${voiceId}_$voiceTypeSuffix';
       final file = File('${cacheDir.path}/$hash.mp3');
 
       if (await file.exists()) {
@@ -135,8 +136,9 @@ class MeditationCache {
 
   /// Cache TTS audio file
   /// [isPremiumVoice] ensures premium and free TTS have separate caches
+  /// [voiceId] is included in the cache key so voice changes bust stale entries
   static Future<File?> cacheAudio(String text, List<int> audioBytes,
-      {bool isPremiumVoice = false}) async {
+      {bool isPremiumVoice = false, String voiceId = ''}) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final cacheDir = Directory('${dir.path}/tts_cache');
@@ -145,9 +147,9 @@ class MeditationCache {
         await cacheDir.create(recursive: true);
       }
 
-      // Include voice type in cache key to separate premium/free audio
+      // Include voice type AND voice ID so changing voices busts the cache
       final voiceTypeSuffix = isPremiumVoice ? 'premium' : 'free';
-      final hash = '${text.hashCode.abs().toString()}_$voiceTypeSuffix';
+      final hash = '${text.hashCode.abs().toString()}_${voiceId}_$voiceTypeSuffix';
       final file = File('${cacheDir.path}/$hash.mp3');
 
       await file.writeAsBytes(audioBytes);

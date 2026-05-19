@@ -260,8 +260,11 @@ class MeditationVoiceService {
   /// ElevenLabs TTS — default global provider (works in Europe and worldwide).
   Future<bool> _tryElevenLabsTts(String text) async {
     try {
-      final cachedFile =
-          await MeditationCache.getCachedAudio(text, isPremiumVoice: true);
+      final cachedFile = await MeditationCache.getCachedAudio(
+        text,
+        isPremiumVoice: true,
+        voiceId: _elevenLabsVoiceId,
+      );
       if (cachedFile != null) {
         _logger.i('Using cached ElevenLabs audio (saves 1 API request)');
         await _playAudioFile(cachedFile);
@@ -321,6 +324,7 @@ class MeditationVoiceService {
           text,
           audioBytes,
           isPremiumVoice: true,
+          voiceId: _elevenLabsVoiceId,
         );
         print('[EARSTREAM TTS] Cache write: ${cachedAudioFile?.path ?? "null (cache failed)"}');
       } catch (cacheErr) {
@@ -355,8 +359,11 @@ class MeditationVoiceService {
   /// fails, so the same build works reliably from both China and abroad.
   Future<bool> _tryQwenTts(String text) async {
     try {
-      final cachedFile =
-          await MeditationCache.getCachedAudio(text, isPremiumVoice: true);
+      final cachedFile = await MeditationCache.getCachedAudio(
+        text,
+        isPremiumVoice: true,
+        voiceId: _qwenVoice,
+      );
       if (cachedFile != null) {
         _logger.i('Using cached Qwen3-TTS audio (saves 1 API request)');
         await _playAudioFile(cachedFile);
@@ -450,6 +457,7 @@ class MeditationVoiceService {
         text,
         audioBytes,
         isPremiumVoice: true,
+        voiceId: _qwenVoice,
       );
 
       final playFile = cachedAudioFile ?? await _createTempFile(audioBytes);

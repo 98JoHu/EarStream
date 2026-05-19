@@ -617,8 +617,8 @@ class ImprovedMeditationController {
         return;
       }
 
-      // Capture transcript for biosignal-adaptive demo mode
-      if (demoMode == DemoConfig.modeBiosignalAdaptive) {
+      // Capture transcript for all real/simulated sessions (not scripted demo)
+      if (demoMode == DemoConfig.modeNone) {
         _sessionTranscript.add(text);
       }
 
@@ -696,8 +696,8 @@ class ImprovedMeditationController {
       );
     }
 
-    // Save transcript for biosignal-adaptive demo mode
-    if (demoMode == DemoConfig.modeBiosignalAdaptive &&
+    // Save transcript for real/simulated sessions (not scripted demo)
+    if (demoMode == DemoConfig.modeNone &&
         _sessionTranscript.isNotEmpty) {
       await SavedMeditationTranscripts.instance.addTranscript(
         SavedMeditationTranscript(
