@@ -77,10 +77,9 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
   OutlookMeetingBlocker? _meetingBlocker;
 
   bool get isIdle => _currentState == MeditationState.idle;
-  bool get _hasConfiguredGeminiKey => MeditationConfig.hasValidDeepSeekKey;
 
   /// Public getter so the parent screen can show the API warning inline.
-  bool get hasConfiguredApiKey => _hasConfiguredGeminiKey;
+  bool get hasConfiguredApiKey => MeditationConfig.hasValidDeepSeekKey;
 
   Future<bool> startMeditationNowFromExternal() async {
     if (_currentState != MeditationState.idle) {
@@ -1170,7 +1169,7 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
           // API Warning Banner (if APIs not configured)
           // Hidden in timer mode — the parent screen shows it below the timer card.
           if (_currentState == MeditationState.idle &&
-              !_hasConfiguredGeminiKey &&
+              !hasConfiguredApiKey &&
               widget.stressDetectionEnabled)
             Container(
               margin: const EdgeInsets.only(bottom: 16),

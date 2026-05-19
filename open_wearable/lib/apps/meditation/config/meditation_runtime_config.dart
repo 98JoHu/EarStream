@@ -30,14 +30,6 @@ class MeditationRuntimeValue {
 }
 
 class MeditationRuntimeConfig {
-  static MeditationRuntimeValue geminiApiKey({String? localValue}) {
-    return _resolve(
-      localValue: localValue,
-      envValue: MeditationConfig.geminiApiKey,
-      sanitizer: sanitizeGeminiApiKey,
-    );
-  }
-
   static MeditationRuntimeValue elevenLabsApiKey({String? localValue}) {
     return _resolve(
       localValue: localValue,
@@ -81,14 +73,6 @@ class MeditationRuntimeConfig {
   static String resolveElevenLabsVoiceId({String? localValue}) {
     return sanitizeElevenLabsVoiceId(localValue) ??
         MeditationConfig.elevenLabsVoiceId;
-  }
-
-  static String? sanitizeGeminiApiKey(String? value) {
-    final key = value?.trim() ?? '';
-    if (key.startsWith('AIza')) {
-      return key;
-    }
-    return null;
   }
 
   static String? sanitizeLongSecret(String? value) {

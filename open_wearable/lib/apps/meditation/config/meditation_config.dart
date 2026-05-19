@@ -10,18 +10,6 @@ class MeditationConfig {
   }
 
   // API Configuration - loaded from .env
-  static String get geminiApiKey {
-    final key = _readEnv('GEMINI_API_KEY');
-    // Validate that it's not a placeholder
-    if (key == 'NONE' ||
-        key == 'YOUR_GEMINI_API_KEY_HERE' ||
-        key.contains('YOUR_') ||
-        key.contains('your_')) {
-      return 'NONE';
-    }
-    return key;
-  }
-
   static String get elevenLabsApiKey {
     final key = _readEnv('ELEVENLABS_API_KEY') != 'NONE'
         ? _readEnv('ELEVENLABS_API_KEY')
@@ -97,8 +85,6 @@ class MeditationConfig {
   }
 
   // Debug helper to check if APIs are configured
-  static bool get hasValidGeminiKey =>
-      geminiApiKey != 'NONE' && geminiApiKey.length > 20;
   static bool get hasValidDeepSeekKey =>
       deepSeekApiKey != 'NONE' && deepSeekApiKey.length > 20;
   // ElevenLabs key validity (global default TTS provider)

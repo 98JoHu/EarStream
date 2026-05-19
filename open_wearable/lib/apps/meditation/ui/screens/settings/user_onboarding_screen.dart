@@ -21,7 +21,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
   // Form fields
   late TextEditingController _nameController;
   late TextEditingController _ageController;
-  late TextEditingController _geminiApiKeyController;
   late TextEditingController _elevenLabsApiKeyController;
   late TextEditingController _microsoftGraphTokenController;
   String _gender = 'other';
@@ -49,8 +48,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     final account = widget.existingAccount;
     _nameController = TextEditingController(text: account?.name ?? '');
     _ageController = TextEditingController(text: account?.age.toString() ?? '');
-    _geminiApiKeyController =
-        TextEditingController(text: account?.geminiApiKey ?? '');
     _elevenLabsApiKeyController =
         TextEditingController(text: account?.elevenLabsApiKey ?? '');
     _microsoftGraphTokenController =
@@ -79,7 +76,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
     _pageController.dispose();
     _nameController.dispose();
     _ageController.dispose();
-    _geminiApiKeyController.dispose();
     _elevenLabsApiKeyController.dispose();
     _microsoftGraphTokenController.dispose();
     _additionalPreferencesController.dispose();
@@ -138,7 +134,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
       additionalPreferences: _additionalPreferencesController.text.trim(),
       stressThreshold: _stressThreshold,
       usePremiumVoice: _usePremiumVoice,
-      geminiApiKey: _geminiApiKeyController.text.trim(),
       elevenLabsApiKey: _elevenLabsApiKeyController.text.trim(),
       elevenLabsVoiceId: _selectedElevenLabsVoiceId,
       microsoftGraphAccessToken: _microsoftGraphTokenController.text.trim(),
@@ -756,12 +751,6 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                       color: Colors.grey[600],
                       height: 1.4,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildCredentialField(
-                    label: 'Gemini API Key',
-                    controller: _geminiApiKeyController,
-                    hintText: 'Enter your Gemini API key',
                   ),
                   const SizedBox(height: 16),
                   _buildCredentialField(

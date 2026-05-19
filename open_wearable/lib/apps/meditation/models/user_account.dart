@@ -22,7 +22,6 @@ class UserAccount {
   double stressThreshold; // Threshold for stress detection (default 0.10 = 10%)
   bool usePremiumVoice; // Toggle for ElevenLabs TTS ($$$)
   String ttsProvider; // 'elevenlabs' (default, global) or 'dashscope' (China)
-  String geminiApiKey;
   String elevenLabsApiKey;
   String elevenLabsVoiceId;
   String dashScopeApiKey; // In-app DashScope International key override
@@ -52,7 +51,6 @@ class UserAccount {
     this.stressThreshold = 0.10, // 10% threshold by default
     this.usePremiumVoice = false, // Default to FREE voice
     this.ttsProvider = 'elevenlabs',
-    this.geminiApiKey = '',
     this.elevenLabsApiKey = '',
     this.elevenLabsVoiceId = '',
     this.dashScopeApiKey = '',
@@ -95,7 +93,6 @@ class UserAccount {
         'stressThreshold': stressThreshold,
         'usePremiumVoice': usePremiumVoice,
         'ttsProvider': ttsProvider,
-        'geminiApiKey': geminiApiKey,
         'elevenLabsApiKey': elevenLabsApiKey,
         'elevenLabsVoiceId': elevenLabsVoiceId,
         'dashScopeApiKey': dashScopeApiKey,
@@ -126,7 +123,6 @@ class UserAccount {
       stressThreshold: (json['stressThreshold'] ?? 0.10).toDouble(),
       usePremiumVoice: json['usePremiumVoice'] ?? false, // Default to FREE
       ttsProvider: json['ttsProvider'] ?? 'elevenlabs',
-      geminiApiKey: json['geminiApiKey'] ?? '',
       elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',
       elevenLabsVoiceId: json['elevenLabsVoiceId'] ?? '',
       dashScopeApiKey: json['dashScopeApiKey'] ?? '',

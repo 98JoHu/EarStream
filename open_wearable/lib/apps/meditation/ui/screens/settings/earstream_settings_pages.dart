@@ -33,7 +33,6 @@ class _EarStreamAccountSectionPageState
 
   late final TextEditingController _nameController;
   late final TextEditingController _ageController;
-  late final TextEditingController _geminiApiKeyController;
   late final TextEditingController _elevenLabsApiKeyController;
   late final TextEditingController _dashScopeApiKeyController;
   late final TextEditingController _dashScopeApiKeyCnController;
@@ -51,7 +50,6 @@ class _EarStreamAccountSectionPageState
   late String _selectedElevenLabsVoiceId;
 
   bool _isSaving = false;
-  bool _showGeminiApiKey = false;
   bool _showElevenLabsApiKey = false;
   bool _showDashScopeApiKey = false;
   bool _showDashScopeApiKeyCn = false;
@@ -75,7 +73,6 @@ class _EarStreamAccountSectionPageState
     _ageController = TextEditingController(
       text: account.age > 0 ? account.age.toString() : '',
     );
-    _geminiApiKeyController = TextEditingController(text: account.geminiApiKey);
     _elevenLabsApiKeyController =
         TextEditingController(text: account.elevenLabsApiKey);
     _dashScopeApiKeyController =
@@ -102,7 +99,6 @@ class _EarStreamAccountSectionPageState
     _selectedElevenLabsVoiceId =
         hasSavedVoice ? savedVoiceId : _elevenLabsStandardVoices.first['id']!;
 
-    _geminiApiKeyController.addListener(_handleLiveFieldChange);
     _elevenLabsApiKeyController.addListener(_handleLiveFieldChange);
     _dashScopeApiKeyController.addListener(_handleLiveFieldChange);
     _dashScopeApiKeyCnController.addListener(_handleLiveFieldChange);
@@ -112,14 +108,12 @@ class _EarStreamAccountSectionPageState
 
   @override
   void dispose() {
-    _geminiApiKeyController.removeListener(_handleLiveFieldChange);
     _elevenLabsApiKeyController.removeListener(_handleLiveFieldChange);
     _dashScopeApiKeyController.removeListener(_handleLiveFieldChange);
     _dashScopeApiKeyCnController.removeListener(_handleLiveFieldChange);
     _microsoftGraphTokenController.removeListener(_handleLiveFieldChange);
     _nameController.dispose();
     _ageController.dispose();
-    _geminiApiKeyController.dispose();
     _elevenLabsApiKeyController.dispose();
     _dashScopeApiKeyController.dispose();
     _dashScopeApiKeyCnController.dispose();
@@ -177,7 +171,6 @@ class _EarStreamAccountSectionPageState
     updatedAccount.stressThreshold = _stressThreshold;
     updatedAccount.usePremiumVoice = _usePremiumVoice;
     updatedAccount.elevenLabsVoiceId = _selectedElevenLabsVoiceId;
-    updatedAccount.geminiApiKey = _geminiApiKeyController.text.trim();
     updatedAccount.elevenLabsApiKey = _elevenLabsApiKeyController.text.trim();
     updatedAccount.ttsProvider = _ttsProvider;
     updatedAccount.dashScopeApiKey = _dashScopeApiKeyController.text.trim();
@@ -247,8 +240,6 @@ class _EarStreamAccountSectionPageState
       }
     }
   }
-
-  bool _looksLikeGeminiKey(String value) => value.trim().startsWith('AIza');
 
   bool _hasPremiumVoiceKey(String value) => value.trim().length > 20;
 
@@ -990,16 +981,9 @@ class _EarStreamAccountSectionPageState
   }
 
   Widget _buildApiKeysPage() {
-    final geminiValue = _geminiApiKeyController.text.trim();
     final elevenLabsValue = _elevenLabsApiKeyController.text.trim();
     final dashScopeValue = _dashScopeApiKeyController.text.trim();
     final dashScopeCnValue = _dashScopeApiKeyCnController.text.trim();
-
-    final geminiStatus = geminiValue.isNotEmpty
-        ? (_looksLikeGeminiKey(geminiValue) ? 'In-app key' : 'Check value')
-        : MeditationConfig.hasValidGeminiKey
-            ? '.env fallback'
-            : 'Missing';
 
     final elevenLabsStatus = elevenLabsValue.isNotEmpty
         ? (_hasPremiumVoiceKey(elevenLabsValue) ? 'In-app key' : 'Check value')
@@ -1155,37 +1139,6 @@ class _EarStreamAccountSectionPageState
             color: dashScopeCnStatus == 'In-app key'
                 ? Colors.teal
                 : Colors.grey,
-          ),
-          const SizedBox(height: 24),
-
-          // ── Gemini ────────────────────────────────────────────────────────
-          const Text(
-            'Gemini (AI content)',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          _buildSecretField(
-            label: 'Gemini API key',
-            controller: _geminiApiKeyController,
-            hintText: 'Paste a Gemini API key',
-            isVisible: _showGeminiApiKey,
-            onToggleVisibility: () {
-              setState(() {
-                _showGeminiApiKey = !_showGeminiApiKey;
-              });
-            },
-          ),
-          _buildStatusCard(
-            title: 'Gemini',
-            status: geminiStatus,
-            description: geminiValue.isNotEmpty
-                ? 'This value will override the bundled .env key for EarStream content generation.'
-                : 'Leave this empty if you want EarStream to keep using the bundled .env key instead.',
-            color: geminiStatus == 'Missing'
-                ? Colors.orange
-                : geminiStatus == 'Check value'
-                    ? Colors.red.shade700
-                    : Colors.indigo,
           ),
         ],
       ),
