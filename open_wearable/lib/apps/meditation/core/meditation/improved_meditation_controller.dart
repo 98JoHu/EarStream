@@ -12,6 +12,7 @@ import '../../models/user_account.dart';
 import '../../config/demo_config.dart';
 import 'personalized_stress_detector.dart';
 import '../storage/meditation_history.dart';
+import '../storage/saved_meditation_transcripts.dart';
 import '../biosignals/activity_detector.dart';
 import '../storage/meditation_cache.dart';
 
@@ -100,6 +101,9 @@ class ImprovedMeditationController {
       false; // Guard flag to prevent concurrent completion calls
   Future<String>? _prefetchFuture; // Pre-fetched next segment to reduce silence gaps
 
+  // Transcript capture (biosignal-adaptive demo only)
+  final List<String> _sessionTranscript = [];
+
   // Monitoring
   Timer? _stressMonitorTimer;
   bool _isMonitoringStress = false;
@@ -184,6 +188,7 @@ class ImprovedMeditationController {
       _peakStressLevel = 0.0;
       _isPaused = false;
       _isCompletingSession = false; // Reset completion flag
+      _sessionTranscript.clear();
 
       llmService.startNewSession();
 
@@ -201,13 +206,23 @@ class ImprovedMeditationController {
 
       // Generate welcome
       _setState(MeditationState.generatingContent);
-      final welcomeText = await llmService.generatePersonalizedWelcome(
+      // Kick off LLM generation concurrently so it runs while the user
+      // hears the immediate opener — eliminating the cold-start silence.
+      final welcomeFuture = llmService.generatePersonalizedWelcome(
         currentHr: _currentHr,
         currentHrv: _currentHrv,
         baselineHr: _baselineHr,
         baselineHrv: _baselineHrv,
       );
 
+      // Speak a fixed opener right away — no waiting for the LLM
+      await _speak(
+        'Welcome. I\'m preparing your personalized meditation. '
+        'Please find a comfortable position and allow yourself to settle.',
+      );
+
+      // By the time the opener finishes the LLM call is typically done
+      final welcomeText = await welcomeFuture;
       await _speak(welcomeText);
 
       // Start adaptive loop
@@ -590,7 +605,7 @@ class ImprovedMeditationController {
     // Lower background ambience during speech
     try {
       await backgroundMusicPlayer
-          .setVolume(0.25); // Gentle background during voice (25%)
+          .setVolume(0.35); // Gentle background during voice (35%)
     } catch (e) {
       // Ignore if not playing
     }
@@ -600,6 +615,11 @@ class ImprovedMeditationController {
       if (_state == MeditationState.idle) {
         _logger.i('Session stopped before speaking - skipping speech');
         return;
+      }
+
+      // Capture transcript for biosignal-adaptive demo mode
+      if (demoMode == DemoConfig.modeBiosignalAdaptive) {
+        _sessionTranscript.add(text);
       }
 
       // Let the current segment finish completely without interruption
@@ -619,7 +639,7 @@ class ImprovedMeditationController {
 
     // Restore ambience volume after speech
     try {
-      await backgroundMusicPlayer.setVolume(0.30); // Back to 30%
+      await backgroundMusicPlayer.setVolume(0.40); // Back to 40%
     } catch (e) {
       // Ignore if not playing
     }
@@ -674,6 +694,19 @@ class ImprovedMeditationController {
         iterationCount: _iterationCount,
         peakStressLevel: _peakStressLevel,
       );
+    }
+
+    // Save transcript for biosignal-adaptive demo mode
+    if (demoMode == DemoConfig.modeBiosignalAdaptive &&
+        _sessionTranscript.isNotEmpty) {
+      await SavedMeditationTranscripts.instance.addTranscript(
+        SavedMeditationTranscript(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          timestamp: _sessionStartTime ?? DateTime.now(),
+          segments: List<String>.from(_sessionTranscript),
+        ),
+      );
+      _logger.i('Saved meditation transcript (${_sessionTranscript.length} segments)');
     }
 
     _setState(MeditationState.completed);
@@ -1053,7 +1086,7 @@ class ImprovedMeditationController {
           audioFile = 'audio/meditation_sound.mp3';
           _logger.i('Trying default: $audioFile');
           await backgroundMusicPlayer.setReleaseMode(ReleaseMode.loop);
-          await backgroundMusicPlayer.setVolume(0.30);
+          await backgroundMusicPlayer.setVolume(0.40);
           await _playMeditationAsset(audioFile);
           _logger.i('Default background sound playing');
         } catch (e) {

@@ -17,6 +17,7 @@ import '../components/biosignal_display/hr_hrv_display_new.dart';
 import '../components/meditation_session/llm_meditation_widget.dart';
 import '../components/debug/api_debug_widget.dart';
 import 'weekly_analysis_screen.dart';
+import 'saved_meditations_screen.dart';
 import '../../models/user_account.dart';
 import 'settings/earstream_settings_pages.dart';
 
@@ -1834,6 +1835,15 @@ class _MeditationViewState extends State<MeditationView> {
     );
   }
 
+  Future<void> _openSavedMeditationsPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SavedMeditationsScreen(),
+      ),
+    );
+  }
+
   Future<void> _openSealCheckPage() async {
     // Check if wearable is available and has AudioResponseManager capability
     if (widget.wearable == null) {
@@ -2388,6 +2398,11 @@ class _MeditationViewState extends State<MeditationView> {
                 leading: const Icon(Icons.insights_outlined),
                 title: const Text('Weekly Analytics'),
                 onTap: () => _closeDrawerAnd(_openWeeklyAnalyticsPage),
+              ),
+              ListTile(
+                leading: const Icon(Icons.library_books_outlined),
+                title: const Text('Saved Meditations'),
+                onTap: () => _closeDrawerAnd(_openSavedMeditationsPage),
               ),
               if (!_isDemoModeActive) ...[
                 ListTile(

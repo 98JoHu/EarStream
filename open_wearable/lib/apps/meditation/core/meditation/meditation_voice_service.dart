@@ -31,7 +31,7 @@ class MeditationVoiceService {
   String _ttsProvider = 'elevenlabs';
   // ElevenLabs fields
   String _elevenLabsApiKey = MeditationConfig.elevenLabsApiKey;
-  String _elevenLabsVoiceId = 'hpp4J3VqNfWAUOO0d1Us'; // resolved from voiceGender in initialize()
+  String _elevenLabsVoiceId = 'pFZP5JQG7iQjIQuC4Bku'; // resolved from voiceGender in initialize()
   // DashScope fields (Alibaba, for China)
   String _dashScopeApiKey = MeditationConfig.dashScopeApiKey;
   String _qwenVoice = 'Seren'; // Qwen3-TTS voice name; updated in initialize()
@@ -62,10 +62,10 @@ class MeditationVoiceService {
           localValue: elevenLabsApiKey,
         ).value ??
         MeditationConfig.elevenLabsApiKey;
-    // Derive ElevenLabs voice from voiceGender: male=Roger, female=Bella
+    // Derive ElevenLabs voice from voiceGender: male=Brian, female=Lily
     _elevenLabsVoiceId = voiceGender == 'male'
-        ? 'CwhRBWXzGAHq8TQ4Fs17' // Roger (male, resonant)
-        : 'hpp4J3VqNfWAUOO0d1Us'; // Bella (female, warm)
+        ? 'nPczCjzI2devNBz1zQrb' // Brian (male, deep, resonant, comforting)
+        : 'pFZP5JQG7iQjIQuC4Bku'; // Lily (female, velvety, warm, British)
     // Resolve DashScope credentials (in-app override > .env)
     _dashScopeApiKey = MeditationRuntimeConfig.dashScopeApiKey(
           localValue: dashScopeApiKey,
@@ -287,12 +287,13 @@ class MeditationVoiceService {
             },
             body: jsonEncode({
               'text': text,
-              'model_id': 'eleven_turbo_v2',
+              'model_id': 'eleven_turbo_v2_5',
               'voice_settings': {
-                'stability': 0.65, // Meditation-optimized: calm and stable
+                'stability': 0.75, // Higher stability = more measured, calming pace
                 'similarity_boost': 0.80, // Maintain voice consistency
-                'style': 0.35,
+                'style': 0.20, // Lower expressiveness = slower, more even delivery
                 'use_speaker_boost': true,
+                'speed': 0.85, // 15% slower than default
               },
             }),
           )
