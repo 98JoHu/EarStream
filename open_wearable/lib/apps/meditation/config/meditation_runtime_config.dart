@@ -54,14 +54,6 @@ class MeditationRuntimeConfig {
     );
   }
 
-  static MeditationRuntimeValue dashScopeApiKeyCn({String? localValue}) {
-    return _resolve(
-      localValue: localValue,
-      envValue: MeditationConfig.dashScopeApiKeyCn,
-      sanitizer: sanitizeLongSecret,
-    );
-  }
-
   /// Resolves the active TTS provider. In-app value takes precedence over .env.
   static String resolveTtsProvider({String? localValue}) {
     if (localValue == 'dashscope' || localValue == 'elevenlabs') {

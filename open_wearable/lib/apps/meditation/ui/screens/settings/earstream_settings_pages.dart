@@ -35,7 +35,6 @@ class _EarStreamAccountSectionPageState
   late final TextEditingController _ageController;
   late final TextEditingController _elevenLabsApiKeyController;
   late final TextEditingController _dashScopeApiKeyController;
-  late final TextEditingController _dashScopeApiKeyCnController;
   late final TextEditingController _microsoftGraphTokenController;
   late final TextEditingController _additionalPreferencesController;
 
@@ -52,7 +51,6 @@ class _EarStreamAccountSectionPageState
   bool _isSaving = false;
   bool _showElevenLabsApiKey = false;
   bool _showDashScopeApiKey = false;
-  bool _showDashScopeApiKeyCn = false;
   bool _showMicrosoftGraphToken = false;
   String _ttsProvider = 'elevenlabs'; // 'elevenlabs' or 'dashscope'
   bool _isCheckingOutlook = false;
@@ -77,8 +75,6 @@ class _EarStreamAccountSectionPageState
         TextEditingController(text: account.elevenLabsApiKey);
     _dashScopeApiKeyController =
         TextEditingController(text: account.dashScopeApiKey);
-    _dashScopeApiKeyCnController =
-        TextEditingController(text: account.dashScopeApiKeyCn);
     _microsoftGraphTokenController =
         TextEditingController(text: account.microsoftGraphAccessToken);
     _additionalPreferencesController =
@@ -101,7 +97,6 @@ class _EarStreamAccountSectionPageState
 
     _elevenLabsApiKeyController.addListener(_handleLiveFieldChange);
     _dashScopeApiKeyController.addListener(_handleLiveFieldChange);
-    _dashScopeApiKeyCnController.addListener(_handleLiveFieldChange);
     _microsoftGraphTokenController.addListener(_handleLiveFieldChange);
     _ttsProvider = account.ttsProvider.isNotEmpty ? account.ttsProvider : 'elevenlabs';
   }
@@ -110,13 +105,11 @@ class _EarStreamAccountSectionPageState
   void dispose() {
     _elevenLabsApiKeyController.removeListener(_handleLiveFieldChange);
     _dashScopeApiKeyController.removeListener(_handleLiveFieldChange);
-    _dashScopeApiKeyCnController.removeListener(_handleLiveFieldChange);
     _microsoftGraphTokenController.removeListener(_handleLiveFieldChange);
     _nameController.dispose();
     _ageController.dispose();
     _elevenLabsApiKeyController.dispose();
     _dashScopeApiKeyController.dispose();
-    _dashScopeApiKeyCnController.dispose();
     _microsoftGraphTokenController.dispose();
     _additionalPreferencesController.dispose();
     super.dispose();
@@ -174,7 +167,6 @@ class _EarStreamAccountSectionPageState
     updatedAccount.elevenLabsApiKey = _elevenLabsApiKeyController.text.trim();
     updatedAccount.ttsProvider = _ttsProvider;
     updatedAccount.dashScopeApiKey = _dashScopeApiKeyController.text.trim();
-    updatedAccount.dashScopeApiKeyCn = _dashScopeApiKeyCnController.text.trim();
     updatedAccount.microsoftGraphAccessToken =
         _microsoftGraphTokenController.text.trim();
 
@@ -983,7 +975,6 @@ class _EarStreamAccountSectionPageState
   Widget _buildApiKeysPage() {
     final elevenLabsValue = _elevenLabsApiKeyController.text.trim();
     final dashScopeValue = _dashScopeApiKeyController.text.trim();
-    final dashScopeCnValue = _dashScopeApiKeyCnController.text.trim();
 
     final elevenLabsStatus = elevenLabsValue.isNotEmpty
         ? (_hasPremiumVoiceKey(elevenLabsValue) ? 'In-app key' : 'Check value')
@@ -996,10 +987,6 @@ class _EarStreamAccountSectionPageState
         : MeditationConfig.hasValidDashScopeKey
             ? '.env fallback'
             : 'Missing';
-
-    final dashScopeCnStatus = dashScopeCnValue.isNotEmpty
-        ? (dashScopeCnValue.length > 10 ? 'In-app key' : 'Check value')
-        : 'Not configured';
 
     return _buildWhiteCard(
       child: Column(
@@ -1086,12 +1073,12 @@ class _EarStreamAccountSectionPageState
           ),
           const SizedBox(height: 4),
           Text(
-            'International endpoint (Singapore) — works outside China.',
+            'Beijing endpoint — globally accessible from China and abroad.',
             style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
           const SizedBox(height: 8),
           _buildSecretField(
-            label: 'DashScope API key (International)',
+            label: 'DashScope API key',
             controller: _dashScopeApiKeyController,
             hintText: 'Paste a DashScope API key',
             isVisible: _showDashScopeApiKey,
@@ -1102,7 +1089,7 @@ class _EarStreamAccountSectionPageState
             },
           ),
           _buildStatusCard(
-            title: 'DashScope (International)',
+            title: 'DashScope',
             status: dashScopeStatus,
             description: dashScopeValue.isNotEmpty
                 ? 'This value will override the bundled .env key for DashScope TTS.'
@@ -1112,33 +1099,6 @@ class _EarStreamAccountSectionPageState
                 : dashScopeStatus == 'Check value'
                     ? Colors.red.shade700
                     : Colors.teal,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Chinese Mainland endpoint (Beijing) — fallback for China.',
-            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          _buildSecretField(
-            label: 'DashScope API key (China Mainland)',
-            controller: _dashScopeApiKeyCnController,
-            hintText: 'Paste a DashScope CN API key (optional)',
-            isVisible: _showDashScopeApiKeyCn,
-            onToggleVisibility: () {
-              setState(() {
-                _showDashScopeApiKeyCn = !_showDashScopeApiKeyCn;
-              });
-            },
-          ),
-          _buildStatusCard(
-            title: 'DashScope (China Mainland)',
-            status: dashScopeCnStatus,
-            description: dashScopeCnValue.isNotEmpty
-                ? 'Will be tried as fallback when the International endpoint denies access.'
-                : 'Optional. If provided, used as CN Mainland fallback.',
-            color: dashScopeCnStatus == 'In-app key'
-                ? Colors.teal
-                : Colors.grey,
           ),
         ],
       ),

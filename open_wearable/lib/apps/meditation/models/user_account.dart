@@ -24,8 +24,7 @@ class UserAccount {
   String ttsProvider; // 'elevenlabs' (default, global) or 'dashscope' (China)
   String elevenLabsApiKey;
   String elevenLabsVoiceId;
-  String dashScopeApiKey; // In-app DashScope International key override
-  String dashScopeApiKeyCn; // In-app DashScope Chinese Mainland key override
+  String dashScopeApiKey; // In-app DashScope key override (Beijing endpoint, globally accessible)
   String microsoftGraphAccessToken;
   List<String> stressTriggers;
   List<String> relaxationTechniques;
@@ -54,7 +53,6 @@ class UserAccount {
     this.elevenLabsApiKey = '',
     this.elevenLabsVoiceId = '',
     this.dashScopeApiKey = '',
-    this.dashScopeApiKeyCn = '',
     this.microsoftGraphAccessToken = '',
     this.stressTriggers = const [],
     this.relaxationTechniques = const [
@@ -96,7 +94,6 @@ class UserAccount {
         'elevenLabsApiKey': elevenLabsApiKey,
         'elevenLabsVoiceId': elevenLabsVoiceId,
         'dashScopeApiKey': dashScopeApiKey,
-        'dashScopeApiKeyCn': dashScopeApiKeyCn,
         'microsoftGraphAccessToken': microsoftGraphAccessToken,
         'stressTriggers': stressTriggers,
         'relaxationTechniques': relaxationTechniques,
@@ -126,7 +123,6 @@ class UserAccount {
       elevenLabsApiKey: json['elevenLabsApiKey'] ?? '',
       elevenLabsVoiceId: json['elevenLabsVoiceId'] ?? '',
       dashScopeApiKey: json['dashScopeApiKey'] ?? '',
-      dashScopeApiKeyCn: json['dashScopeApiKeyCn'] ?? '',
       microsoftGraphAccessToken: json['microsoftGraphAccessToken'] ?? '',
       stressTriggers: List<String>.from(json['stressTriggers'] ?? []),
       relaxationTechniques: List<String>.from(json['relaxationTechniques'] ??

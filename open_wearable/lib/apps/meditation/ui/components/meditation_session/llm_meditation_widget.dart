@@ -167,7 +167,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
       ttsProvider: _userAccount!.ttsProvider,
       dashScopeApiKey: _userAccount!.dashScopeApiKey,
-      dashScopeApiKeyCn: _userAccount!.dashScopeApiKeyCn,
     );
 
     _llmService = ImprovedMeditationLLMService();
@@ -332,7 +331,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
         elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
         ttsProvider: _userAccount!.ttsProvider,
         dashScopeApiKey: _userAccount!.dashScopeApiKey,
-        dashScopeApiKeyCn: _userAccount!.dashScopeApiKeyCn,
       );
       print(
           '✅ Voice service reinitialized after reset: speed=${_userAccount!.speakingSpeed}, premium=${_userAccount!.usePremiumVoice}');
@@ -458,7 +456,6 @@ class LlmMeditationWidgetState extends State<LlmMeditationWidget> {
       elevenLabsVoiceId: _userAccount!.elevenLabsVoiceId,
       ttsProvider: _userAccount!.ttsProvider,
       dashScopeApiKey: _userAccount!.dashScopeApiKey,
-      dashScopeApiKeyCn: _userAccount!.dashScopeApiKeyCn,
     );
     print(
         '✅ Voice service RE-initialized: gender=${_userAccount!.voiceGender.toUpperCase()}, speed=${_userAccount!.speakingSpeed}, premium=${_userAccount!.usePremiumVoice}');

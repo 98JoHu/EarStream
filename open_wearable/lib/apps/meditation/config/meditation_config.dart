@@ -60,17 +60,10 @@ class MeditationConfig {
     return key;
   }
 
+  /// DashScope API key (Alibaba/Qwen3-TTS). Uses the Beijing endpoint which
+  /// is globally accessible — works from both China and abroad.
   static String get dashScopeApiKey {
     final key = _readEnv('DASHSCOPE_API_KEY');
-    if (key == 'NONE' || key.contains('YOUR_') || key.contains('your_')) {
-      return 'NONE';
-    }
-    return key;
-  }
-
-  /// DashScope Chinese Mainland key (Beijing endpoint) for demos in China.
-  static String get dashScopeApiKeyCn {
-    final key = _readEnv('DASHSCOPE_API_KEY_CN');
     if (key == 'NONE' || key.contains('YOUR_') || key.contains('your_')) {
       return 'NONE';
     }
