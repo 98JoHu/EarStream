@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
 
-class PreferencesPage extends DrawerPage {
+class PreferencesPage extends StatefulWidget implements DrawerPage {
   const PreferencesPage({super.key});
 
   @override
@@ -13,6 +13,11 @@ class PreferencesPage extends DrawerPage {
   @override
   IconData get selectedIcon => Icons.spa;
 
+  @override
+  State<PreferencesPage> createState() => _PreferencesPageState();
+}
+
+class _PreferencesPageState extends State<PreferencesPage> {
   @override
   Widget build(BuildContext context) {
     return const Center(

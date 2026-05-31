@@ -1,7 +1,7 @@
 import 'drawer_page.dart';
 import 'package:flutter/material.dart';
 
-class MeditationPage extends DrawerPage {
+class MeditationPage extends StatefulWidget implements DrawerPage {
   const MeditationPage({super.key});
 
   @override
@@ -13,6 +13,11 @@ class MeditationPage extends DrawerPage {
   @override
   IconData get selectedIcon => Icons.tune;
 
+  @override
+  State<MeditationPage> createState() => _MeditationPageState();
+}
+
+class _MeditationPageState extends State<MeditationPage> {
   @override
   Widget build(BuildContext context) {
     return const Center(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
 
-class WeeklyAnalyticsPage extends DrawerPage {
+class WeeklyAnalyticsPage extends StatefulWidget implements DrawerPage {
   const WeeklyAnalyticsPage({super.key});
 
   @override
@@ -13,6 +13,11 @@ class WeeklyAnalyticsPage extends DrawerPage {
   @override
   IconData get selectedIcon => Icons.insights;
 
+  @override
+  State<WeeklyAnalyticsPage> createState() => _WeeklyAnalyticsPageState();
+}
+
+class _WeeklyAnalyticsPageState extends State<WeeklyAnalyticsPage> {
   @override
   Widget build(BuildContext context) {
     return const Center(

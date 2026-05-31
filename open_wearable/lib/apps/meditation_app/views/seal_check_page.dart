@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
 
-class SealCheckPage extends DrawerPage {
+class SealCheckPage extends StatefulWidget implements DrawerPage {
   const SealCheckPage({super.key});
 
   @override
@@ -13,6 +13,11 @@ class SealCheckPage extends DrawerPage {
   @override
   IconData get selectedIcon => Icons.verified;
 
+  @override
+  State<SealCheckPage> createState() => _SealCheckPageState();
+}
+
+class _SealCheckPageState extends State<SealCheckPage> {
   @override
   Widget build(BuildContext context) {
     return const Center(

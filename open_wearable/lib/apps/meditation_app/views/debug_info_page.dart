@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
 
-class DebugInfoPage extends DrawerPage {
+class DebugInfoPage extends StatefulWidget implements DrawerPage {
   const DebugInfoPage({super.key});
 
   @override
@@ -13,6 +13,11 @@ class DebugInfoPage extends DrawerPage {
   @override
   IconData get selectedIcon => Icons.bug_report;
 
+  @override
+  State<DebugInfoPage> createState() => _DebugInfoPageState();
+}
+
+class _DebugInfoPageState extends State<DebugInfoPage> {
   @override
   Widget build(BuildContext context) {
     return const Center(
