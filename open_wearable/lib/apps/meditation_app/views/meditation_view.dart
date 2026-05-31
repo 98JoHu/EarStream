@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
+import '../model/user_account.dart';
 import 'drawer_page.dart';
 import 'meditation_page.dart';
 import 'profile_page.dart';
@@ -31,10 +32,18 @@ class MeditationView extends StatefulWidget {
 
 class _MeditationViewState extends State<MeditationView> {
   int _selectedIndex = 0;
+  final UserAccount _mockUserAccount = UserAccount(
+    username: 'johndoe',
+    firstName: 'John',
+    lastName: 'Doe',
+    gender: Gender.unspecified,
+    age: 30,
+    fitnessLevel: FitnessLevel.moderate,
+  );
 
-  final List<DrawerPage> _pages = [
+  late final List<DrawerPage> _pages = [
     const MeditationPage(),
-    const ProfilePage(),
+    ProfilePage(userAccount: _mockUserAccount),
     const PreferencesPage(),
     const WeeklyAnalyticsPage(),
     const CalendarIntegrationPage(),

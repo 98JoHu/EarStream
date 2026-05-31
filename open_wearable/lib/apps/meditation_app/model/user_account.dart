@@ -1,11 +1,21 @@
+enum Gender { male, female, nonBinary, unspecified }
+
+enum FitnessLevel { sedentary, moderate, active, athlete }
+
 class UserAccount {
-  String username;
-  String firstName;
-  String lastName;
+  String? username;
+  String? firstName;
+  String? lastName;
+  Gender? gender;
+  int? age;
+  FitnessLevel? fitnessLevel;
 
   UserAccount({
-    required this.username,
-    required this.firstName,
-    required this.lastName,
+    this.username,
+    this.firstName,
+    this.lastName,
+    this.gender,
+    this.age,
+    this.fitnessLevel,
   });
 }
