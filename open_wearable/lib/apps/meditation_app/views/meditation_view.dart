@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
+abstract class DrawerPage extends StatelessWidget {
+  const DrawerPage({super.key});
+
+  String get label;
+  IconData get icon;
+  IconData get selectedIcon;
+}
+
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;
   final SensorConfigurationProvider? sensorConfigProvider;
@@ -21,6 +29,19 @@ class MeditationView extends StatefulWidget {
 }
 
 class _MeditationViewState extends State<MeditationView> {
+  int _selectedIndex = 0;
+
+  final List<DrawerPage> _pages = [
+    const MeditationPage(),
+    const ProfilePage(),
+    const PreferencesPage(),
+    const WeeklyAnalyticsPage(),
+    const CalendarIntegrationPage(),
+    const SealCheckPage(),
+    const ApiKeysPage(),
+    const DebugInfoPage(),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,6 +50,14 @@ class _MeditationViewState extends State<MeditationView> {
       ),
       endDrawer: SafeArea(
         child: NavigationDrawer(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (int index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+            // Close the drawer after selecting a destination
+            Navigator.of(context).pop();
+          },
           header: DrawerHeader(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -65,16 +94,16 @@ class _MeditationViewState extends State<MeditationView> {
             ),
           ),
           children: [
-            NavigationDrawerDestination(
-              icon: Icon(Icons.person_2_outlined),
-              label: Text('Profile'),
-            ),
+            ..._pages.map((DrawerPage page) {
+              return NavigationDrawerDestination(
+                icon: Icon(page.icon),
+                label: Text(page.label),
+              );
+            }),
           ],
         ),
       ),
-      body: const Center(
-        child: Text("Meditation view coming soon!"),
-      ),
+      body: _pages[_selectedIndex],
     );
   }
 }
