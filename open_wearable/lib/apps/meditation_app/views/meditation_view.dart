@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
-
-abstract class DrawerPage extends StatelessWidget {
-  const DrawerPage({super.key});
-
-  String get label;
-  IconData get icon;
-  IconData get selectedIcon;
-}
+import 'drawer_page.dart';
+import 'meditation_page.dart';
+import 'profile_page.dart';
+import 'preferences_page.dart';
+import 'weekly_analytics_page.dart';
+import 'calendar_integration_page.dart';
+import 'seal_check_page.dart';
+import 'api_keys_page.dart';
+import 'debug_info_page.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;
@@ -93,14 +94,13 @@ class _MeditationViewState extends State<MeditationView> {
               ],
             ),
           ),
-          children: [
-            ..._pages.map((DrawerPage page) {
-              return NavigationDrawerDestination(
-                icon: Icon(page.icon),
-                label: Text(page.label),
-              );
-            }),
-          ],
+          children: _pages.map((DrawerPage page) {
+            return NavigationDrawerDestination(
+              icon: Icon(page.icon),
+              label: Text(page.label),
+              selectedIcon: Icon(page.selectedIcon),
+            );
+          }).toList(),
         ),
       ),
       body: _pages[_selectedIndex],
