@@ -274,6 +274,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     onSelected: (value) =>
                         setState(() => _stressThreshold = value!),
                   ),
+                  const SizedBox(height: 24),
                   // TODO: Add eleven labs voice selection
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
