@@ -44,7 +44,7 @@ class _MeditationViewState extends State<MeditationView> {
   late final List<DrawerPage> _pages = [
     const MeditationPage(),
     ProfilePage(userAccount: _mockUserAccount),
-    const PreferencesPage(),
+    PreferencesPage(userAccount: _mockUserAccount),
     const WeeklyAnalyticsPage(),
     const CalendarIntegrationPage(),
     const SealCheckPage(),
