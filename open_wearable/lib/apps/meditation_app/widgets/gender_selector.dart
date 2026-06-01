@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../model/user_account.dart';
+import '../model/user_account.dart' show Gender;
 
 class GenderSelector extends StatelessWidget {
   final Gender currentSelection;
