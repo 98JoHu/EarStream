@@ -150,7 +150,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 28),
                   const Text(
                     'Fitness level',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
                   _buildFitnessOption(
