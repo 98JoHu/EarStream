@@ -19,6 +19,9 @@ class UserAccount {
   String? additionalPreferences;
   double? stressThreshold;
 
+  // Outlook integration
+  String? outlookSuppressionToken;
+
   UserAccount({
     this.username,
     this.firstName,
@@ -32,5 +35,6 @@ class UserAccount {
     this.meditationEnvironment,
     this.additionalPreferences,
     this.stressThreshold,
+    this.outlookSuppressionToken,
   });
 }
