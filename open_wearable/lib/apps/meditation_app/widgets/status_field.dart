@@ -189,3 +189,69 @@ class OutlookConnectionManager extends ConnectionManager {
     print('Outlook Synced. User Busy Status: $isCurrentlyInMeeting');
   }
 }
+
+class DeepseekManager extends ConnectionManager {
+  DeepseekManager({required super.userAccount});
+
+  @override
+  Future<dynamic> verifyCredentials() async {
+    if (userAccount.deepseekApiKey?.isEmpty ?? true) {
+      throw Exception('Deepseek API key cannot be empty.');
+    }
+
+    final response = await http.get(
+      Uri.parse('https://api.deepseek.ai/v1/account'),
+      headers: {
+        'Authorization': 'Bearer ${userAccount.deepseekApiKey}',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Deepseek API rejected key (Code: ${response.statusCode})');
+    }
+
+    return json.decode(response.body);
+  }
+
+  @override
+  Future<void> updateUser(dynamic result) async {
+    // Extract relevant account info from the result and update your user model
+    // Example:
+    // userAccount.deepseekSubscriptionLevel = result['subscription']['level'];
+    print('Deepseek Synced. Account Info: $result');
+  }
+}
+
+class ElevenLabsManager extends ConnectionManager {
+  ElevenLabsManager({required super.userAccount});
+
+  @override
+  Future<dynamic> verifyCredentials() async {
+    if (userAccount.elevenLabsApiKey?.isEmpty ?? true) {
+      throw Exception('ElevenLabs API key cannot be empty.');
+    }
+
+    final response = await http.get(
+      Uri.parse('https://api.elevenlabs.io/v1/user'),
+      headers: {
+        'Authorization': 'Bearer ${userAccount.elevenLabsApiKey}',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'ElevenLabs API rejected key (Code: ${response.statusCode})');
+    }
+
+    return json.decode(response.body);
+  }
+
+  @override
+  Future<void> updateUser(dynamic result) async {
+    // Extract relevant account info from the result and update your user model
+    // Example:
+    // userAccount.elevenLabsSubscriptionLevel = result['subscription']['plan'];
+    print('ElevenLabs Synced. Account Info: $result');
+  }
+}
