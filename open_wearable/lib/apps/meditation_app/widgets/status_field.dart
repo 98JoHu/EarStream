@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../model/user_account.dart';
 
 enum Status { missing, checking, error, ok }
 
-class StatusField extends StatefulWidget {
+class StatusField extends StatelessWidget {
   final Widget? neighbourWidget;
-  const StatusField({super.key, this.neighbourWidget});
+  final ConnectionManager connectionManager;
+  const StatusField({
+    super.key,
+    this.neighbourWidget,
+    required this.connectionManager,
+  });
 
-  @override
-  State<StatusField> createState() => _StatusFieldState();
-}
-
-class _StatusFieldState extends State<StatusField> {
-  final Status _status = Status.missing;
   Color get color {
-    switch (_status) {
+    switch (connectionManager.status) {
       case Status.missing:
         return Colors.grey;
       case Status.checking:
@@ -26,7 +28,7 @@ class _StatusFieldState extends State<StatusField> {
   }
 
   String get statusText {
-    switch (_status) {
+    switch (connectionManager.status) {
       case Status.missing:
         return "Not set";
       case Status.checking:
@@ -39,7 +41,7 @@ class _StatusFieldState extends State<StatusField> {
   }
 
   String get description {
-    switch (_status) {
+    switch (connectionManager.status) {
       case Status.missing:
         return "No source selected. Please choose a source to enable stress detection.";
       case Status.checking:
@@ -57,49 +59,133 @@ class _StatusFieldState extends State<StatusField> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        widget.neighbourWidget ?? const SizedBox.shrink(),
-        if (widget.neighbourWidget != null) const SizedBox(height: 8),
-        Container(
-          margin: const EdgeInsets.only(top: 12),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withValues(alpha: 0.35)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        neighbourWidget ?? const SizedBox.shrink(),
+        if (neighbourWidget != null) const SizedBox(height: 8),
+        ListenableBuilder(
+          listenable: connectionManager,
+          builder: (context, child) {
+            return Container(
+              margin: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: color.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Text(
+                        "Current Source",
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Text(
-                    "Current Source",
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    description,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.4,
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: connectionManager.checkConnection,
+                    child: const Text("Check Connection"),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ],
     );
+  }
+}
+
+abstract class ConnectionManager extends ChangeNotifier {
+  @protected
+  final UserAccount userAccount;
+  ConnectionManager({required this.userAccount});
+  Status _status = Status.missing;
+  Status get status => _status;
+
+  Future<void> checkConnection() async {
+    _status = Status.checking;
+    notifyListeners();
+
+    try {
+      final dynamic result = await verifyCredentials();
+      _status = Status.ok;
+      notifyListeners();
+
+      await updateUser(result);
+    } catch (e) {
+      print("Connection check failed: $e");
+      _status = Status.error;
+      notifyListeners();
+    }
+  }
+
+  @protected
+  Future<dynamic> verifyCredentials();
+
+  @protected
+  Future<void> updateUser(dynamic result);
+}
+
+class OutlookConnectionManager extends ConnectionManager {
+  OutlookConnectionManager({required super.userAccount});
+
+  @override
+  Future<dynamic> verifyCredentials() async {
+    if (userAccount.outlookSuppressionToken?.isEmpty ?? true) {
+      throw Exception('Outlook token cannot be empty.');
+    }
+
+    final now = DateTime.now().toUtc();
+    final url =
+        'https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${now.toIso8601String()}&endDateTime=${now.add(const Duration(minutes: 1)).toIso8601String()}';
+
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer ${userAccount.outlookSuppressionToken}',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Outlook API rejected token (Code: ${response.statusCode})');
+    }
+
+    // Pass the decoded JSON body forward to the next step
+    return json.decode(response.body);
+  }
+
+  @override
+  Future<void> updateUser(dynamic rawData) async {
+    final List events = rawData['value'] ?? [];
+
+    // Check if there's an active meeting that blocks the user's schedule
+    bool isCurrentlyInMeeting =
+        events.any((event) => event['showAs'] != 'free');
+
+    // Update your local user database or user state object here!
+    // Example: currentUser.isMutedByCalendar = isCurrentlyInMeeting;
+    print('Outlook Synced. User Busy Status: $isCurrentlyInMeeting');
   }
 }
