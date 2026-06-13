@@ -48,7 +48,7 @@ class _MeditationViewState extends State<MeditationView> {
     const WeeklyAnalyticsPage(),
     CalendarIntegrationPage(userAccount: _mockUserAccount),
     const SealCheckPage(),
-    const ApiKeysPage(),
+    ApiKeysPage(userAccount: _mockUserAccount),
     const DebugInfoPage(),
   ];
 
@@ -112,7 +112,9 @@ class _MeditationViewState extends State<MeditationView> {
           }).toList(),
         ),
       ),
-      body: _pages[_selectedIndex],
+      body: SafeArea(
+        child: _pages[_selectedIndex],
+      ),
     );
   }
 }
