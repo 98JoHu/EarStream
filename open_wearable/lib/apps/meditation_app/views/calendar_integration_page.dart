@@ -23,14 +23,11 @@ class CalendarIntegrationPage extends StatefulWidget implements DrawerPage {
 }
 
 class _CalendarIntegrationPageState extends State<CalendarIntegrationPage> {
-  final _formKey = GlobalKey<FormState>();
-  late String _suppressionToken;
   late final OutlookConnectionManager _connectionManager;
 
   @override
   void initState() {
     super.initState();
-    _suppressionToken = widget.userAccount.outlookSuppressionToken ?? "";
     _connectionManager =
         OutlookConnectionManager(userAccount: widget.userAccount);
   }
@@ -39,38 +36,35 @@ class _CalendarIntegrationPageState extends State<CalendarIntegrationPage> {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.all(16.0),
-      child: Form(
-        key: _formKey,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Outlook suppression token',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Outlook suppression token',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'EarStream polls Microsoft Graph to avoid firing stress prompts during meetings. Tokens are stored only on this device.',
-                style: TextStyle(color: Colors.grey[700], height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'EarStream polls Microsoft Graph to avoid firing stress prompts during meetings. Tokens are stored only on this device.',
+              style: TextStyle(color: Colors.grey[700], height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            StatusField(
+              neighbourWidget: SecretField(
+                title: "Suppression Token",
+                description: "Enter your Outlook suppression token here.",
+                onChanged: (value) =>
+                    widget.userAccount.outlookSuppressionToken = value,
+                initialValue: widget.userAccount.outlookSuppressionToken ?? '',
               ),
-              const SizedBox(height: 24),
-              StatusField(
-                neighbourWidget: SecretField(
-                  title: "Suppression Token",
-                  description: "Enter your Outlook suppression token here.",
-                  onChanged: (value) =>
-                      widget.userAccount.outlookSuppressionToken = value,
-                  initialValue: _suppressionToken,
-                ),
-                connectionManager: _connectionManager,
-              ),
-            ],
-          ),
+              connectionManager: _connectionManager,
+            ),
+          ],
         ),
       ),
     );
