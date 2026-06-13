@@ -19,8 +19,10 @@ class UserAccount {
   String? additionalPreferences;
   double? stressThreshold;
 
-  // Outlook integration
+  // API keys and tokens
   String? outlookSuppressionToken;
+  String? deepseekApiKey;
+  String? elevenLabsApiKey;
 
   UserAccount({
     this.username,
@@ -36,5 +38,7 @@ class UserAccount {
     this.additionalPreferences,
     this.stressThreshold,
     this.outlookSuppressionToken,
+    this.deepseekApiKey,
+    this.elevenLabsApiKey,
   });
 }
