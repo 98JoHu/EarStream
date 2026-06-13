@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 class SecretField extends StatefulWidget {
   final String title;
   final String description;
+  final ValueChanged<String>? onChanged;
+  final String? initialValue;
 
   const SecretField({
     super.key,
     required this.title,
     required this.description,
+    this.onChanged,
+    this.initialValue,
   });
 
   @override
@@ -32,11 +36,13 @@ class _SecretFieldState extends State<SecretField> {
             obscureText: _isObscured,
             autocorrect: false,
             enableSuggestions: false,
+            initialValue: widget.initialValue,
             keyboardType: TextInputType.visiblePassword,
+            onChanged: widget.onChanged,
             decoration: InputDecoration(
               hintText: widget.description,
               suffixIcon: IconButton(
-                tooltip: _isObscured ? 'Hide value' : 'Show value',
+                tooltip: _isObscured ? 'Show value' : 'Hide value',
                 onPressed: () => setState(() => _isObscured = !_isObscured),
                 icon: Icon(
                   _isObscured ? Icons.visibility_off : Icons.visibility,
