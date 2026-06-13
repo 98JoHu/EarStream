@@ -46,7 +46,7 @@ class _MeditationViewState extends State<MeditationView> {
     ProfilePage(userAccount: _mockUserAccount),
     PreferencesPage(userAccount: _mockUserAccount),
     const WeeklyAnalyticsPage(),
-    const CalendarIntegrationPage(),
+    CalendarIntegrationPage(userAccount: _mockUserAccount),
     const SealCheckPage(),
     const ApiKeysPage(),
     const DebugInfoPage(),
