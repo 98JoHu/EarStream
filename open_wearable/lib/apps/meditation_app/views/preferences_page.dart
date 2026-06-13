@@ -121,7 +121,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
   void initState() {
     super.initState();
     _additionalPreferencesController = TextEditingController(
-        text: widget.userAccount.additionalPreferences ?? '');
+      text: widget.userAccount.additionalPreferences ?? '',
+    );
     _voiceGender = widget.userAccount.voiceGender ?? 'female';
     _speakingSpeed = widget.userAccount.speakingSpeed ?? 'slow';
     _meditationType = widget.userAccount.meditationType ?? 'mindfulness';

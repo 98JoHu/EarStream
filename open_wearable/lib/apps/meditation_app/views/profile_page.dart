@@ -83,9 +83,10 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Tell EarStreAM about you',
-                      style:
-                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Tell EarStreAM about you',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
                   SizedBox(height: 16),
                   Text(
                     'These values feed the personalized baseline and stress-threshold logic before a meditation session starts.',
