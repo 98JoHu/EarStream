@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
+import '../model/user_account.dart';
 import '../widgets/status_field.dart';
 import '../widgets/secret_field.dart';
 
 class CalendarIntegrationPage extends StatefulWidget implements DrawerPage {
-  const CalendarIntegrationPage({super.key});
+  final UserAccount userAccount;
+  const CalendarIntegrationPage({super.key, required this.userAccount});
 
   @override
   String get label => "Outlook Calendar Integration";
@@ -22,6 +24,16 @@ class CalendarIntegrationPage extends StatefulWidget implements DrawerPage {
 
 class _CalendarIntegrationPageState extends State<CalendarIntegrationPage> {
   final _formKey = GlobalKey<FormState>();
+  late String _suppressionToken;
+  late final OutlookConnectionManager _connectionManager;
+
+  @override
+  void initState() {
+    super.initState();
+    _suppressionToken = widget.userAccount.outlookSuppressionToken ?? "";
+    _connectionManager =
+        OutlookConnectionManager(userAccount: widget.userAccount);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,10 +60,14 @@ class _CalendarIntegrationPageState extends State<CalendarIntegrationPage> {
               ),
               const SizedBox(height: 24),
               StatusField(
-                neighbourWidget: const SecretField(
+                neighbourWidget: SecretField(
                   title: "Suppression Token",
                   description: "Enter your Outlook suppression token here.",
+                  onChanged: (value) =>
+                      widget.userAccount.outlookSuppressionToken = value,
+                  initialValue: _suppressionToken,
                 ),
+                connectionManager: _connectionManager,
               ),
             ],
           ),
