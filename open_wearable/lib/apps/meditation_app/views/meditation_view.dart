@@ -10,7 +10,6 @@ import 'weekly_analytics_page.dart';
 import 'calendar_integration_page.dart';
 import 'seal_check_page.dart';
 import 'api_keys_page.dart';
-import 'debug_info_page.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;
@@ -49,7 +48,6 @@ class _MeditationViewState extends State<MeditationView> {
     CalendarIntegrationPage(userAccount: _mockUserAccount),
     const SealCheckPage(),
     ApiKeysPage(userAccount: _mockUserAccount),
-    const DebugInfoPage(),
   ];
 
   @override
