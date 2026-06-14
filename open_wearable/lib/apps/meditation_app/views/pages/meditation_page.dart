@@ -1,8 +1,8 @@
 import 'drawer_page.dart';
 import 'package:flutter/material.dart';
-import 'bio_adaptive_view.dart';
-import 'demo_view.dart';
-import 'timer_view.dart';
+import '../meditation_modes/bio_adaptive_view.dart';
+import '../meditation_modes/demo_view.dart';
+import '../meditation_modes/timer_view.dart';
 
 enum MeditationMode {
   bioAdaptive(label: "Bio-Scan", icon: Icons.bolt, view: BioAdaptiveView()),

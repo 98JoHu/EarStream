@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
-import '../model/user_account.dart';
-import '../widgets/emojis.dart';
-import '../widgets/custom_dropdown.dart';
+import '../../model/user_account.dart';
+import '../../widgets/emojis.dart';
+import '../../widgets/custom_dropdown.dart';
 
 class PreferencesPage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;

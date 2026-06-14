@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
-import '../model/user_account.dart';
-import '../widgets/status_field.dart';
-import '../widgets/secret_field.dart';
+import '../../model/user_account.dart';
+import '../../widgets/status_field.dart';
+import '../../widgets/secret_field.dart';
 
 class CalendarIntegrationPage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;

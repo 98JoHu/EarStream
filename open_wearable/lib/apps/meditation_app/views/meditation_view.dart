@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
-import 'drawer_page.dart';
-import 'meditation_page.dart';
-import 'profile_page.dart';
-import 'preferences_page.dart';
-import 'weekly_analytics_page.dart';
-import 'calendar_integration_page.dart';
-import 'seal_check_page.dart';
-import 'api_keys_page.dart';
+import 'pages/drawer_page.dart';
+import 'pages/meditation_page.dart';
+import 'pages/profile_page.dart';
+import 'pages/preferences_page.dart';
+import 'pages/weekly_analytics_page.dart';
+import 'pages/calendar_integration_page.dart';
+import 'pages/seal_check_page.dart';
+import 'pages/api_keys_page.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;

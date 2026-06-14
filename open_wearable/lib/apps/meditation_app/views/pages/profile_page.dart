@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
-import '../model/user_account.dart';
-import '../widgets/gender_selector.dart';
+import '../../model/user_account.dart';
+import '../../widgets/gender_selector.dart';
 
 class ProfilePage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;
