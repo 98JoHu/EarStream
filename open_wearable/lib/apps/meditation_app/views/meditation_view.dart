@@ -12,10 +12,10 @@ import 'pages/seal_check_page.dart';
 import 'pages/api_keys_page.dart';
 
 class MeditationView extends StatefulWidget {
-  final Sensor? ppgSensor;
-  final Sensor? accelerometerSensor;
-  final Sensor? gyroscopeSensor;
-  final SensorConfigurationProvider? sensorConfigProvider;
+  final Sensor ppgSensor;
+  final Sensor accelerometerSensor;
+  final Sensor gyroscopeSensor;
+  final SensorConfigurationProvider sensorConfigProvider;
   final Wearable? wearable;
 
   const MeditationView({
@@ -23,7 +23,7 @@ class MeditationView extends StatefulWidget {
     required this.ppgSensor,
     required this.accelerometerSensor,
     required this.gyroscopeSensor,
-    this.sensorConfigProvider,
+    required this.sensorConfigProvider,
     this.wearable,
   });
 
@@ -43,7 +43,12 @@ class _MeditationViewState extends State<MeditationView> {
   );
 
   late final List<DrawerPage> _pages = [
-    const MeditationPage(),
+    MeditationPage(
+      ppgSensor: widget.ppgSensor,
+      accelerometerSensor: widget.accelerometerSensor,
+      gyroscopeSensor: widget.gyroscopeSensor,
+      sensorConfigProvider: widget.sensorConfigProvider,
+    ),
     ProfilePage(userAccount: _mockUserAccount),
     PreferencesPage(userAccount: _mockUserAccount),
     const WeeklyAnalyticsPage(),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
 
 class BioAdaptiveView extends StatefulWidget {
@@ -9,22 +10,23 @@ class BioAdaptiveView extends StatefulWidget {
 }
 
 class _BioAdaptiveViewState extends State<BioAdaptiveView> {
-  final Measurement _measurement = Measurement();
   bool hasStarted = false;
 
   @override
   Widget build(BuildContext context) {
+    final measurement = context.read<Measurement>();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasStarted) _buildBioAdaptiveContent(),
+        if (hasStarted) _buildBioAdaptiveContent(measurement),
         SizedBox(height: hasStarted ? 24 : 0),
         ElevatedButton.icon(
           onPressed: () => {
             setState(() {
               hasStarted = !hasStarted;
             }),
-            _measurement.startMeasuring(),
+            measurement.startMeasuring(),
           },
           icon: Icon(hasStarted ? Icons.stop : Icons.play_arrow),
           label: Text(hasStarted ? "Stop EarStreAM" : "Start EarStreAM"),
@@ -56,7 +58,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
     );
   }
 
-  Widget _buildBioAdaptiveContent() {
+  Widget _buildBioAdaptiveContent(Measurement measurement) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -71,7 +73,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
                     icon: Icons.favorite,
                     iconColor: Colors.redAccent,
                     backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                    listenable: _measurement.heartRate,
+                    listenable: measurement.heartRate,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -82,17 +84,17 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
                     icon: Icons.air,
                     iconColor: Colors.blueAccent,
                     backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
-                    listenable: _measurement.rmssd,
+                    listenable: measurement.rmssd,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            _MonitoringPhaseTile(listenable: _measurement.monitoringPhase),
+            _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
             const SizedBox(height: 16),
-            _StressLevelTile(listenable: _measurement.stressLevel),
+            _StressLevelTile(listenable: measurement.stressLevel),
             const SizedBox(height: 16),
-            _ActivityLevelTile(listenable: _measurement.activityLevel),
+            _ActivityLevelTile(listenable: measurement.activityLevel),
             // HeartRateChart
           ],
         ),

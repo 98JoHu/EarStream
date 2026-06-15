@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:open_earable_flutter/open_earable_flutter.dart';
+import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
 enum ActivityLevel {
   resting(
@@ -97,7 +99,19 @@ enum MonitoringPhase {
   });
 }
 
-class Measurement {
+class Measurement extends ChangeNotifier {
+  final Sensor ppgSensor;
+  final Sensor accelerometerSensor;
+  final Sensor gyroscopeSensor;
+  final SensorConfigurationProvider sensorConfigProvider;
+
+  Measurement({
+    required this.ppgSensor,
+    required this.accelerometerSensor,
+    required this.gyroscopeSensor,
+    required this.sensorConfigProvider,
+  });
+
   ValueNotifier<ActivityLevel> get activityLevel => _activityLevel;
   ValueNotifier<StressLevel> get stressLevel => _stressLevel;
   ValueNotifier<MonitoringPhase> get monitoringPhase => _monitoringPhase;

@@ -1,8 +1,13 @@
+import 'package:provider/provider.dart';
+
 import 'drawer_page.dart';
 import 'package:flutter/material.dart';
+import 'package:open_earable_flutter/open_earable_flutter.dart';
+import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../meditation_modes/bio_adaptive_view.dart';
 import '../meditation_modes/demo_view.dart';
 import '../meditation_modes/timer_view.dart';
+import '../../model/measurement.dart';
 
 enum MeditationMode {
   bioAdaptive(label: "Bio-Scan", icon: Icons.bolt, view: BioAdaptiveView()),
@@ -21,7 +26,17 @@ enum MeditationMode {
 }
 
 class MeditationPage extends StatefulWidget implements DrawerPage {
-  const MeditationPage({super.key});
+  final Sensor ppgSensor;
+  final Sensor accelerometerSensor;
+  final Sensor gyroscopeSensor;
+  final SensorConfigurationProvider sensorConfigProvider;
+  const MeditationPage({
+    super.key,
+    required this.ppgSensor,
+    required this.accelerometerSensor,
+    required this.gyroscopeSensor,
+    required this.sensorConfigProvider,
+  });
 
   @override
   String get label => "Meditation Mode";
@@ -37,7 +52,19 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
 }
 
 class _MeditationPageState extends State<MeditationPage> {
+  late final Measurement _measurement;
   MeditationMode _selectedMode = MeditationMode.bioAdaptive;
+
+  @override
+  void initState() {
+    super.initState();
+    _measurement = Measurement(
+      ppgSensor: widget.ppgSensor,
+      accelerometerSensor: widget.accelerometerSensor,
+      gyroscopeSensor: widget.gyroscopeSensor,
+      sensorConfigProvider: widget.sensorConfigProvider,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +93,10 @@ class _MeditationPageState extends State<MeditationPage> {
             },
           ),
           const SizedBox(height: 24),
-          _selectedMode.view,
+          Provider<Measurement>(
+            create: (_) => _measurement,
+            child: _selectedMode.view,
+          ),
         ],
       ),
     );

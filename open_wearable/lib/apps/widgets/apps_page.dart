@@ -215,10 +215,12 @@ final List<AppInfo> _apps = [
             }
           }
 
+          // TODO: add validation that sensors are not null and show error message if they are
+
           return MeditationView(
-            ppgSensor: ppgSensor,
-            accelerometerSensor: accelerometerSensor,
-            gyroscopeSensor: gyroscopeSensor,
+            ppgSensor: ppgSensor!,
+            accelerometerSensor: accelerometerSensor!,
+            gyroscopeSensor: gyroscopeSensor!,
             sensorConfigProvider: sensorConfigProvider,
             wearable: wearable,
           );
