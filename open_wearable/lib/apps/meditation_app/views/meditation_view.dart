@@ -13,15 +13,17 @@ import 'pages/api_keys_page.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor? ppgSensor;
+  final Sensor? accelerometerSensor;
+  final Sensor? gyroscopeSensor;
   final SensorConfigurationProvider? sensorConfigProvider;
-  final SensorManager? sensorManager;
   final Wearable? wearable;
 
   const MeditationView({
     super.key,
-    this.ppgSensor,
+    required this.ppgSensor,
+    required this.accelerometerSensor,
+    required this.gyroscopeSensor,
     this.sensorConfigProvider,
-    this.sensorManager,
     this.wearable,
   });
 

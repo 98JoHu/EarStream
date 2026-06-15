@@ -177,46 +177,63 @@ final List<AppInfo> _apps = [
     accentColor: _appAccentColor,
     title: "EarStreAM",
     description: "Stress-adaptive meditation sessions",
-    widget: MeditationView(),
-    // TODO: Re-enable SelectEarableView once meditation view is build
-    // SelectEarableView(
-    //   supportedDevicePrefixes: _meditationSupportedDevices,
-    //   startApp: (wearable, sensorConfigProvider) async {
-    //     try {
-    //       Sensor? ppgSensor;
-    //       if (wearable.hasCapability<SensorManager>()) {
-    //         try {
-    //           ppgSensor = wearable
-    //               .requireCapability<SensorManager>()
-    //               .sensors
-    //               .firstWhere(
-    //                 (s) =>
-    //                     s.sensorName.toLowerCase() ==
-    //                     "photoplethysmography".toLowerCase(),
-    //               );
-    //         } catch (e) {
-    //           // No PPG sensor found, will use mock sensor
-    //         }
-    //       }
-    //       return MeditationView(
-    //         ppgSensor: ppgSensor,
-    //         sensorConfigProvider: sensorConfigProvider,
-    //         sensorManager: wearable.requireCapability<SensorManager>(),
-    //         wearable: wearable,
-    //       );
-    //     } catch (e) {
-    //       // Fallback if meditation view fails to load
-    //       return PlatformScaffold(
-    //         appBar: PlatformAppBar(
-    //           title: PlatformText("EarStreAM"),
-    //         ),
-    //         body: Center(
-    //           child: PlatformText("EarStreAM is loading... Error: $e"),
-    //         ),
-    //       );
-    //     }
-    //   },
-    // ),
+    widget: SelectEarableView(
+      supportedDevicePrefixes: _meditationSupportedDevices,
+      startApp: (wearable, sensorConfigProvider) async {
+        if (wearable.hasCapability<SensorManager>()) {
+          final sensors = wearable.requireCapability<SensorManager>().sensors;
+
+          Sensor? ppgSensor;
+          for (final sensor in sensors) {
+            final text =
+                '${sensor.sensorName} ${sensor.chartTitle}'.toLowerCase();
+            if (text.contains('photoplethysmography') ||
+                text.contains('ppg') ||
+                text.contains('pulse')) {
+              ppgSensor = sensor;
+              break;
+            }
+          }
+
+          Sensor? accelerometerSensor;
+          for (final sensor in sensors) {
+            final text =
+                '${sensor.sensorName} ${sensor.chartTitle}'.toLowerCase();
+            if (text.contains('accelerometer') || text.contains('acc')) {
+              accelerometerSensor = sensor;
+              break;
+            }
+          }
+
+          Sensor? gyroscopeSensor;
+          for (final sensor in sensors) {
+            final text =
+                '${sensor.sensorName} ${sensor.chartTitle}'.toLowerCase();
+            if (text.contains('gyroscope') || text.contains('gyro')) {
+              gyroscopeSensor = sensor;
+              break;
+            }
+          }
+
+          return MeditationView(
+            ppgSensor: ppgSensor,
+            accelerometerSensor: accelerometerSensor,
+            gyroscopeSensor: gyroscopeSensor,
+            sensorConfigProvider: sensorConfigProvider,
+            wearable: wearable,
+          );
+        }
+        // Fallback if meditation view fails to load
+        return PlatformScaffold(
+          appBar: PlatformAppBar(
+            title: PlatformText("EarStreAM"),
+          ),
+          body: Center(
+            child: PlatformText("EarStreAM is loading..."),
+          ),
+        );
+      },
+    ),
   ),
 ];
 
@@ -250,18 +267,12 @@ class AppsPage extends StatelessWidget {
     final enabledApps = <_AppListEntry>[];
     final disabledApps = <_AppListEntry>[];
     for (final app in _apps) {
-      // TODO: change to final from bool
-      bool isEnabled = connectedWearableNames.any(
+      final bool isEnabled = connectedWearableNames.any(
         (wearableName) => wearableIsCompatibleWithApp(
           wearableName: wearableName,
           supportedDevicePrefixes: app.supportedDevices,
         ),
       );
-
-      // TODO: remove later if UI is built
-      if (app.title == "EarStreAM") {
-        isEnabled = true;
-      }
 
       final entry = _AppListEntry(app: app, isEnabled: isEnabled);
       if (isEnabled) {
