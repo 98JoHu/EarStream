@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'band_pass_filter.dart';
+import 'dart:math';
 
 enum ActivityLevel {
   resting(
@@ -124,9 +125,9 @@ class Measurement {
 
   // PPG data stream: emits a tuple of (timestamp, value) where value is the sum of green and ambient channels (inverted).
   late final Stream<(int, double)> _ppgStream;
-  Stream<int> _heartRate = Stream.value(0);
-  Stream<double> _rmssd = Stream.value(0.0);
-  Stream<int> get heartRate => _heartRate;
+  Stream<int?> _heartRate = Stream.empty();
+  Stream<int?> get heartRate => _heartRate;
+  Stream<double> _rmssd = Stream.empty();
   Stream<double> get rmssd => _rmssd;
 
   Measurement({
@@ -155,7 +156,6 @@ class Measurement {
           (sample) => (sample!.timestamp, -(sample.green + sample.ambient)),
         )
         .asBroadcastStream();
-
     _ppgStream = ppgStream;
   }
 
@@ -164,21 +164,58 @@ class Measurement {
     _rmssd = deriveRmssd(_ppgStream);
   }
 
-  Stream<int> deriveHeartRate(Stream<(int, double)> ppgStream) {
-    // 1. Band pass filter
+  Stream<int?> deriveHeartRate(Stream<(int, double)> ppgStream) {
+    // 1. Band pass filter the PPG signal to remove noise and artifacts.
     final bandPassFilter =
         BandPassFilter(lowCut: 0.5, highCut: 4.0, sampleFreq: 200.0);
-    // 2. 9-sample moving average smoothing
+    // 2. Smooth the filtered signal
     final movingAverageFilter = MovingAverageFilter();
-    final processedStream = ppgStream.map((event) {
-      final (timestamp, value) = event;
-      final filteredValue = bandPassFilter.filter(value);
-      final smoothedValue = movingAverageFilter.next(filteredValue);
-      return (timestamp, smoothedValue);
-    });
+    // 3. Detect peaks in the filtered PPG
+    final peakDetector = SlidingWindowPeakDetector(
+      windowDurationSeconds: 8,
+      minInterPeakDistanceMs: 300,
+      timestampExponent: ppgSensor.timestampExponent,
+    );
+    // 4. Smooth the heart rate using a Kalman filter
+    final kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
+    return ppgStream.map(
+      (event) {
+        final (timestamp, value) = event;
+        print("PPG Sample: timestamp=$timestamp, value=$value");
+        final filteredValue = bandPassFilter.filter(value);
+        final smoothedValue = movingAverageFilter.next(filteredValue);
+        final int? peakTimestamp =
+            peakDetector.processSample(timestamp, smoothedValue);
+        if (peakTimestamp == null) return null;
+        final peaks = peakDetector.activePeaks;
+        if (peaks.length < 2) return null;
 
-    // 3. Calculate the time intervals between consecutive peaks (RR intervals).
-    return Stream.empty(); // Placeholder implementation
+        double totalIbiMs = 0.0;
+        int ibiCount = 0;
+
+        for (var i = 1; i < peaks.length; i++) {
+          final double ibi = (peaks[i] - peaks[i - 1]) *
+              pow(10, ppgSensor.timestampExponent + 3)
+                  .toDouble(); // Convert to milliseconds
+          totalIbiMs += ibi;
+          ibiCount++;
+        }
+
+        final averageIbiMs = totalIbiMs / ibiCount;
+        if (averageIbiMs <= 0 ||
+            averageIbiMs.isNaN ||
+            averageIbiMs.isInfinite) {
+          return null;
+        }
+
+        final double heartRate =
+            60000.0 / averageIbiMs; // Convert to beats per minute
+
+        final smoothedHeartRate = kalmanFilter.update(heartRate);
+
+        return smoothedHeartRate.round();
+      },
+    );
   }
 
   Stream<double> deriveRmssd(Stream<(int, double)> ppgStream) {
@@ -346,5 +383,104 @@ class MovingAverageFilter {
 
     // Return the average of the current window
     return _currentSum / _buffer.length;
+  }
+}
+
+class SlidingWindowPeakDetector {
+  late num windowDuration;
+  late num minInterPeakDistance;
+  final int timestampExponent;
+
+  SlidingWindowPeakDetector({
+    required int windowDurationSeconds,
+    required int minInterPeakDistanceMs,
+    required this.timestampExponent,
+  }) {
+    windowDuration = windowDurationSeconds * pow(10, -timestampExponent);
+    minInterPeakDistance =
+        minInterPeakDistanceMs * pow(10, -timestampExponent - 3);
+  }
+
+  // Stores the historical clean samples: Tuple of (timestampUs, value)
+  final List<(int, double)> _history = [];
+  final List<int> _peakTimestamps = [];
+
+  /// Processes a single filtered/smoothed sample.
+  /// Returns a valid peak timestamp (in microseconds) if a peak was just found, otherwise null.
+  int? processSample(int timestamp, double value) {
+    // 1. Add current sample to our tracking history
+    _history.add((timestamp, value));
+
+    // 2. Slide the window: Drop elements older than 8 seconds
+    _history.removeWhere((sample) => sample.$1 < timestamp - windowDuration);
+
+    // 3. We need at least 3 samples in history to evaluate a local maximum turning point
+    if (_history.length < 3) return null;
+
+    // Grab the last three sequential samples in our history buffer
+    final idx = _history.length - 1;
+    final (_, vPrev) = _history[idx - 2];
+    final (tCurr, vCurr) = _history[idx - 1]; // We evaluate the middle point
+    final (_, vNext) = _history[idx];
+
+    // 4. Check if the middle point represents a mathematical local maximum peak
+    if (vCurr > vPrev && vCurr >= vNext) {
+      // 5. Enforce minimum inter-peak lockout distance constraint
+      final lastPeak = _peakTimestamps.isNotEmpty ? _peakTimestamps.last : 0;
+      if (tCurr - lastPeak >= minInterPeakDistance) {
+        // Valid peak found! Record it and clean up peak history older than 8 seconds
+        _peakTimestamps.add(tCurr);
+        _peakTimestamps.removeWhere(
+          (peakTime) => peakTime < timestamp - windowDuration,
+        );
+
+        return tCurr;
+      }
+    }
+
+    return null;
+  }
+
+  /// Exposes the list of peak timestamps currently residing within the 8-second window
+  List<int> get activePeaks => List.unmodifiable(_peakTimestamps);
+}
+
+class KalmanFilter {
+  // Parameters
+  final double q; // Process noise covariance
+  final double r; // Measurement noise covariance
+
+  KalmanFilter({required this.q, required this.r});
+
+  // Filter State Variables
+  double _x = 0.0; // Estimated true state value
+  double _p = 1.0; // Estimation error covariance
+  bool _isInitialized = false;
+
+  /// Processes a single noisy sample and returns the smoothed estimate
+  double update(double measurement) {
+    // 1. Handle initialization on the very first sample
+    if (!_isInitialized) {
+      _x = measurement;
+      _isInitialized = true;
+      return _x;
+    }
+
+    // 2. PREDICT STEP
+    // For a simple 1D system, the state prediction remains the same,
+    // but our uncertainty grows by the process noise Q.
+    _p = _p + q;
+
+    // 3. UPDATE STEP
+    // Calculate the Kalman Gain (K)
+    double k = _p / (_p + r);
+
+    // Correct the state estimate using the new measurement
+    _x = _x + k * (measurement - _x);
+
+    // Update the error covariance for the next loop
+    _p = (1.0 - k) * _p;
+
+    return _x;
   }
 }
