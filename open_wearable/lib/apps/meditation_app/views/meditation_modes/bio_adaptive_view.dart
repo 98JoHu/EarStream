@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
 
@@ -26,7 +27,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             setState(() {
               hasStarted = !hasStarted;
             }),
-            measurement.start(),
+            hasStarted ? measurement.start() : null,
           },
           icon: Icon(hasStarted ? Icons.stop : Icons.play_arrow),
           label: Text(hasStarted ? "Stop EarStreAM" : "Start EarStreAM"),
