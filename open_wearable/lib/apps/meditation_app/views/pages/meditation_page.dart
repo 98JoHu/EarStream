@@ -52,22 +52,31 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
 }
 
 class _MeditationPageState extends State<MeditationPage> {
-  late final Measurement _measurement;
+  Measurement? _measurement;
   MeditationMode _selectedMode = MeditationMode.bioAdaptive;
 
   @override
   void initState() {
     super.initState();
-    _measurement = Measurement(
-      ppgSensor: widget.ppgSensor,
-      accelerometerSensor: widget.accelerometerSensor,
-      gyroscopeSensor: widget.gyroscopeSensor,
-      sensorConfigProvider: widget.sensorConfigProvider,
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _measurement = Measurement(
+          ppgSensor: widget.ppgSensor,
+          accelerometerSensor: widget.accelerometerSensor,
+          gyroscopeSensor: widget.gyroscopeSensor,
+          sensorConfigProvider: widget.sensorConfigProvider,
+        );
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_measurement == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -94,7 +103,7 @@ class _MeditationPageState extends State<MeditationPage> {
           ),
           const SizedBox(height: 24),
           Provider<Measurement>(
-            create: (_) => _measurement,
+            create: (_) => _measurement!,
             child: _selectedMode.view,
           ),
         ],
