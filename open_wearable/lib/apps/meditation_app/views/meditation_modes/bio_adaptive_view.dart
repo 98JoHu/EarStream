@@ -26,7 +26,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             setState(() {
               hasStarted = !hasStarted;
             }),
-            measurement.startMeasuring(),
+            measurement.start(),
           },
           icon: Icon(hasStarted ? Icons.stop : Icons.play_arrow),
           label: Text(hasStarted ? "Stop EarStreAM" : "Start EarStreAM"),
@@ -89,12 +89,12 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
-            const SizedBox(height: 16),
-            _StressLevelTile(listenable: measurement.stressLevel),
-            const SizedBox(height: 16),
-            _ActivityLevelTile(listenable: measurement.activityLevel),
+            // const SizedBox(height: 16),
+            // _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
+            // const SizedBox(height: 16),
+            // _StressLevelTile(listenable: measurement.stressLevel),
+            // const SizedBox(height: 16),
+            // _ActivityLevelTile(listenable: measurement.activityLevel),
             // HeartRateChart
           ],
         ),
@@ -109,7 +109,7 @@ class _MeasurementTile extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final Color backgroundColor;
-  final ValueNotifier<dynamic>? listenable;
+  final Stream<dynamic>? listenable;
 
   const _MeasurementTile({
     required this.label,
@@ -140,9 +140,10 @@ class _MeasurementTile extends StatelessWidget {
             Text(label),
             const SizedBox(height: 4),
             if (listenable != null)
-              ValueListenableBuilder(
-                valueListenable: listenable!,
-                builder: (context, value, child) {
+              StreamBuilder(
+                stream: listenable,
+                builder: (context, snapshot) {
+                  final value = snapshot.data;
                   return Text(
                     "$value $unit",
                     style: const TextStyle(
