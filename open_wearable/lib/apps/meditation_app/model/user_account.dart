@@ -123,4 +123,15 @@ class UserAccount {
 
     return (defaultHeartRate, defaultRMSSD);
   }
+
+  (int, double) get stressThresholds {
+    final (baselineHeartRate, baselineRMSSD) = baselineBiometrics;
+
+    final threshold = stressThreshold ?? 0.1;
+    stressThreshold ??= threshold;
+
+    final heartRateThreshold = (baselineHeartRate * (1 + threshold)).round();
+    final rmssdThreshold = baselineRMSSD * (1 - threshold);
+    return (heartRateThreshold, rmssdThreshold);
+  }
 }
