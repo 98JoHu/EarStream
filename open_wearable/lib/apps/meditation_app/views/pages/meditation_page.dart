@@ -8,10 +8,12 @@ import '../meditation_modes/bio_adaptive_view.dart';
 import '../meditation_modes/demo_view.dart';
 import '../meditation_modes/timer_view.dart';
 import '../../model/measurement.dart';
+import '../../model/user_account.dart';
 
 enum MeditationMode {
-  bioAdaptive(label: "Bio-Scan", icon: Icons.bolt, view: BioAdaptiveView()),
-  timer(label: "Timer", icon: Icons.alarm, view: TimerView()),
+  bioAdaptive(
+      label: "Bio-SignalAdaptive", icon: Icons.bolt, view: BioAdaptiveView()),
+  timer(label: "Timed", icon: Icons.alarm, view: TimerView()),
   demo(label: "Demo", icon: Icons.play_circle_outline, view: DemoView());
 
   final String label;
@@ -30,12 +32,14 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
   final Sensor accelerometerSensor;
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
+  final UserAccount userAccount;
   const MeditationPage({
     super.key,
     required this.ppgSensor,
     required this.accelerometerSensor,
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
+    required this.userAccount,
   });
 
   @override
@@ -66,6 +70,7 @@ class _MeditationPageState extends State<MeditationPage> {
           accelerometerSensor: widget.accelerometerSensor,
           gyroscopeSensor: widget.gyroscopeSensor,
           sensorConfigProvider: widget.sensorConfigProvider,
+          userAccount: widget.userAccount,
         );
       });
     });

@@ -48,6 +48,7 @@ class _MeditationViewState extends State<MeditationView> {
       accelerometerSensor: widget.accelerometerSensor,
       gyroscopeSensor: widget.gyroscopeSensor,
       sensorConfigProvider: widget.sensorConfigProvider,
+      userAccount: _mockUserAccount,
     ),
     ProfilePage(userAccount: _mockUserAccount),
     PreferencesPage(userAccount: _mockUserAccount),
