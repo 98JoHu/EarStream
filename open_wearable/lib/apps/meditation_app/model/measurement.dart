@@ -125,10 +125,10 @@ class Measurement {
 
   // PPG data stream: emits a tuple of (timestamp, value) where value is the sum of green and ambient channels (inverted).
   late final Stream<(int, double)> _ppgStream;
-  Stream<int?> _heartRate = Stream.empty();
-  Stream<int?> get heartRate => _heartRate;
-  Stream<double> _rmssd = Stream.empty();
-  Stream<double> get rmssd => _rmssd;
+  Stream<int> get heartRate =>
+      biometricStream.map((biometrics) => biometrics.$1);
+  Stream<String> get rmssd =>
+      biometricStream.map((biometrics) => biometrics.$2);
 
   Measurement({
     required this.ppgSensor,
@@ -140,7 +140,7 @@ class Measurement {
       ppgSensor,
       sensorConfigProvider,
       fallbackFrequency: 50.0,
-      targetFrequencyHz: 50,
+      targetFrequencyHz: 200,
     );
 
     final ppgStream = ppgSensor.sensorStream
@@ -152,19 +152,17 @@ class Measurement {
           return _extractPpgOpticalSample(ppgSensor, data, values);
         })
         .where((sample) => sample != null)
+        .cast<PpgOpticalSample>()
         .map<(int, double)>(
-          (sample) => (sample!.timestamp, -(sample.green + sample.ambient)),
+          (sample) => (sample.timestamp, -(sample.green + sample.ambient)),
         )
         .asBroadcastStream();
     _ppgStream = ppgStream;
   }
 
-  void start() {
-    _heartRate = deriveHeartRate(_ppgStream);
-    _rmssd = deriveRmssd(_ppgStream);
-  }
+  void start() {}
 
-  Stream<int?> deriveHeartRate(Stream<(int, double)> ppgStream) {
+  Stream<(int heartRate, String rmssd)> get biometricStream {
     // 1. Band pass filter the PPG signal to remove noise and artifacts.
     final bandPassFilter =
         BandPassFilter(lowCut: 0.5, highCut: 4.0, sampleFreq: 200.0);
@@ -178,55 +176,60 @@ class Measurement {
     );
     // 4. Smooth the heart rate using a Kalman filter
     final kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
-    return ppgStream.map(
-      (event) {
-        final (timestamp, value) = event;
-        print("PPG Sample: timestamp=$timestamp, value=$value");
-        final filteredValue = bandPassFilter.filter(value);
-        final smoothedValue = movingAverageFilter.next(filteredValue);
-        final int? peakTimestamp =
-            peakDetector.processSample(timestamp, smoothedValue);
-        if (peakTimestamp == null) return null;
-        final peaks = peakDetector.activePeaks;
-        if (peaks.length < 2) return null;
+    return _ppgStream
+        .map(
+          (event) {
+            final (timestamp, value) = event;
+            final filteredValue = bandPassFilter.filter(value);
+            final smoothedValue = movingAverageFilter.next(filteredValue);
+            final int? peakTimestamp =
+                peakDetector.processSample(timestamp, smoothedValue);
+            if (peakTimestamp == null) return null;
+            final peaks = peakDetector.activePeaks;
+            if (peaks.length < 2) return null;
 
-        double totalIbiMs = 0.0;
-        int ibiCount = 0;
+            final ibiList = <double>[];
 
-        for (var i = 1; i < peaks.length; i++) {
-          final double ibi = (peaks[i] - peaks[i - 1]) *
-              pow(10, ppgSensor.timestampExponent + 3)
-                  .toDouble(); // Convert to milliseconds
-          totalIbiMs += ibi;
-          ibiCount++;
-        }
+            for (var i = 1; i < peaks.length; i++) {
+              final double ibi = (peaks[i] - peaks[i - 1]) *
+                  pow(10, ppgSensor.timestampExponent + 3)
+                      .toDouble(); // Convert to milliseconds
 
-        final averageIbiMs = totalIbiMs / ibiCount;
-        if (averageIbiMs <= 0 ||
-            averageIbiMs.isNaN ||
-            averageIbiMs.isInfinite) {
-          return null;
-        }
+              // Physiological plausibility check: Ignore IBIs that are too short or too long
+              if (ibi < 300 || ibi > 2000) {
+                continue;
+              }
+              ibiList.add(ibi);
+            }
 
-        final double heartRate =
-            60000.0 / averageIbiMs; // Convert to beats per minute
+            if (ibiList.isEmpty) return null;
 
-        final smoothedHeartRate = kalmanFilter.update(heartRate);
+            final averageIbiMs =
+                ibiList.reduce((a, b) => a + b) / ibiList.length;
+            if (averageIbiMs <= 0 ||
+                averageIbiMs.isNaN ||
+                averageIbiMs.isInfinite) {
+              return null;
+            }
+            final double heartRate =
+                60000.0 / averageIbiMs; // Convert to beats per minute
+            final smoothedHeartRate = kalmanFilter.update(heartRate);
 
-        return smoothedHeartRate.round();
-      },
-    );
-  }
+            double hrvScore = 0.0;
+            if (ibiList.length >= 2) {
+              double sumOfSquaredDifferences = 0.0;
+              for (int i = 1; i < ibiList.length; i++) {
+                double diff = ibiList[i] - ibiList[i - 1];
+                sumOfSquaredDifferences += diff * diff;
+              }
+              hrvScore = sqrt(sumOfSquaredDifferences / (ibiList.length - 1));
+            }
 
-  Stream<double> deriveRmssd(Stream<(int, double)> ppgStream) {
-    // 1. Band pass filter the PPG signal to remove noise and artifacts.
-
-    // 2. Detect peaks in the filtered PPG signal to identify heartbeats.
-    // 3. Calculate the time intervals between consecutive peaks (RR intervals).
-    // 4. Compute the differences between successive RR intervals.
-    // 5. Square the differences and calculate the mean of these squared differences.
-    // 6. Take the square root of the mean to obtain RMSSD.
-    return ppgStream.map((_) => 0.0); // Placeholder implementation
+            return (smoothedHeartRate.round(), hrvScore.toStringAsFixed(2));
+          },
+        )
+        .where((data) => data != null)
+        .cast<(int, String)>();
   }
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {
@@ -437,7 +440,6 @@ class SlidingWindowPeakDetector {
         return tCurr;
       }
     }
-
     return null;
   }
 
