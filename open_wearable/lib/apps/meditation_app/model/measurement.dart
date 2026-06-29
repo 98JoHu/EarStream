@@ -3,6 +3,7 @@ import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'band_pass_filter.dart';
 import 'dart:math';
+import 'user_account.dart';
 
 enum ActivityLevel {
   resting(
@@ -122,6 +123,7 @@ class Measurement {
   final Sensor accelerometerSensor;
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
+  final UserAccount userAccount;
 
   // PPG data stream: emits a tuple of (timestamp, value) where value is the sum of green and ambient channels (inverted).
   late final Stream<(int, double)> _ppgStream;
@@ -129,17 +131,19 @@ class Measurement {
       biometricStream.map((biometrics) => biometrics.$1);
   Stream<String> get rmssd =>
       biometricStream.map((biometrics) => biometrics.$2);
+  ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
 
   Measurement({
     required this.ppgSensor,
     required this.accelerometerSensor,
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
+    required this.userAccount,
   }) {
     _configureSensorForStreaming(
       ppgSensor,
       sensorConfigProvider,
-      fallbackFrequency: 50.0,
+      fallbackFrequency: 100.0,
       targetFrequencyHz: 200,
     );
 
@@ -159,8 +163,6 @@ class Measurement {
         .asBroadcastStream();
     _ppgStream = ppgStream;
   }
-
-  void start() {}
 
   Stream<(int heartRate, String rmssd)> get biometricStream {
     // 1. Band pass filter the PPG signal to remove noise and artifacts.
@@ -230,6 +232,24 @@ class Measurement {
         )
         .where((data) => data != null)
         .cast<(int, String)>();
+  }
+
+  void start() {
+    // Detect stress
+    biometricStream.listen((data) {
+      // if user is stressed already then don't change the stress level
+      if (stressLevel.value == StressLevel.stressed) {
+        return;
+      }
+
+      // Check if the user is stressed based on heart rate and RMSSD thresholds
+      final (heartRate, rmssd) = data;
+      if (heartRate > userAccount.stressThresholds.$1 &&
+          double.parse(rmssd) < userAccount.stressThresholds.$2) {
+        stressLevel.value = StressLevel.stressed;
+        // TODO: Start meditation
+      }
+    });
   }
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {

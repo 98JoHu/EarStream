@@ -92,8 +92,8 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             ),
             // const SizedBox(height: 16),
             // _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
-            // const SizedBox(height: 16),
-            // _StressLevelTile(listenable: measurement.stressLevel),
+            const SizedBox(height: 16),
+            _StressLevelTile(listenable: measurement.stressLevel),
             // const SizedBox(height: 16),
             // _ActivityLevelTile(listenable: measurement.activityLevel),
             // HeartRateChart
