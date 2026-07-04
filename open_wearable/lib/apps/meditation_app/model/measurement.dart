@@ -4,6 +4,7 @@ import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'band_pass_filter.dart';
 import 'dart:math';
 import 'user_account.dart';
+import 'dart:async';
 
 enum ActivityLevel {
   resting(
@@ -132,6 +133,9 @@ class Measurement {
   Stream<String> get rmssd =>
       biometricStream.map((biometrics) => biometrics.$2);
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
+  ValueNotifier<MonitoringPhase> monitoringPhase =
+      ValueNotifier(MonitoringPhase.calibration);
+  Timer? _monitoringPhaseTimer;
 
   Measurement({
     required this.ppgSensor,
@@ -178,6 +182,7 @@ class Measurement {
     );
     // 4. Smooth the heart rate using a Kalman filter
     final kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
+    final startTime = DateTime.now();
     return _ppgStream
         .map(
           (event) {
@@ -227,6 +232,11 @@ class Measurement {
               hrvScore = sqrt(sumOfSquaredDifferences / (ibiList.length - 1));
             }
 
+            // For the first 10 seconds allow filters to stabilize
+            if (DateTime.now().difference(startTime).inSeconds < 10) {
+              return null;
+            }
+
             return (smoothedHeartRate.round(), hrvScore.toStringAsFixed(2));
           },
         )
@@ -235,6 +245,13 @@ class Measurement {
   }
 
   void start() {
+    // Start with calibration phase
+    _monitoringPhaseTimer?.cancel();
+    // TODO: ask what to do here
+    _monitoringPhaseTimer = Timer(MonitoringPhase.calibration.duration, () {
+      monitoringPhase.value = MonitoringPhase.baseline;
+    });
+
     // Detect stress
     biometricStream.listen((data) {
       // if user is stressed already then don't change the stress level
@@ -244,6 +261,7 @@ class Measurement {
 
       // Check if the user is stressed based on heart rate and RMSSD thresholds
       final (heartRate, rmssd) = data;
+      // TODO: take activity level into account when determining stress level
       if (heartRate > userAccount.stressThresholds.$1 &&
           double.parse(rmssd) < userAccount.stressThresholds.$2) {
         stressLevel.value = StressLevel.stressed;
