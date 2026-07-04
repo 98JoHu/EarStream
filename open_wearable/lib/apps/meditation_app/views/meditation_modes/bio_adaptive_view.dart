@@ -90,8 +90,8 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
                 ),
               ],
             ),
-            // const SizedBox(height: 16),
-            // _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
+            const SizedBox(height: 16),
+            _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
             const SizedBox(height: 16),
             _StressLevelTile(listenable: measurement.stressLevel),
             // const SizedBox(height: 16),
@@ -141,19 +141,29 @@ class _MeasurementTile extends StatelessWidget {
             Text(label),
             const SizedBox(height: 4),
             if (listenable != null)
-              StreamBuilder(
-                stream: listenable,
-                builder: (context, snapshot) {
-                  final value = snapshot.data;
-                  return Text(
-                    "$value $unit",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  );
-                },
-              ),
+              SizedBox(
+                width: 80,
+                height: 24,
+                child: Center(
+                  child: StreamBuilder(
+                    stream: listenable,
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const CircularProgressIndicator();
+                      } else {
+                        final value = snapshot.data;
+                        return Text(
+                          "$value $unit",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              )
           ],
         ),
       ],
