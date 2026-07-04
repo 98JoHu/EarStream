@@ -130,12 +130,25 @@ class Measurement {
   late final Stream<(int, double)> _ppgStream;
   Stream<int> get heartRate =>
       biometricStream.map((biometrics) => biometrics.$1);
-  Stream<String> get rmssd =>
+  Stream<double?> get rmssd =>
       biometricStream.map((biometrics) => biometrics.$2);
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
   ValueNotifier<MonitoringPhase> monitoringPhase =
       ValueNotifier(MonitoringPhase.calibration);
   Timer? _monitoringPhaseTimer;
+
+  // Filters
+  final _bandPassFilter =
+      BandPassFilter(lowCut: 0.5, highCut: 4.0, sampleFreq: 200.0);
+  final _movingAverageFilter = MovingAverageFilter();
+  late final _peakDetector = SlidingWindowPeakDetector(
+    windowDurationSeconds: 8,
+    minInterPeakDistanceMs: 300,
+    timestampExponent: ppgSensor.timestampExponent,
+  );
+  final _kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
+  final List<(double, DateTime)> _ibiRollingHistory = [];
+  final Duration _hrvWindowDuration = const Duration(minutes: 5);
 
   Measurement({
     required this.ppgSensor,
@@ -168,31 +181,19 @@ class Measurement {
     _ppgStream = ppgStream;
   }
 
-  Stream<(int heartRate, String rmssd)> get biometricStream {
-    // 1. Band pass filter the PPG signal to remove noise and artifacts.
-    final bandPassFilter =
-        BandPassFilter(lowCut: 0.5, highCut: 4.0, sampleFreq: 200.0);
-    // 2. Smooth the filtered signal
-    final movingAverageFilter = MovingAverageFilter();
-    // 3. Detect peaks in the filtered PPG
-    final peakDetector = SlidingWindowPeakDetector(
-      windowDurationSeconds: 8,
-      minInterPeakDistanceMs: 300,
-      timestampExponent: ppgSensor.timestampExponent,
-    );
-    // 4. Smooth the heart rate using a Kalman filter
-    final kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
+  Stream<(int heartRate, double? rmssd)> get biometricStream {
     final startTime = DateTime.now();
+
     return _ppgStream
         .map(
           (event) {
             final (timestamp, value) = event;
-            final filteredValue = bandPassFilter.filter(value);
-            final smoothedValue = movingAverageFilter.next(filteredValue);
+            final filteredValue = _bandPassFilter.filter(value);
+            final smoothedValue = _movingAverageFilter.next(filteredValue);
             final int? peakTimestamp =
-                peakDetector.processSample(timestamp, smoothedValue);
+                _peakDetector.processSample(timestamp, smoothedValue);
             if (peakTimestamp == null) return null;
-            final peaks = peakDetector.activePeaks;
+            final peaks = _peakDetector.activePeaks;
             if (peaks.length < 2) return null;
 
             final ibiList = <double>[];
@@ -220,37 +221,71 @@ class Measurement {
             }
             final double heartRate =
                 60000.0 / averageIbiMs; // Convert to beats per minute
-            final smoothedHeartRate = kalmanFilter.update(heartRate);
+            final smoothedHeartRate = _kalmanFilter.update(heartRate);
 
-            double hrvScore = 0.0;
-            if (ibiList.length >= 2) {
-              double sumOfSquaredDifferences = 0.0;
-              for (int i = 1; i < ibiList.length; i++) {
-                double diff = ibiList[i] - ibiList[i - 1];
-                sumOfSquaredDifferences += diff * diff;
-              }
-              hrvScore = sqrt(sumOfSquaredDifferences / (ibiList.length - 1));
+            final now = DateTime.now();
+            final double latestIbi = (peaks.last - peaks[peaks.length - 2]) *
+                pow(10, ppgSensor.timestampExponent + 3)
+                    .toDouble(); // convert to milliseconds
+            if (latestIbi >= 300 && latestIbi <= 2000) {
+              _ibiRollingHistory.add((latestIbi, now));
             }
+
+            // Remove old IBIs outside the 5-minute window
+            _ibiRollingHistory.removeWhere(
+              (ibiEntry) => now.difference(ibiEntry.$2) > _hrvWindowDuration,
+            );
 
             // For the first 10 seconds allow filters to stabilize
             if (DateTime.now().difference(startTime).inSeconds < 10) {
               return null;
             }
 
-            return (smoothedHeartRate.round(), hrvScore.toStringAsFixed(2));
+            double? hrvScore;
+
+            // Calculate RMSSD (Root Mean Square of Successive Differences)
+            if (_ibiRollingHistory.isNotEmpty) {
+              final oldestRecordTime = _ibiRollingHistory.first.$2;
+
+              if (now.difference(oldestRecordTime) >=
+                  const Duration(minutes: 1)) {
+                double sumOfSquaredDifferences = 0.0;
+                int count = 0;
+
+                for (int i = 1; i < _ibiRollingHistory.length; i++) {
+                  double diff =
+                      _ibiRollingHistory[i].$1 - _ibiRollingHistory[i - 1].$1;
+                  sumOfSquaredDifferences += diff * diff;
+                  count++;
+                }
+                if (count > 0) {
+                  hrvScore = sqrt(sumOfSquaredDifferences / count);
+                }
+              }
+            }
+
+            return (smoothedHeartRate.round(), hrvScore?.toStringAsFixed(2));
           },
         )
         .where((data) => data != null)
-        .cast<(int, String)>();
+        .cast<(int, double?)>();
   }
 
   void start() {
     // Start with calibration phase
     _monitoringPhaseTimer?.cancel();
-    // TODO: ask what to do here
     _monitoringPhaseTimer = Timer(MonitoringPhase.calibration.duration, () {
       monitoringPhase.value = MonitoringPhase.baseline;
     });
+
+    // Execute baseline phase after calibration
+    adjustBaseline();
+    _monitoringPhaseTimer = Timer(
+      MonitoringPhase.baseline.duration,
+      () {
+        monitoringPhase.value = MonitoringPhase.monitoring;
+      },
+    );
 
     // Detect stress
     biometricStream.listen((data) {
@@ -263,12 +298,15 @@ class Measurement {
       final (heartRate, rmssd) = data;
       // TODO: take activity level into account when determining stress level
       if (heartRate > userAccount.stressThresholds.$1 &&
-          double.parse(rmssd) < userAccount.stressThresholds.$2) {
+          rmssd != null &&
+          rmssd < userAccount.stressThresholds.$2) {
         stressLevel.value = StressLevel.stressed;
         // TODO: Start meditation
       }
     });
   }
+
+  void adjustBaseline() {}
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {
     if (data is SensorDoubleValue) {
