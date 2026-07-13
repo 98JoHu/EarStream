@@ -264,29 +264,60 @@ class Measurement {
               }
             }
 
-            return (smoothedHeartRate.round(), hrvScore?.toStringAsFixed(2));
+            return (smoothedHeartRate.round(), hrvScore);
           },
         )
         .where((data) => data != null)
         .cast<(int, double?)>();
   }
 
-  void start() {
+  Future<void> start() async {
     // Start with calibration phase
     _monitoringPhaseTimer?.cancel();
-    _monitoringPhaseTimer = Timer(MonitoringPhase.calibration.duration, () {
-      monitoringPhase.value = MonitoringPhase.baseline;
-    });
+    await Future.delayed(MonitoringPhase.calibration.duration);
 
     // Execute baseline phase after calibration
-    adjustBaseline();
-    _monitoringPhaseTimer = Timer(
-      MonitoringPhase.baseline.duration,
-      () {
-        monitoringPhase.value = MonitoringPhase.monitoring;
-      },
-    );
+    monitoringPhase.value = MonitoringPhase.baseline;
+    final subscription = adjustBaseline();
 
+    await Future.delayed(MonitoringPhase.baseline.duration);
+    subscription.cancel();
+    monitoringPhase.value = MonitoringPhase.monitoring;
+
+    monitorStress();
+  }
+
+  StreamSubscription<(int, double?)> adjustBaseline() {
+    final (heartRateThreshold, rmssdThreshold) = userAccount.baselineBiometrics;
+    final startTime = DateTime.now();
+
+    final subscription = biometricStream.listen((data) {
+      final int elapsedSeconds =
+          DateTime.now().difference(startTime).inMilliseconds;
+      double timeRatio =
+          elapsedSeconds / MonitoringPhase.baseline.duration.inMilliseconds;
+      timeRatio = timeRatio.clamp(0.0, 1.0);
+
+      final double studyWeight = timeRatio * 0.3;
+      final double measuredWeight = 1.0 - studyWeight;
+
+      final (currentHeartRate, currentRmssd) = data;
+
+      final dynamicHeartRate =
+          (studyWeight * heartRateThreshold + measuredWeight * currentHeartRate)
+              .round();
+      userAccount.baselineHeartRate = dynamicHeartRate;
+      if (currentRmssd != null) {
+        final dynamicRmssdThreshold =
+            studyWeight * rmssdThreshold + measuredWeight * currentRmssd;
+        userAccount.baselineRMSSD = dynamicRmssdThreshold;
+      }
+    });
+
+    return subscription;
+  }
+
+  void monitorStress() {
     // Detect stress
     biometricStream.listen((data) {
       // if user is stressed already then don't change the stress level
@@ -305,8 +336,6 @@ class Measurement {
       }
     });
   }
-
-  void adjustBaseline() {}
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {
     if (data is SensorDoubleValue) {
