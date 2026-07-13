@@ -119,6 +119,16 @@ class PpgOpticalSample {
   });
 }
 
+class HeartRateSample {
+  final int heartRate;
+  final double? rmssd;
+
+  const HeartRateSample({
+    required this.heartRate,
+    required this.rmssd,
+  });
+}
+
 class Measurement {
   final Sensor ppgSensor;
   final Sensor accelerometerSensor;
@@ -129,9 +139,9 @@ class Measurement {
   // PPG data stream: emits a tuple of (timestamp, value) where value is the sum of green and ambient channels (inverted).
   late final Stream<(int, double)> _ppgStream;
   Stream<int> get heartRate =>
-      biometricStream.map((biometrics) => biometrics.$1);
+      biometricStream.map((biometrics) => biometrics.heartRate);
   Stream<double?> get rmssd =>
-      biometricStream.map((biometrics) => biometrics.$2);
+      biometricStream.map((biometrics) => biometrics.rmssd);
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
   ValueNotifier<MonitoringPhase> monitoringPhase =
       ValueNotifier(MonitoringPhase.calibration);
@@ -181,7 +191,7 @@ class Measurement {
     _ppgStream = ppgStream;
   }
 
-  Stream<(int heartRate, double? rmssd)> get biometricStream {
+  Stream<HeartRateSample> get biometricStream {
     final startTime = DateTime.now();
 
     return _ppgStream
@@ -264,11 +274,16 @@ class Measurement {
               }
             }
 
-            return (smoothedHeartRate.round(), hrvScore);
+            HeartRateSample sample = HeartRateSample(
+              heartRate: smoothedHeartRate.round(),
+              rmssd: hrvScore,
+            );
+
+            return sample;
           },
         )
         .where((data) => data != null)
-        .cast<(int, double?)>();
+        .cast<HeartRateSample>();
   }
 
   Future<void> start() async {
@@ -279,15 +294,15 @@ class Measurement {
     // Execute baseline phase after calibration
     monitoringPhase.value = MonitoringPhase.baseline;
     final subscription = adjustBaseline();
-
     await Future.delayed(MonitoringPhase.baseline.duration);
     subscription.cancel();
-    monitoringPhase.value = MonitoringPhase.monitoring;
 
+    // Stress detection
+    monitoringPhase.value = MonitoringPhase.monitoring;
     monitorStress();
   }
 
-  StreamSubscription<(int, double?)> adjustBaseline() {
+  StreamSubscription<HeartRateSample> adjustBaseline() {
     final (heartRateThreshold, rmssdThreshold) = userAccount.baselineBiometrics;
     final startTime = DateTime.now();
 
@@ -301,7 +316,7 @@ class Measurement {
       final double studyWeight = timeRatio * 0.3;
       final double measuredWeight = 1.0 - studyWeight;
 
-      final (currentHeartRate, currentRmssd) = data;
+      final (currentHeartRate, currentRmssd) = (data.heartRate, data.rmssd);
 
       final dynamicHeartRate =
           (studyWeight * heartRateThreshold + measuredWeight * currentHeartRate)
@@ -326,7 +341,7 @@ class Measurement {
       }
 
       // Check if the user is stressed based on heart rate and RMSSD thresholds
-      final (heartRate, rmssd) = data;
+      final (heartRate, rmssd) = (data.heartRate, data.rmssd);
       // TODO: take activity level into account when determining stress level
       if (heartRate > userAccount.stressThresholds.$1 &&
           rmssd != null &&
