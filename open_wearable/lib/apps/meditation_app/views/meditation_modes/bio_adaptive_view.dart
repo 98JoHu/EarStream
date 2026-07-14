@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
 import '../../model/activity_tracker.dart' show ActivityLevel;
+import '../../model/meditation.dart';
 
 class BioAdaptiveView extends StatefulWidget {
   const BioAdaptiveView({super.key});
@@ -23,6 +24,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
       children: [
         if (hasStarted) _buildBioAdaptiveContent(measurement),
         SizedBox(height: hasStarted ? 24 : 0),
+        _MeditationTile(meditation: measurement.meditation),
         ElevatedButton.icon(
           onPressed: () => {
             setState(() {
@@ -41,7 +43,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => {
-                    measurement.simulateStress(),
+                    hasStarted ? measurement.simulateStress() : null,
                   },
                   icon: const Icon(Icons.psychology),
                   label: const Text("Simulate Stress"),
@@ -51,7 +53,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => {
-                    measurement.reset(),
+                    hasStarted ? measurement.reset() : null,
                   },
                   icon: const Icon(Icons.refresh),
                   label: const Text("Reset"),
@@ -90,7 +92,9 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
                     icon: Icons.air,
                     iconColor: Colors.blueAccent,
                     backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
-                    listenable: measurement.rmssd,
+                    listenable: measurement.rmssd
+                        .where((value) => value != null)
+                        .map((value) => value!.toStringAsFixed(1)),
                   ),
                 ),
               ],
@@ -105,6 +109,77 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MeditationTile extends StatelessWidget {
+  final ValueNotifier<Meditation?> meditation;
+  const _MeditationTile({
+    required this.meditation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: meditation,
+      builder: (context, value, child) {
+        if (value == null) {
+          return const SizedBox.shrink();
+        } else {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.green.withValues(alpha: 0.1),
+                  border:
+                      Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.self_improvement, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Meditation in Progress",
+                      style: TextStyle(
+                        color: Colors.green[700],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => {
+                      meditation.value!.pause(),
+                    },
+                    icon: const Icon(Icons.pause),
+                    label: const Text("Pause"),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => {
+                      meditation.value!.stop(),
+                      meditation.value = null,
+                    },
+                    icon: const Icon(Icons.stop),
+                    label: const Text("Stop"),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }
+      },
     );
   }
 }

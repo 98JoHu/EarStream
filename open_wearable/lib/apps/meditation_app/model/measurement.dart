@@ -120,6 +120,7 @@ class Measurement {
   ValueNotifier<ActivityLevel> get activityLevel =>
       activityTracker.activityLevel;
   Timer? _monitoringPhaseTimer;
+  ValueNotifier<Meditation?> meditation = ValueNotifier(null);
 
   // Filters
   final _bandPassFilter =
@@ -386,9 +387,9 @@ class Measurement {
           rmssd < userAccount.stressThresholds.$2) {
         stressLevel.value = StressLevel.stressed;
         monitoringPhase.value = MonitoringPhase.meditation;
-        Meditation meditation =
+        meditation.value =
             Meditation(userAccount: userAccount, measurement: this);
-        meditation.start();
+        meditation.value!.start();
       }
     });
   }
@@ -397,14 +398,14 @@ class Measurement {
     stressLevel.value = StressLevel.stressed;
     monitoringPhase.value = MonitoringPhase.meditation;
     // TODO: tweek heart rate and heart rate variability to simulate stress
-    Meditation meditation =
-        Meditation(userAccount: userAccount, measurement: this);
-    meditation.start();
+    meditation.value = Meditation(userAccount: userAccount, measurement: this);
+    meditation.value!.start();
   }
 
   void reset() {
     stressLevel.value = StressLevel.relaxed;
     monitoringPhase.value = MonitoringPhase.calibration;
+    meditation.value = null;
     // TODO: Reset measurements
   }
 
