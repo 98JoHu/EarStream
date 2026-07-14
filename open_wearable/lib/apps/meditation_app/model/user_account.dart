@@ -5,23 +5,23 @@ enum FitnessLevel { sedentary, moderate, active, athlete }
 enum MeditationEnvironment {
   nature(
     label: "Peaceful Nature",
-    assetPath: "assets/audio/meditation_environments/nature.jpg",
+    assetPath: "Peaceful_Nature.wav",
   ),
   ocean(
     label: "Ocean beach",
-    assetPath: "assets/audio/meditation_environments/ocean.jpg",
+    assetPath: "Ocean_Beach.wav",
   ),
   mountain(
     label: "Mountain",
-    assetPath: "assets/audio/meditation_environments/mountain.jpg",
+    assetPath: "Mountain.wav",
   ),
   forest(
     label: "Forest",
-    assetPath: "assets/audio/meditation_environments/forest.jpg",
+    assetPath: "Forest.wav",
   ),
   garden(
     label: "Garden",
-    assetPath: "assets/audio/meditation_environments/garden.jpg",
+    assetPath: "Garden.mp3",
   );
 
   final String label;

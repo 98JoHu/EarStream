@@ -30,9 +30,12 @@ class Meditation {
     // segments.clear();
 
     // Start background music
+    musicPlayer.audioCache =
+        AudioCache(prefix: "lib/apps/meditation_app/assets/audio/");
     await musicPlayer.play(
       AssetSource(
-        "lib/apps/meditation_app/${userAccount.meditationEnvironment?.assetPath ?? MeditationEnvironment.nature.assetPath}",
+        userAccount.meditationEnvironment?.assetPath ??
+            MeditationEnvironment.nature.assetPath,
       ),
     );
 
@@ -48,6 +51,16 @@ class Meditation {
     //   await segment.start();
     //   measurement.checkStressLevel();
     // }
+  }
+
+  Future<void> stop() async {
+    await musicPlayer.stop();
+    await voicePlayer.stop();
+  }
+
+  void pause() {
+    musicPlayer.pause();
+    voicePlayer.pause();
   }
 }
 
