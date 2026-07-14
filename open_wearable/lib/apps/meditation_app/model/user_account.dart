@@ -2,6 +2,33 @@ enum Gender { male, female, nonBinary, unspecified }
 
 enum FitnessLevel { sedentary, moderate, active, athlete }
 
+enum MeditationEnvironment {
+  nature(
+    label: "Peaceful Nature",
+    assetPath: "assets/audio/meditation_environments/nature.jpg",
+  ),
+  ocean(
+    label: "Ocean beach",
+    assetPath: "assets/audio/meditation_environments/ocean.jpg",
+  ),
+  mountain(
+    label: "Mountain",
+    assetPath: "assets/audio/meditation_environments/mountain.jpg",
+  ),
+  forest(
+    label: "Forest",
+    assetPath: "assets/audio/meditation_environments/forest.jpg",
+  ),
+  garden(
+    label: "Garden",
+    assetPath: "assets/audio/meditation_environments/garden.jpg",
+  );
+
+  final String label;
+  final String assetPath;
+  const MeditationEnvironment({required this.label, required this.assetPath});
+}
+
 class UserAccount {
   // Basic user information
   String? username;
@@ -15,7 +42,7 @@ class UserAccount {
   String? voiceGender;
   String? speakingSpeed;
   String? meditationType;
-  String? meditationEnvironment;
+  MeditationEnvironment? meditationEnvironment;
   String? additionalPreferences;
   double? stressThreshold;
 

@@ -27,7 +27,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   late String _voiceGender;
   late String _speakingSpeed;
   late String _meditationType;
-  late String _meditationEnvironment;
+  late MeditationEnvironment _meditationEnvironment;
   late double _stressThreshold;
 
   static const genderOptions = [
@@ -78,23 +78,23 @@ class _PreferencesPageState extends State<PreferencesPage> {
   ];
   static const meditationEnvironmentOptions = [
     DropdownMenuEntry(
-      value: 'peaceful nature',
+      value: MeditationEnvironment.nature,
       label: '${AppEmojis.tree} Peaceful nature',
     ),
     DropdownMenuEntry(
-      value: 'calm ocean beach',
+      value: MeditationEnvironment.ocean,
       label: '${AppEmojis.wave} Ocean beach',
     ),
     DropdownMenuEntry(
-      value: 'quiet mountain',
+      value: MeditationEnvironment.mountain,
       label: '${AppEmojis.mountain} Mountain',
     ),
     DropdownMenuEntry(
-      value: 'serene forest',
+      value: MeditationEnvironment.forest,
       label: '${AppEmojis.forest} Forest',
     ),
     DropdownMenuEntry(
-      value: 'gentle garden',
+      value: MeditationEnvironment.garden,
       label: '${AppEmojis.cherryBlossom} Garden',
     ),
   ];
@@ -126,8 +126,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _voiceGender = widget.userAccount.voiceGender ?? 'female';
     _speakingSpeed = widget.userAccount.speakingSpeed ?? 'slow';
     _meditationType = widget.userAccount.meditationType ?? 'mindfulness';
-    _meditationEnvironment =
-        widget.userAccount.meditationEnvironment ?? 'peaceful nature';
+    _meditationEnvironment = widget.userAccount.meditationEnvironment ??
+        MeditationEnvironment.nature;
     _stressThreshold = widget.userAccount.stressThreshold ?? 0.10;
   }
 
@@ -232,7 +232,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<String>(
+                  FormDropdown<MeditationEnvironment>(
                     initialSelection: _meditationEnvironment,
                     entries: meditationEnvironmentOptions,
                     onSelected: (value) =>
