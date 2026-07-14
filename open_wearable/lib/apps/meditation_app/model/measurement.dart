@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
-import 'band_pass_filter.dart';
 import 'dart:math';
-import 'user_account.dart';
 import 'dart:async';
+import 'band_pass_filter.dart';
+import 'user_account.dart';
 import 'activity_tracker.dart';
+import 'meditation.dart';
 
 enum StressLevel {
   relaxed(
@@ -131,7 +132,7 @@ class Measurement {
   );
   final _kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
   final List<(double, DateTime)> _ibiRollingHistory = [];
-  final Duration _hrvWindowDuration = const Duration(minutes: 5);
+  static const Duration _hrvWindowDuration = Duration(minutes: 5);
 
   Measurement({
     required this.ppgSensor,
@@ -384,10 +385,30 @@ class Measurement {
           rmssd != null &&
           rmssd < userAccount.stressThresholds.$2) {
         stressLevel.value = StressLevel.stressed;
-        // TODO: Start meditation
+        monitoringPhase.value = MonitoringPhase.meditation;
+        Meditation meditation =
+            Meditation(userAccount: userAccount, measurement: this);
+        meditation.start();
       }
     });
   }
+
+  void simulateStress() {
+    stressLevel.value = StressLevel.stressed;
+    monitoringPhase.value = MonitoringPhase.meditation;
+    // TODO: tweek heart rate and heart rate variability to simulate stress
+    Meditation meditation =
+        Meditation(userAccount: userAccount, measurement: this);
+    meditation.start();
+  }
+
+  void reset() {
+    stressLevel.value = StressLevel.relaxed;
+    monitoringPhase.value = MonitoringPhase.calibration;
+    // TODO: Reset measurements
+  }
+
+  void checkStressLevel() {}
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {
     if (data is SensorDoubleValue) {

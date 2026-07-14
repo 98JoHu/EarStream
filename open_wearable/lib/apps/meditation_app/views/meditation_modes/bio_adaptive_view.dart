@@ -40,7 +40,9 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => {},
+                  onPressed: () => {
+                    measurement.simulateStress(),
+                  },
                   icon: const Icon(Icons.psychology),
                   label: const Text("Simulate Stress"),
                 ),
@@ -48,7 +50,9 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               const SizedBox(width: 24),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => {},
+                  onPressed: () => {
+                    measurement.reset(),
+                  },
                   icon: const Icon(Icons.refresh),
                   label: const Text("Reset"),
                 ),

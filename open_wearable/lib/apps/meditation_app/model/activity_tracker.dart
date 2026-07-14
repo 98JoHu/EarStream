@@ -157,8 +157,6 @@ class ActivityTracker {
     final avgGyroMagnitude =
         _gyroWindow.map((s) => s.magnitude).reduce((a, b) => a + b) /
             _gyroWindow.length;
-    print(
-        "Avg Accel Deviation: $avgAccelDeviation, Avg Gyro Magnitude: $avgGyroMagnitude");
 
     if (avgAccelDeviation < ActivityLevel.resting.accelarationThreshold &&
         avgGyroMagnitude < ActivityLevel.resting.gyroscopeThreshold) {
