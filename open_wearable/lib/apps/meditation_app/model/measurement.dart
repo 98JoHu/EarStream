@@ -5,37 +5,7 @@ import 'band_pass_filter.dart';
 import 'dart:math';
 import 'user_account.dart';
 import 'dart:async';
-
-enum ActivityLevel {
-  resting(
-    label: "Resting",
-    icon: Icons.airline_seat_individual_suite,
-  ),
-  light(
-    label: "Light",
-    icon: Icons.directions_walk,
-  ),
-  moderate(
-    label: "Moderate",
-    icon: Icons.directions_run,
-  ),
-  vigorous(
-    label: "Vigorous",
-    icon: Icons.fitness_center,
-  ),
-  intense(
-    label: "Intense",
-    icon: Icons.local_fire_department,
-  );
-
-  final String label;
-  final IconData icon;
-
-  const ActivityLevel({
-    required this.label,
-    required this.icon,
-  });
-}
+import 'activity_tracker.dart';
 
 enum StressLevel {
   relaxed(
@@ -138,6 +108,7 @@ class Measurement {
 
   // PPG data stream: emits a tuple of (timestamp, value) where value is the sum of green and ambient channels (inverted).
   late final Stream<(int, double)> _ppgStream;
+  late final ActivityTracker activityTracker;
   Stream<int> get heartRate =>
       biometricStream.map((biometrics) => biometrics.heartRate);
   Stream<double?> get rmssd =>
@@ -145,6 +116,8 @@ class Measurement {
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
   ValueNotifier<MonitoringPhase> monitoringPhase =
       ValueNotifier(MonitoringPhase.calibration);
+  ValueNotifier<ActivityLevel> get activityLevel =>
+      activityTracker.activityLevel;
   Timer? _monitoringPhaseTimer;
 
   // Filters
@@ -173,6 +146,18 @@ class Measurement {
       fallbackFrequency: 100.0,
       targetFrequencyHz: 200,
     );
+    _configureSensorForStreaming(
+      accelerometerSensor,
+      sensorConfigProvider,
+      fallbackFrequency: 100.0,
+      targetFrequencyHz: 200,
+    );
+    _configureSensorForStreaming(
+      gyroscopeSensor,
+      sensorConfigProvider,
+      fallbackFrequency: 100.0,
+      targetFrequencyHz: 200,
+    );
 
     final ppgStream = ppgSensor.sensorStream
         .map<PpgOpticalSample?>((data) {
@@ -188,7 +173,46 @@ class Measurement {
           (sample) => (sample.timestamp, -(sample.green + sample.ambient)),
         )
         .asBroadcastStream();
+
+    final accelerometerStream = accelerometerSensor.sensorStream
+        .map<PpgMotionSample?>((data) {
+          final values = _sensorValuesAsDoubles(data);
+          if (values == null) {
+            return null;
+          }
+          return _extractImuMotionSample(
+            accelerometerSensor,
+            data,
+            values,
+          );
+        })
+        .where((sample) => sample != null)
+        .cast<PpgMotionSample>()
+        .asBroadcastStream();
+
+    final gyroscopeStream = gyroscopeSensor.sensorStream
+        .map<PpgMotionSample?>((data) {
+          final values = _sensorValuesAsDoubles(data);
+          if (values == null) {
+            return null;
+          }
+          return _extractImuMotionSample(
+            gyroscopeSensor,
+            data,
+            values,
+          );
+        })
+        .where((sample) => sample != null)
+        .cast<PpgMotionSample>()
+        .asBroadcastStream();
+
     _ppgStream = ppgStream;
+    activityTracker = ActivityTracker(
+      accelerometerStream: accelerometerStream,
+      gyroscopeStream: gyroscopeStream,
+      timestampExponentAccelerometer: accelerometerSensor.timestampExponent,
+      timestampExponentGyroscope: gyroscopeSensor.timestampExponent,
+    );
   }
 
   Stream<HeartRateSample> get biometricStream {
@@ -287,6 +311,9 @@ class Measurement {
   }
 
   Future<void> start() async {
+    // Detect activity level
+    activityTracker.start();
+
     // Start with calibration phase
     _monitoringPhaseTimer?.cancel();
     await Future.delayed(MonitoringPhase.calibration.duration);
@@ -300,6 +327,16 @@ class Measurement {
     // Stress detection
     monitoringPhase.value = MonitoringPhase.monitoring;
     monitorStress();
+  }
+
+  void stop() {
+    _monitoringPhaseTimer?.cancel();
+    activityTracker.stop();
+    // TODO: add more cleanup
+  }
+
+  void dispose() {
+    // TODO: Clean up resources
   }
 
   StreamSubscription<HeartRateSample> adjustBaseline() {
@@ -408,6 +445,44 @@ class Measurement {
       ir: ir,
       green: green,
       ambient: ambient,
+    );
+  }
+
+  PpgMotionSample _extractImuMotionSample(
+    Sensor sensor,
+    SensorValue data,
+    List<double> values,
+  ) {
+    int? findAxisIndex(List<String> keywords) {
+      for (var i = 0; i < sensor.axisNames.length; i++) {
+        final axis = sensor.axisNames[i].toLowerCase();
+        if (keywords.any(axis.contains)) {
+          return i;
+        }
+      }
+      return null;
+    }
+
+    double valueAt(int? index, double fallback) {
+      if (index != null && index >= 0 && index < values.length) {
+        return values[index];
+      }
+      return fallback;
+    }
+
+    final fallbackX = values.isNotEmpty ? values[0] : 0.0;
+    final fallbackY = values.length > 1 ? values[1] : 0.0;
+    final fallbackZ = values.length > 2 ? values[2] : 0.0;
+
+    final x = valueAt(findAxisIndex(['x']), fallbackX);
+    final y = valueAt(findAxisIndex(['y']), fallbackY);
+    final z = valueAt(findAxisIndex(['z']), fallbackZ);
+
+    return PpgMotionSample(
+      timestamp: data.timestamp,
+      x: x,
+      y: y,
+      z: z,
     );
   }
 

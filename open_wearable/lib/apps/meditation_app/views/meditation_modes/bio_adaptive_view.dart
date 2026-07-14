@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
+import '../../model/activity_tracker.dart' show ActivityLevel;
 
 class BioAdaptiveView extends StatefulWidget {
   const BioAdaptiveView({super.key});
@@ -27,7 +28,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             setState(() {
               hasStarted = !hasStarted;
             }),
-            hasStarted ? measurement.start() : null,
+            hasStarted ? measurement.start() : measurement.stop(),
           },
           icon: Icon(hasStarted ? Icons.stop : Icons.play_arrow),
           label: Text(hasStarted ? "Stop EarStreAM" : "Start EarStreAM"),
@@ -94,8 +95,8 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
             const SizedBox(height: 16),
             _StressLevelTile(listenable: measurement.stressLevel),
-            // const SizedBox(height: 16),
-            // _ActivityLevelTile(listenable: measurement.activityLevel),
+            const SizedBox(height: 16),
+            _ActivityLevelTile(listenable: measurement.activityLevel),
             // HeartRateChart
           ],
         ),
