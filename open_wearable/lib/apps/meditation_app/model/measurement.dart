@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
-import 'dart:math';
 import 'dart:async';
-import 'band_pass_filter.dart';
 import 'user_account.dart';
 import 'activity_tracker.dart';
 import 'meditation.dart';
+import 'hr_hrv_processor.dart';
 
 enum StressLevel {
   relaxed(
@@ -107,13 +106,16 @@ class Measurement {
   final SensorConfigurationProvider sensorConfigProvider;
   final UserAccount userAccount;
 
-  // PPG data stream: emits a tuple of (timestamp, value) where value is the sum of green and ambient channels (inverted).
-  late final Stream<(int, double)> _ppgStream;
+  late final Stream<PpgOpticalSample> _ppgStream;
+  late final HrHrvProcessor _processor;
   late final ActivityTracker activityTracker;
+  StreamSubscription<PpgOpticalSample>? metricSubscription;
   Stream<int> get heartRate =>
-      biometricStream.map((biometrics) => biometrics.heartRate);
+      _processor.biometricStream.map((biometrics) => biometrics.heartRate);
   Stream<double?> get rmssd =>
-      biometricStream.map((biometrics) => biometrics.rmssd);
+      _processor.biometricStream.map((biometrics) => biometrics.rmssd);
+
+  // Expose calculated values to UI
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
   ValueNotifier<MonitoringPhase> monitoringPhase =
       ValueNotifier(MonitoringPhase.calibration);
@@ -122,19 +124,6 @@ class Measurement {
   Timer? _monitoringPhaseTimer;
   ValueNotifier<Meditation?> meditation = ValueNotifier(null);
 
-  // Filters
-  final _bandPassFilter =
-      BandPassFilter(lowCut: 0.5, highCut: 4.0, sampleFreq: 200.0);
-  final _movingAverageFilter = MovingAverageFilter();
-  late final _peakDetector = SlidingWindowPeakDetector(
-    windowDurationSeconds: 8,
-    minInterPeakDistanceMs: 300,
-    timestampExponent: ppgSensor.timestampExponent,
-  );
-  final _kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
-  final List<(double, DateTime)> _ibiRollingHistory = [];
-  static const Duration _hrvWindowDuration = Duration(minutes: 5);
-
   Measurement({
     required this.ppgSensor,
     required this.accelerometerSensor,
@@ -142,7 +131,7 @@ class Measurement {
     required this.sensorConfigProvider,
     required this.userAccount,
   }) {
-    _configureSensorForStreaming(
+    final double sampleFreq = _configureSensorForStreaming(
       ppgSensor,
       sensorConfigProvider,
       fallbackFrequency: 100.0,
@@ -161,7 +150,7 @@ class Measurement {
       targetFrequencyHz: 200,
     );
 
-    final ppgStream = ppgSensor.sensorStream
+    _ppgStream = ppgSensor.sensorStream
         .map<PpgOpticalSample?>((data) {
           final values = _sensorValuesAsDoubles(data);
           if (values == null) {
@@ -171,9 +160,6 @@ class Measurement {
         })
         .where((sample) => sample != null)
         .cast<PpgOpticalSample>()
-        .map<(int, double)>(
-          (sample) => (sample.timestamp, -(sample.green + sample.ambient)),
-        )
         .asBroadcastStream();
 
     final accelerometerStream = accelerometerSensor.sensorStream
@@ -208,7 +194,10 @@ class Measurement {
         .cast<PpgMotionSample>()
         .asBroadcastStream();
 
-    _ppgStream = ppgStream;
+    _processor = HrHrvProcessor(
+      sampleFreq: sampleFreq,
+      timestampExponent: ppgSensor.timestampExponent,
+    );
     activityTracker = ActivityTracker(
       accelerometerStream: accelerometerStream,
       gyroscopeStream: gyroscopeStream,
@@ -217,102 +206,11 @@ class Measurement {
     );
   }
 
-  Stream<HeartRateSample> get biometricStream {
-    final startTime = DateTime.now();
-
-    return _ppgStream
-        .map(
-          (event) {
-            final (timestamp, value) = event;
-            final filteredValue = _bandPassFilter.filter(value);
-            final smoothedValue = _movingAverageFilter.next(filteredValue);
-            final int? peakTimestamp =
-                _peakDetector.processSample(timestamp, smoothedValue);
-            if (peakTimestamp == null) return null;
-            final peaks = _peakDetector.activePeaks;
-            if (peaks.length < 2) return null;
-
-            final ibiList = <double>[];
-
-            for (var i = 1; i < peaks.length; i++) {
-              final double ibi = (peaks[i] - peaks[i - 1]) *
-                  pow(10, ppgSensor.timestampExponent + 3)
-                      .toDouble(); // Convert to milliseconds
-
-              // Physiological plausibility check: Ignore IBIs that are too short or too long
-              if (ibi < 300 || ibi > 2000) {
-                continue;
-              }
-              ibiList.add(ibi);
-            }
-
-            if (ibiList.isEmpty) return null;
-
-            final averageIbiMs =
-                ibiList.reduce((a, b) => a + b) / ibiList.length;
-            if (averageIbiMs <= 0 ||
-                averageIbiMs.isNaN ||
-                averageIbiMs.isInfinite) {
-              return null;
-            }
-            final double heartRate =
-                60000.0 / averageIbiMs; // Convert to beats per minute
-            final smoothedHeartRate = _kalmanFilter.update(heartRate);
-
-            final now = DateTime.now();
-            final double latestIbi = (peaks.last - peaks[peaks.length - 2]) *
-                pow(10, ppgSensor.timestampExponent + 3)
-                    .toDouble(); // convert to milliseconds
-            if (latestIbi >= 300 && latestIbi <= 2000) {
-              _ibiRollingHistory.add((latestIbi, now));
-            }
-
-            // Remove old IBIs outside the 5-minute window
-            _ibiRollingHistory.removeWhere(
-              (ibiEntry) => now.difference(ibiEntry.$2) > _hrvWindowDuration,
-            );
-
-            // For the first 10 seconds allow filters to stabilize
-            if (DateTime.now().difference(startTime).inSeconds < 10) {
-              return null;
-            }
-
-            double? hrvScore;
-
-            // Calculate RMSSD (Root Mean Square of Successive Differences)
-            if (_ibiRollingHistory.isNotEmpty) {
-              final oldestRecordTime = _ibiRollingHistory.first.$2;
-
-              if (now.difference(oldestRecordTime) >=
-                  const Duration(minutes: 1)) {
-                double sumOfSquaredDifferences = 0.0;
-                int count = 0;
-
-                for (int i = 1; i < _ibiRollingHistory.length; i++) {
-                  double diff =
-                      _ibiRollingHistory[i].$1 - _ibiRollingHistory[i - 1].$1;
-                  sumOfSquaredDifferences += diff * diff;
-                  count++;
-                }
-                if (count > 0) {
-                  hrvScore = sqrt(sumOfSquaredDifferences / count);
-                }
-              }
-            }
-
-            HeartRateSample sample = HeartRateSample(
-              heartRate: smoothedHeartRate.round(),
-              rmssd: hrvScore,
-            );
-
-            return sample;
-          },
-        )
-        .where((data) => data != null)
-        .cast<HeartRateSample>();
-  }
-
   Future<void> start() async {
+    // Listen to the PPG stream and process incoming samples => HR and HRV
+    metricSubscription = _ppgStream.listen((data) {
+      _processor.processPpgSample(data.timestamp, data.green, data.ambient);
+    });
     // Detect activity level
     activityTracker.start();
 
@@ -334,6 +232,7 @@ class Measurement {
   void stop() {
     _monitoringPhaseTimer?.cancel();
     activityTracker.stop();
+    metricSubscription?.cancel();
     // TODO: add more cleanup
   }
 
@@ -345,7 +244,7 @@ class Measurement {
     final (heartRateThreshold, rmssdThreshold) = userAccount.baselineBiometrics;
     final startTime = DateTime.now();
 
-    final subscription = biometricStream.listen((data) {
+    final subscription = _processor.biometricStream.listen((data) {
       final int elapsedSeconds =
           DateTime.now().difference(startTime).inMilliseconds;
       double timeRatio =
@@ -373,7 +272,7 @@ class Measurement {
 
   void monitorStress() {
     // Detect stress
-    biometricStream.listen((data) {
+    _processor.biometricStream.listen((data) {
       // if user is stressed already then don't change the stress level
       if (stressLevel.value == StressLevel.stressed) {
         return;
@@ -603,103 +502,5 @@ class MovingAverageFilter {
 
     // Return the average of the current window
     return _currentSum / _buffer.length;
-  }
-}
-
-class SlidingWindowPeakDetector {
-  late num windowDuration;
-  late num minInterPeakDistance;
-  final int timestampExponent;
-
-  SlidingWindowPeakDetector({
-    required int windowDurationSeconds,
-    required int minInterPeakDistanceMs,
-    required this.timestampExponent,
-  }) {
-    windowDuration = windowDurationSeconds * pow(10, -timestampExponent);
-    minInterPeakDistance =
-        minInterPeakDistanceMs * pow(10, -timestampExponent - 3);
-  }
-
-  // Stores the historical clean samples: Tuple of (timestampUs, value)
-  final List<(int, double)> _history = [];
-  final List<int> _peakTimestamps = [];
-
-  /// Processes a single filtered/smoothed sample.
-  /// Returns a valid peak timestamp (in microseconds) if a peak was just found, otherwise null.
-  int? processSample(int timestamp, double value) {
-    // 1. Add current sample to our tracking history
-    _history.add((timestamp, value));
-
-    // 2. Slide the window: Drop elements older than 8 seconds
-    _history.removeWhere((sample) => sample.$1 < timestamp - windowDuration);
-
-    // 3. We need at least 3 samples in history to evaluate a local maximum turning point
-    if (_history.length < 3) return null;
-
-    // Grab the last three sequential samples in our history buffer
-    final idx = _history.length - 1;
-    final (_, vPrev) = _history[idx - 2];
-    final (tCurr, vCurr) = _history[idx - 1]; // We evaluate the middle point
-    final (_, vNext) = _history[idx];
-
-    // 4. Check if the middle point represents a mathematical local maximum peak
-    if (vCurr > vPrev && vCurr >= vNext) {
-      // 5. Enforce minimum inter-peak lockout distance constraint
-      final lastPeak = _peakTimestamps.isNotEmpty ? _peakTimestamps.last : 0;
-      if (tCurr - lastPeak >= minInterPeakDistance) {
-        // Valid peak found! Record it and clean up peak history older than 8 seconds
-        _peakTimestamps.add(tCurr);
-        _peakTimestamps.removeWhere(
-          (peakTime) => peakTime < timestamp - windowDuration,
-        );
-
-        return tCurr;
-      }
-    }
-    return null;
-  }
-
-  /// Exposes the list of peak timestamps currently residing within the 8-second window
-  List<int> get activePeaks => List.unmodifiable(_peakTimestamps);
-}
-
-class KalmanFilter {
-  // Parameters
-  final double q; // Process noise covariance
-  final double r; // Measurement noise covariance
-
-  KalmanFilter({required this.q, required this.r});
-
-  // Filter State Variables
-  double _x = 0.0; // Estimated true state value
-  double _p = 1.0; // Estimation error covariance
-  bool _isInitialized = false;
-
-  /// Processes a single noisy sample and returns the smoothed estimate
-  double update(double measurement) {
-    // 1. Handle initialization on the very first sample
-    if (!_isInitialized) {
-      _x = measurement;
-      _isInitialized = true;
-      return _x;
-    }
-
-    // 2. PREDICT STEP
-    // For a simple 1D system, the state prediction remains the same,
-    // but our uncertainty grows by the process noise Q.
-    _p = _p + q;
-
-    // 3. UPDATE STEP
-    // Calculate the Kalman Gain (K)
-    double k = _p / (_p + r);
-
-    // Correct the state estimate using the new measurement
-    _x = _x + k * (measurement - _x);
-
-    // Update the error covariance for the next loop
-    _p = (1.0 - k) * _p;
-
-    return _x;
   }
 }
