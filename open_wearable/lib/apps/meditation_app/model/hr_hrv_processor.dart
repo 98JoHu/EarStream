@@ -6,6 +6,7 @@ import 'dart:math';
 class HrHrvProcessor {
   // Filters
   final KalmanFilter _kalmanFilter = KalmanFilter(q: 0.01, r: 4.0);
+  final MovingAverageFilter _movingAverageFilter = MovingAverageFilter();
   late final BandPassFilter _bandPassFilter;
   late final SlidingWindowPeakDetector _peakDetector;
   final List<(double, DateTime)> _ibiRollingHistory = [];
@@ -127,6 +128,7 @@ class SlidingWindowPeakDetector {
   late num windowDuration;
   late num minInterPeakDistance;
   final int timestampExponent;
+  final double minProminence = 0.1;
 
   SlidingWindowPeakDetector({
     required int windowDurationSeconds,
@@ -162,6 +164,11 @@ class SlidingWindowPeakDetector {
 
     // 4. Check if the middle point represents a mathematical local maximum peak
     if (vCurr > vPrev && vCurr >= vNext) {
+      final prominence = min(vCurr - vPrev, vCurr - vNext);
+      if (prominence < minProminence) {
+        return null; // Not a significant peak
+      }
+
       // 5. Enforce minimum inter-peak lockout distance constraint
       final lastPeak = _peakTimestamps.isNotEmpty ? _peakTimestamps.last : 0;
       if (tCurr - lastPeak >= minInterPeakDistance) {
@@ -218,5 +225,26 @@ class KalmanFilter {
     _p = (1.0 - k) * _p;
 
     return _x;
+  }
+}
+
+class MovingAverageFilter {
+  final int windowSize = 9;
+  final List<double> _buffer = [];
+  double _currentSum = 0.0;
+
+  /// Process a single sample through the 9-sample moving average
+  double next(double sample) {
+    // Add the new sample to our window
+    _buffer.add(sample);
+    _currentSum += sample;
+
+    // If the window exceeds 9 items, drop the oldest sample
+    if (_buffer.length > windowSize) {
+      _currentSum -= _buffer.removeAt(0);
+    }
+
+    // Return the average of the current window
+    return _currentSum / _buffer.length;
   }
 }
