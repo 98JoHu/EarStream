@@ -24,12 +24,14 @@ class ApiKeysPage extends StatefulWidget implements DrawerPage {
 class _ApiKeysPageState extends State<ApiKeysPage> {
   late final DeepseekManager _deepseekManager;
   late final ElevenLabsManager _elevenLabsManager;
+  late final DashscopeManager _dashscopeManager;
 
   @override
   void initState() {
     super.initState();
     _deepseekManager = DeepseekManager(userAccount: widget.userAccount);
     _elevenLabsManager = ElevenLabsManager(userAccount: widget.userAccount);
+    _dashscopeManager = DashscopeManager(userAccount: widget.userAccount);
   }
 
   @override
@@ -73,6 +75,18 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                   onChanged: (value) =>
                       widget.userAccount.elevenLabsApiKey = value,
                   initialValue: widget.userAccount.elevenLabsApiKey ?? '',
+                ),
+              ),
+              const SizedBox(height: 24),
+              StatusField(
+                connectionManager: _dashscopeManager,
+                neighbourWidget: SecretField(
+                  title: "Dashscope API Key",
+                  description:
+                      "Provide a Dashscope API key to enable AI-powered features. Keys are stored only on this device.",
+                  onChanged: (value) =>
+                      widget.userAccount.dashscopeApiKey = value,
+                  initialValue: widget.userAccount.dashscopeApiKey ?? '',
                 ),
               ),
             ],

@@ -50,6 +50,7 @@ class UserAccount {
   String? outlookSuppressionToken;
   String? deepseekApiKey;
   String? elevenLabsApiKey;
+  String? dashscopeApiKey;
 
   // Bio-adaptive meditation settings
   int? baselineHeartRate;
@@ -71,6 +72,7 @@ class UserAccount {
     this.outlookSuppressionToken,
     this.deepseekApiKey,
     this.elevenLabsApiKey,
+    this.dashscopeApiKey,
     this.baselineHeartRate,
     this.baselineRMSSD,
   });

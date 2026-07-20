@@ -255,3 +255,34 @@ class ElevenLabsManager extends ConnectionManager {
     print('ElevenLabs Synced. Account Info: $result');
   }
 }
+
+class DashscopeManager extends ConnectionManager {
+  DashscopeManager({required super.userAccount});
+
+  @override
+  Future<dynamic> verifyCredentials() async {
+    if (userAccount.dashscopeApiKey?.isEmpty ?? true) {
+      throw Exception('Dashscope API key cannot be empty.');
+    }
+
+    final response = await http.get(
+      Uri.parse('https://api.dashscope.com/v1/account'),
+      headers: {
+        'Authorization': 'Bearer ${userAccount.dashscopeApiKey}',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Dashscope API rejected key (Code: ${response.statusCode})');
+    }
+
+    return json.decode(response.body);
+  }
+
+  @override
+  Future<void> updateUser(dynamic result) async {
+    // Extract relevant account info from the result and update your user model
+    print('Dashscope Synced. Account Info: $result');
+  }
+}
