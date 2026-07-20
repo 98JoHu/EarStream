@@ -49,8 +49,11 @@ class UserAccount {
   // API keys and tokens
   String? outlookSuppressionToken;
   String? deepseekApiKey;
+  bool hasValidDeepseekKey = false;
   String? elevenLabsApiKey;
+  bool hasValidElevenLabsKey = false;
   String? dashscopeApiKey;
+  bool hasValidDashscopeKey = false;
 
   // Bio-adaptive meditation settings
   int? baselineHeartRate;

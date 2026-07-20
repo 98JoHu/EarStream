@@ -49,7 +49,7 @@ class StatusField extends StatelessWidget {
       case Status.error:
         return "Failed to connect to the source. Please check your settings and try again.";
       case Status.ok:
-        return "Successfully connected to the source. Stress detection is active.";
+        return "Successfully connected to the source.";
     }
   }
 
@@ -200,13 +200,14 @@ class DeepseekManager extends ConnectionManager {
     }
 
     final response = await http.get(
-      Uri.parse('https://api.deepseek.ai/v1/account'),
+      Uri.parse('https://api.deepseek.com/user/balance'),
       headers: {
         'Authorization': 'Bearer ${userAccount.deepseekApiKey}',
       },
     );
 
     if (response.statusCode != 200) {
+      userAccount.hasValidDeepseekKey = false; // Mark the key as invalid
       throw Exception(
           'Deepseek API rejected key (Code: ${response.statusCode})');
     }
@@ -216,10 +217,9 @@ class DeepseekManager extends ConnectionManager {
 
   @override
   Future<void> updateUser(dynamic result) async {
-    // Extract relevant account info from the result and update your user model
-    // Example:
-    // userAccount.deepseekSubscriptionLevel = result['subscription']['level'];
+    // Flag current API key as valid
     print('Deepseek Synced. Account Info: $result');
+    userAccount.hasValidDeepseekKey = true;
   }
 }
 
@@ -235,11 +235,12 @@ class ElevenLabsManager extends ConnectionManager {
     final response = await http.get(
       Uri.parse('https://api.elevenlabs.io/v1/user'),
       headers: {
-        'Authorization': 'Bearer ${userAccount.elevenLabsApiKey}',
+        'xi-api-key': 'Bearer ${userAccount.elevenLabsApiKey}',
       },
     );
 
     if (response.statusCode != 200) {
+      userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
       throw Exception(
           'ElevenLabs API rejected key (Code: ${response.statusCode})');
     }
@@ -253,6 +254,7 @@ class ElevenLabsManager extends ConnectionManager {
     // Example:
     // userAccount.elevenLabsSubscriptionLevel = result['subscription']['plan'];
     print('ElevenLabs Synced. Account Info: $result');
+    userAccount.hasValidElevenLabsKey = true; // Mark the key as valid
   }
 }
 
@@ -266,13 +268,16 @@ class DashscopeManager extends ConnectionManager {
     }
 
     final response = await http.get(
-      Uri.parse('https://api.dashscope.com/v1/account'),
+      Uri.parse(
+        'https://dashscope.aliyuncs.com/compatible-mode/v1/models',
+      ),
       headers: {
         'Authorization': 'Bearer ${userAccount.dashscopeApiKey}',
       },
     );
 
     if (response.statusCode != 200) {
+      userAccount.hasValidDashscopeKey = false; // Mark the key as invalid
       throw Exception(
           'Dashscope API rejected key (Code: ${response.statusCode})');
     }
@@ -284,5 +289,6 @@ class DashscopeManager extends ConnectionManager {
   Future<void> updateUser(dynamic result) async {
     // Extract relevant account info from the result and update your user model
     print('Dashscope Synced. Account Info: $result');
+    userAccount.hasValidDashscopeKey = true; // Mark the key as valid
   }
 }
