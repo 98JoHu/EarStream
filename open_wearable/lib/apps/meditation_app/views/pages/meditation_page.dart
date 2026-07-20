@@ -82,36 +82,38 @@ class _MeditationPageState extends State<MeditationPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SegmentedButton<MeditationMode>(
-            segments: MeditationMode.values
-                .map(
-                  (mode) => ButtonSegment<MeditationMode>(
-                    value: mode,
-                    label: Text(mode.label),
-                    icon: Icon(mode.icon),
-                  ),
-                )
-                .toList(),
-            selected: {_selectedMode},
-            onSelectionChanged: (Set<MeditationMode> newSelection) {
-              setState(() {
-                _selectedMode = newSelection.first;
-              });
-              // TODO: Implement mode switching logic here
-            },
-          ),
-          const SizedBox(height: 24),
-          Provider<Measurement>(
-            create: (_) => _measurement!,
-            child: _selectedMode.view,
-          ),
-        ],
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SegmentedButton<MeditationMode>(
+              segments: MeditationMode.values
+                  .map(
+                    (mode) => ButtonSegment<MeditationMode>(
+                      value: mode,
+                      label: Text(mode.label),
+                      icon: Icon(mode.icon),
+                    ),
+                  )
+                  .toList(),
+              selected: {_selectedMode},
+              onSelectionChanged: (Set<MeditationMode> newSelection) {
+                setState(() {
+                  _selectedMode = newSelection.first;
+                });
+                // TODO: Implement mode switching logic here
+              },
+            ),
+            const SizedBox(height: 24),
+            Provider<Measurement>(
+              create: (_) => _measurement!,
+              child: _selectedMode.view,
+            ),
+          ],
+        ),
       ),
     );
   }
