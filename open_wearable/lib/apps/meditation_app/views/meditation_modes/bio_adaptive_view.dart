@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
@@ -105,7 +106,20 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             _StressLevelTile(listenable: measurement.stressLevel),
             const SizedBox(height: 16),
             _ActivityLevelTile(listenable: measurement.activityLevel),
-            // HeartRateChart
+            const SizedBox(height: 16),
+            // Inside your UI build tree:
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A), // Slate background
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: HeartRateChart(
+                heartRateStream:
+                    measurement.heartRate, // Pass the heart rate stream here
+                visibleWindow:
+                    const Duration(seconds: 30), // Show 30s rolling chart
+              ),
+            ),
           ],
         ),
       ),
@@ -369,6 +383,172 @@ class _MonitoringPhaseTile extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class HeartRateChart extends StatefulWidget {
+  // Pass in the clean broadcast stream from your BiometricPipelineManager
+  final Stream<int> heartRateStream;
+
+  /// The duration of history to display on screen at once (e.g., last 30 seconds)
+  final Duration visibleWindow;
+
+  const HeartRateChart({
+    super.key,
+    required this.heartRateStream,
+    this.visibleWindow = const Duration(seconds: 30),
+  });
+
+  @override
+  State<HeartRateChart> createState() => _HeartRateChartState();
+}
+
+class _HeartRateChartState extends State<HeartRateChart> {
+  StreamSubscription? _subscription;
+  final List<FlSpot> _spots = [];
+
+  // Track elapsed seconds relative to when the chart started
+  DateTime? _startTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribeToStream();
+  }
+
+  void _subscribeToStream() {
+    _subscription = widget.heartRateStream.listen((heartRate) {
+      // Guard against zero/unwarmed data points
+      if (heartRate <= 0) return;
+
+      _startTime ??= DateTime.now();
+      final elapsedSeconds =
+          DateTime.now().difference(_startTime!).inMilliseconds / 1000.0;
+
+      setState(() {
+        // 1. Add the new data point (x: seconds, y: heart rate)
+        _spots.add(FlSpot(elapsedSeconds, heartRate.toDouble()));
+
+        // 2. Trim old data points that fall outside the rolling window frame
+        final cutoffTime = elapsedSeconds - widget.visibleWindow.inSeconds;
+        _spots.removeWhere((spot) => spot.x < cutoffTime);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_spots.isEmpty) {
+      return const Center(
+        child: Text(
+          "Waiting for pulse data...",
+          style: TextStyle(color: Colors.white54, fontSize: 14),
+        ),
+      );
+    }
+
+    final double latestX = _spots.last.x;
+    final double minX =
+        (latestX - widget.visibleWindow.inSeconds).clamp(0.0, double.infinity);
+    final double maxX = latestX < widget.visibleWindow.inSeconds
+        ? widget.visibleWindow.inSeconds.toDouble()
+        : latestX;
+
+    return AspectRatio(
+      aspectRatio: 1.8,
+      child: Padding(
+        padding: const EdgeInsets.only(
+            right: 18.0, left: 12.0, top: 24.0, bottom: 12.0),
+        child: LineChart(
+          LineChartData(
+            // Axis boundaries: keeps the chart sliding smoothly to the right
+            minX: minX,
+            maxX: maxX,
+            minY: 40, // Standard resting HR lower bound
+            maxY: 160, // Standard active HR upper bound
+
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              getDrawingHorizontalLine: (value) => FlLine(
+                color: Colors.white.withOpacity(0.05),
+                strokeWidth: 1,
+              ),
+            ),
+            titlesData: FlTitlesData(
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  getTitlesWidget: (value, meta) {
+                    return SideTitleWidget(
+                      meta: meta,
+                      child: Text(
+                        "${value.toInt()}s",
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 10),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 40,
+                  getTitlesWidget: (value, meta) {
+                    return SideTitleWidget(
+                      meta: meta,
+                      child: Text(
+                        "${value.toInt()}",
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            borderData: FlBorderData(show: false),
+            lineBarsData: [
+              LineChartBarData(
+                spots: _spots,
+                isCurved: true,
+                curveSmoothness: 0.35,
+                color: const Color(0xFFF43F5E), // Coral / Red pulse line
+                barWidth: 3,
+                isStrokeCapRound: true,
+                dotData: const FlDotData(
+                    show: false), // Hide dots for continuous line look
+
+                // Subtle gradient fill under the line
+                belowBarData: BarAreaData(
+                  show: true,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFF43F5E).withOpacity(0.3),
+                      const Color(0xFFF43F5E).withOpacity(0.0),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

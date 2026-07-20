@@ -483,24 +483,3 @@ class Measurement {
     return nextBigger ?? maxValue ?? values.first;
   }
 }
-
-class MovingAverageFilter {
-  final int windowSize = 9;
-  final List<double> _buffer = [];
-  double _currentSum = 0.0;
-
-  /// Process a single sample through the 9-sample moving average
-  double next(double sample) {
-    // Add the new sample to our window
-    _buffer.add(sample);
-    _currentSum += sample;
-
-    // If the window exceeds 9 items, drop the oldest sample
-    if (_buffer.length > windowSize) {
-      _currentSum -= _buffer.removeAt(0);
-    }
-
-    // Return the average of the current window
-    return _currentSum / _buffer.length;
-  }
-}
