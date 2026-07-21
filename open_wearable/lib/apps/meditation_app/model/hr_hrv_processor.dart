@@ -129,21 +129,6 @@ class SlidingWindowPeakDetector {
   late num minInterPeakDistance;
   final int timestampExponent;
 
-  // Adaptive prominence threshold: scales with the signal's own recent
-  // amplitude (running std-dev of the smoothed BPF output) instead of a
-  // fixed absolute value, since raw PPG amplitude varies a lot by user,
-  // sensor contact, and motion. Clamped so a near-flat signal doesn't
-  // trigger on noise (floor) and a single large motion artifact can't
-  // inflate the threshold enough to lock out real peaks for long (ceiling).
-  static const double _prominenceFactor = 0.5;
-  static const double _minProminenceFloor = 0.02;
-  static const double _maxProminenceCeiling = 5.0;
-  static const double _statsAlpha = 0.05;
-
-  double _runningMean = 0.0;
-  double _runningVariance = 0.0;
-  bool _statsInitialized = false;
-
   SlidingWindowPeakDetector({
     required int windowDurationSeconds,
     required int minInterPeakDistanceMs,
@@ -158,31 +143,9 @@ class SlidingWindowPeakDetector {
   final List<(int, double)> _history = [];
   final List<int> _peakTimestamps = [];
 
-  void _updateRunningStats(double value) {
-    if (!_statsInitialized) {
-      _runningMean = value;
-      _statsInitialized = true;
-      return;
-    }
-    // Tony Finch's incremental EMA mean/variance: numerically stable and
-    // O(1) per sample, unlike rescanning the 8s history buffer for min/max.
-    final diff = value - _runningMean;
-    final incr = _statsAlpha * diff;
-    _runningMean += incr;
-    _runningVariance = (1 - _statsAlpha) * (_runningVariance + diff * incr);
-  }
-
-  double get _minProminence {
-    final stdDev = sqrt(_runningVariance);
-    return (_prominenceFactor * stdDev)
-        .clamp(_minProminenceFloor, _maxProminenceCeiling);
-  }
-
   /// Processes a single filtered/smoothed sample.
   /// Returns a valid peak timestamp (in microseconds) if a peak was just found, otherwise null.
   int? processSample(int timestamp, double value) {
-    _updateRunningStats(value);
-
     // 1. Add current sample to our tracking history
     _history.add((timestamp, value));
 
@@ -200,11 +163,6 @@ class SlidingWindowPeakDetector {
 
     // 4. Check if the middle point represents a mathematical local maximum peak
     if (vCurr > vPrev && vCurr >= vNext) {
-      final prominence = min(vCurr - vPrev, vCurr - vNext);
-      if (prominence < _minProminence) {
-        return null; // Not a significant peak
-      }
-
       // 5. Enforce minimum inter-peak lockout distance constraint
       final lastPeak = _peakTimestamps.isNotEmpty ? _peakTimestamps.last : 0;
       if (tCurr - lastPeak >= minInterPeakDistance) {
