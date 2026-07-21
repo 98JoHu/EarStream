@@ -7,17 +7,22 @@ import 'dart:async';
 import 'user_account.dart';
 import 'measurement.dart';
 
+final String welcomeMessage =
+    "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
+final String completionMessage =
+    "Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.";
+final defaultSegmentMessage =
+    '''Take a deep breath in...  hold gently for a moment... and slowly release. Feel the tension melting away with each exhale. Your body is becoming more relaxed... your mind more peaceful. Continue breathing naturally... finding your center... allowing calmness to flow through you.''';
+
 class SessionProgress {
   final int currentSegment;
   final int totalSegments;
   final Duration segmentElapsed;
-  final Duration segmentTotal;
 
   const SessionProgress({
     required this.currentSegment,
     required this.totalSegments,
     required this.segmentElapsed,
-    required this.segmentTotal,
   });
 }
 
@@ -31,6 +36,8 @@ class Meditation {
       ValueNotifier<SessionProgress?>(null);
 
   bool isStopped = false;
+  bool isPaused = false;
+  Completer<void>? _resumeCompleter;
 
   Meditation({required this.userAccount, required this.measurement}) {
     initializeAudioPlayers();
@@ -55,16 +62,14 @@ class Meditation {
     List<MeditationSegment> segments
   }) _loadFallbackSession() {
     return (
-      welcomeMessage:
-          "Welcome. I'm here to guide you through a calming meditation. Let's begin together.",
-      completionMessage:
-          "Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.",
+      welcomeMessage: welcomeMessage,
+      completionMessage: completionMessage,
       segments: List.generate(
         10,
         (index) => MeditationSegment(
           segmentId: index + 1,
-          instruction: '...',
-          durationSeconds: 10,
+          instruction: defaultSegmentMessage,
+          durationSeconds: 30,
           targetBreathsPerMinute: 6,
         ),
       ),
@@ -105,7 +110,7 @@ class Meditation {
 
     // Speak the welcome message
     if (!isStopped) {
-      await voicePlayer.speak(welcomeMessage);
+      await _speakRespectingPause(welcomeMessage);
     }
 
     // Start the meditation segments
@@ -113,44 +118,86 @@ class Meditation {
     for (final segment in segments) {
       // if the meditation has been stopped, break out of the loop
       if (isStopped) break;
-      await voicePlayer.speak(segment.instruction);
+
       index++;
       final segmentStart = DateTime.now();
-      final segmentTotal = Duration(seconds: segment.durationSeconds);
+      var pausedDuration = Duration.zero;
+      var speaking = true;
 
-      while (DateTime.now().difference(segmentStart) < segmentTotal) {
-        final elapsed = DateTime.now().difference(segmentStart);
+      final speakFuture = _speakRespectingPause(segment.instruction);
+      speakFuture.whenComplete(() => speaking = false);
+
+      while (speaking) {
+        if (isPaused) {
+          final pauseStart = DateTime.now();
+          await _waitForResume();
+          pausedDuration += DateTime.now().difference(pauseStart);
+        }
+        if (isStopped) break;
+
+        final elapsed =
+            DateTime.now().difference(segmentStart) - pausedDuration;
 
         progress.value = SessionProgress(
           currentSegment: index,
           totalSegments: segments.length,
           segmentElapsed: elapsed,
-          segmentTotal: segmentTotal,
         );
 
         await Future.delayed(const Duration(seconds: 1));
       }
 
+      await speakFuture; // Ensure the segment instruction has finished speaking
+
+      if (isStopped) break;
       if (measurement.checkStressLevel() == StressLevel.relaxed) break;
     }
 
     // Speak the completion message
     if (!isStopped) {
-      await voicePlayer.speak(completionMessage);
+      await _speakRespectingPause(completionMessage);
     }
   }
 
   Future<void> stop() async {
     isStopped = true;
     progress.value = null;
+    _resumeCompleter?.complete();
+    _resumeCompleter = null;
 
     await musicPlayer.stop();
     await voicePlayer.stop();
   }
 
+  Future<void> _waitForResume() {
+    _resumeCompleter ??= Completer<void>();
+    return _resumeCompleter!.future;
+  }
+
+  // Speaks [text], but if pause() cuts it off mid-utterance, waits for
+  // resume() and re-speaks from the start once the user comes back.
+  Future<void> _speakRespectingPause(String text) async {
+    while (true) {
+      if (isPaused) await _waitForResume();
+      if (isStopped) return;
+
+      await voicePlayer.speak(text);
+      if (!isPaused) return;
+    }
+  }
+
   void pause() {
+    isPaused = true;
+    _resumeCompleter ??= Completer<void>();
     musicPlayer.pause();
-    voicePlayer.pause();
+    voicePlayer.stop(); // flutter_tts can't reliably resume mid-utterance
+  }
+
+  void resume() {
+    isPaused = false;
+    musicPlayer.resume();
+    _resumeCompleter?.complete();
+    _resumeCompleter = null;
   }
 
   void dispose() {
