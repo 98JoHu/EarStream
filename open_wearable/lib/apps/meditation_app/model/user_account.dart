@@ -166,4 +166,17 @@ class UserAccount {
     final rmssdThreshold = baselineRMSSD * (1 - threshold);
     return (heartRateThreshold, rmssdThreshold);
   }
+
+  String getContextSummary() {
+    return '''User Profile:
+- Name: ${firstName != null ? '$firstName' : 'the person you are guiding'}
+- Age: $age years old
+- Gender: $gender
+- Fitness Level: $fitnessLevel
+- Meditation Type: $meditationType
+- Meditation Environment: $meditationEnvironment
+- Additional Preferences: ${additionalPreferences ?? 'None'}
+- Resting Heart Rate: ${baselineBiometrics.$1.toStringAsFixed(0)} BPM
+- Baseline HRV (RMSSD): ${baselineBiometrics.$2.toStringAsFixed(0)} ms''';
+  }
 }
