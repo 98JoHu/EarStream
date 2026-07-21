@@ -162,3 +162,6 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 open_wearable/devtools_options.yaml
+
+# Ignore claude instructions file
+CLAUDE.md
