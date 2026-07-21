@@ -7,6 +7,8 @@ import 'activity_tracker.dart';
 import 'meditation.dart';
 import 'hr_hrv_processor.dart';
 
+enum EarstreamState { idle, running, stopped }
+
 enum StressLevel {
   relaxed(
     label: "Relaxed",
@@ -40,36 +42,38 @@ enum MonitoringPhase {
     icon: Icons.settings_outlined,
     duration: Duration(seconds: 30),
     color: Colors.orange,
+    nextPhase: MonitoringPhase.baseline,
   ),
   baseline(
     label: "Monitoring \u00b7 Baseline Adjustment",
     icon: Icons.straighten_outlined,
     duration: Duration(minutes: 5),
     color: Colors.blue,
+    nextPhase: MonitoringPhase.monitoring,
   ),
   monitoring(
     label: "Monitoring",
     icon: Icons.monitor_heart,
-    duration: Duration(),
     color: Color(0xFF4ECDC4),
   ),
   meditation(
     label: "Meditation",
     icon: Icons.self_improvement_outlined,
-    duration: Duration(),
     color: Colors.purple,
   );
 
   final String label;
   final IconData icon;
-  final Duration duration;
+  final Duration? duration;
   final Color color;
+  final MonitoringPhase? nextPhase;
 
   const MonitoringPhase({
     required this.label,
     required this.icon,
-    required this.duration,
+    this.duration,
     required this.color,
+    this.nextPhase,
   });
 }
 
@@ -108,8 +112,9 @@ class Measurement {
 
   late final Stream<PpgOpticalSample> _ppgStream;
   late final HrHrvProcessor _processor;
-  late final ActivityTracker activityTracker;
-  StreamSubscription<PpgOpticalSample>? metricSubscription;
+  late final ActivityTracker _activityTracker;
+  StreamSubscription<PpgOpticalSample>? _metricSubscription;
+  StreamSubscription<HeartRateSample>? _stressSubscription;
   Stream<int> get heartRate =>
       _processor.biometricStream.map((biometrics) => biometrics.heartRate);
   Stream<double?> get rmssd =>
@@ -120,9 +125,15 @@ class Measurement {
   ValueNotifier<MonitoringPhase> monitoringPhase =
       ValueNotifier(MonitoringPhase.calibration);
   ValueNotifier<ActivityLevel> get activityLevel =>
-      activityTracker.activityLevel;
-  Timer? _monitoringPhaseTimer;
+      _activityTracker.activityLevel;
   ValueNotifier<Meditation?> meditation = ValueNotifier(null);
+
+  // Fields for handling the phases
+  EarstreamState _state = EarstreamState.idle;
+  EarstreamState get state => _state;
+  final Stopwatch _stopwatch = Stopwatch();
+  Timer? _ticker;
+  ValueNotifier<double?> progress = ValueNotifier(null);
 
   Measurement({
     required this.ppgSensor,
@@ -198,7 +209,7 @@ class Measurement {
       sampleFreq: sampleFreq,
       timestampExponent: ppgSensor.timestampExponent,
     );
-    activityTracker = ActivityTracker(
+    _activityTracker = ActivityTracker(
       accelerometerStream: accelerometerStream,
       gyroscopeStream: gyroscopeStream,
       timestampExponentAccelerometer: accelerometerSensor.timestampExponent,
@@ -206,34 +217,102 @@ class Measurement {
     );
   }
 
-  Future<void> start() async {
+  void start() {
+    print("Starting EarStreAM measurement...");
+    // Reset the stopwatch to 0 and start it
+    _stopwatch
+      ..reset()
+      ..start();
+    // App is now running
+    _state = EarstreamState.running;
+    // Detect activity level
+    _activityTracker.start();
+
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      final duration = monitoringPhase.value.duration;
+      if (duration == null) {
+        progress.value = null;
+        return;
+      }
+      progress.value =
+          _stopwatch.elapsed.inMilliseconds / duration.inMilliseconds;
+
+      // Check if the current phase duration has elapsed
+      if (_stopwatch.elapsed >= duration) {
+        // Move to the next phase
+        monitoringPhase.value = monitoringPhase.value.nextPhase!;
+        // Reset the stopwatch for the next phase
+        _stopwatch
+          ..reset()
+          ..start();
+      }
+    });
+
     // Listen to the PPG stream and process incoming samples => HR and HRV
-    metricSubscription = _ppgStream.listen((data) {
+    _metricSubscription = _ppgStream.listen((data) {
       _processor.processPpgSample(data.timestamp, data.green, data.ambient);
     });
-    // Detect activity level
-    activityTracker.start();
-
-    // Start with calibration phase
-    _monitoringPhaseTimer?.cancel();
-    await Future.delayed(MonitoringPhase.calibration.duration);
-
-    // Execute baseline phase after calibration
-    monitoringPhase.value = MonitoringPhase.baseline;
-    final subscription = adjustBaseline();
-    await Future.delayed(MonitoringPhase.baseline.duration);
-    subscription.cancel();
-
-    // Stress detection
-    monitoringPhase.value = MonitoringPhase.monitoring;
-    monitorStress();
   }
 
   void stop() {
-    _monitoringPhaseTimer?.cancel();
-    activityTracker.stop();
-    metricSubscription?.cancel();
-    // TODO: add more cleanup
+    print("Stopping EarStreAM measurement...");
+    // Stop the stopwatch
+    _stopwatch.stop();
+    // App is now stopped
+    _state = EarstreamState.stopped;
+    // Stop detecting activity level
+    _activityTracker.stop();
+    // Stop listening to the PPG stream
+    _metricSubscription?.cancel();
+  }
+
+  void resume() {
+    print("Resuming EarStreAM measurement...");
+    // Resume the stopwatch
+    _stopwatch.start();
+    // App is now running
+    _state = EarstreamState.running;
+    // Resume detecting activity level
+    _activityTracker.start();
+    // Resume listening to the PPG stream
+    _metricSubscription = _ppgStream.listen((data) {
+      _processor.processPpgSample(data.timestamp, data.green, data.ambient);
+    });
+    // Resume with current phase
+    switch (monitoringPhase.value) {
+      case MonitoringPhase.calibration:
+        break;
+      case MonitoringPhase.baseline:
+        _stressSubscription?.cancel();
+        _stressSubscription = adjustBaseline();
+        break;
+      case MonitoringPhase.monitoring:
+        _stressSubscription?.cancel();
+        _stressSubscription = monitorStress();
+        break;
+      case MonitoringPhase.meditation:
+        // TODO: Resume meditation if it was ongoing
+        break;
+    }
+  }
+
+  void reset() {
+    print("Resetting EarStreAM measurement...");
+    // Reset the stopwatch
+    _stopwatch.reset();
+    // App is now idle
+    _state = EarstreamState.idle;
+    // Reset the monitoring phase to calibration
+    monitoringPhase.value = MonitoringPhase.calibration;
+    // Reset stress level to relaxed
+    stressLevel.value = StressLevel.relaxed;
+    // Stop detecting activity level
+    _activityTracker.stop();
+    // Stop listening to the PPG stream and heart rate/HRV processing
+    _metricSubscription?.cancel();
+    _stressSubscription?.cancel();
+    // TODO: reset filters / decide what to do with meditation
   }
 
   void dispose() {
@@ -248,7 +327,7 @@ class Measurement {
       final int elapsedSeconds =
           DateTime.now().difference(startTime).inMilliseconds;
       double timeRatio =
-          elapsedSeconds / MonitoringPhase.baseline.duration.inMilliseconds;
+          elapsedSeconds / MonitoringPhase.baseline.duration!.inMilliseconds;
       timeRatio = timeRatio.clamp(0.0, 1.0);
 
       final double studyWeight = timeRatio * 0.3;
@@ -270,9 +349,9 @@ class Measurement {
     return subscription;
   }
 
-  void monitorStress() {
+  StreamSubscription<HeartRateSample> monitorStress() {
     // Detect stress
-    _processor.biometricStream.listen((data) {
+    final subscription = _processor.biometricStream.listen((data) {
       // if user is stressed already then don't change the stress level
       if (stressLevel.value == StressLevel.stressed) {
         return;
@@ -291,6 +370,7 @@ class Measurement {
         meditation.value!.start();
       }
     });
+    return subscription;
   }
 
   void simulateStress() {
@@ -301,14 +381,10 @@ class Measurement {
     meditation.value!.start();
   }
 
-  void reset() {
-    stressLevel.value = StressLevel.relaxed;
-    monitoringPhase.value = MonitoringPhase.calibration;
-    meditation.value = null;
-    // TODO: Reset measurements
+  StressLevel checkStressLevel() {
+    // TODO: Implement a more sophisticated stress detection algorithm that takes into account heart rate, HRV, and activity level.
+    return stressLevel.value;
   }
-
-  void checkStressLevel() {}
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {
     if (data is SensorDoubleValue) {

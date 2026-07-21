@@ -14,7 +14,7 @@ class BioAdaptiveView extends StatefulWidget {
 }
 
 class _BioAdaptiveViewState extends State<BioAdaptiveView> {
-  bool hasStarted = false;
+  EarstreamState _earstreamState = EarstreamState.idle;
 
   @override
   Widget build(BuildContext context) {
@@ -23,18 +23,31 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasStarted) _buildBioAdaptiveContent(measurement),
-        SizedBox(height: hasStarted ? 24 : 0),
+        if (_earstreamState == EarstreamState.running)
+          _buildBioAdaptiveContent(measurement),
+        SizedBox(height: _earstreamState == EarstreamState.running ? 24 : 0),
         _MeditationTile(meditation: measurement.meditation),
         ElevatedButton.icon(
           onPressed: () => {
+            switch (measurement.state) {
+              EarstreamState.idle => measurement.start(),
+              EarstreamState.running => measurement.stop(),
+              EarstreamState.stopped => measurement.resume(),
+            },
             setState(() {
-              hasStarted = !hasStarted;
+              _earstreamState = measurement.state;
             }),
-            hasStarted ? measurement.start() : measurement.stop(),
           },
-          icon: Icon(hasStarted ? Icons.stop : Icons.play_arrow),
-          label: Text(hasStarted ? "Stop EarStreAM" : "Start EarStreAM"),
+          icon: Icon(
+            _earstreamState == EarstreamState.running
+                ? Icons.stop
+                : Icons.play_arrow,
+          ),
+          label: Text(
+            _earstreamState == EarstreamState.running
+                ? "Stop EarStreAM"
+                : "Start EarStreAM",
+          ),
         ),
         const SizedBox(height: 16),
         IntrinsicHeight(
@@ -44,7 +57,9 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => {
-                    hasStarted ? measurement.simulateStress() : null,
+                    _earstreamState == EarstreamState.running
+                        ? measurement.simulateStress()
+                        : null,
                   },
                   icon: const Icon(Icons.psychology),
                   label: const Text("Simulate Stress"),
@@ -54,7 +69,12 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => {
-                    hasStarted ? measurement.reset() : null,
+                    _earstreamState == EarstreamState.running
+                        ? measurement.reset()
+                        : null,
+                    setState(() {
+                      _earstreamState = measurement.state;
+                    }),
                   },
                   icon: const Icon(Icons.refresh),
                   label: const Text("Reset"),
@@ -101,7 +121,10 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               ],
             ),
             const SizedBox(height: 16),
-            _MonitoringPhaseTile(listenable: measurement.monitoringPhase),
+            _MonitoringPhaseTile(
+              monitoringPhase: measurement.monitoringPhase,
+              progress: measurement.progress,
+            ),
             const SizedBox(height: 16),
             _StressLevelTile(listenable: measurement.stressLevel),
             const SizedBox(height: 16),
@@ -398,15 +421,17 @@ class _StressLevelTile extends StatelessWidget {
 }
 
 class _MonitoringPhaseTile extends StatelessWidget {
-  final ValueNotifier<MonitoringPhase> listenable;
+  final ValueNotifier<MonitoringPhase> monitoringPhase;
+  final ValueNotifier<double?> progress;
   const _MonitoringPhaseTile({
-    required this.listenable,
+    required this.monitoringPhase,
+    required this.progress,
   });
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-      valueListenable: listenable,
+      valueListenable: monitoringPhase,
       builder: (_, value, child) {
         return Container(
           alignment: Alignment.center,
@@ -418,17 +443,35 @@ class _MonitoringPhaseTile extends StatelessWidget {
             color: value.color.withValues(alpha: 0.1),
             border: Border.all(color: value.color.withValues(alpha: 0.3)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+          child: Column(
             children: [
-              Icon(value.icon, color: value.color),
-              const SizedBox(width: 8),
-              Text(
-                value.label,
-                style: TextStyle(
-                  color: value.color,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(value.icon, color: value.color),
+                  const SizedBox(width: 8),
+                  Text(
+                    value.label,
+                    style: TextStyle(
+                      color: value.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              ValueListenableBuilder<double?>(
+                valueListenable: progress,
+                builder: (context, progressValue, child) {
+                  if (progressValue == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: LinearProgressIndicator(
+                      value: progressValue,
+                      color: value.color,
+                      backgroundColor: value.color.withValues(alpha: 0.1),
+                    ),
+                  );
+                },
               ),
             ],
           ),
