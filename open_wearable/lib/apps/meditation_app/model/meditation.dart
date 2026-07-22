@@ -26,9 +26,8 @@ class SessionProgress {
   });
 }
 
-class Meditation {
+abstract class Meditation {
   final UserAccount userAccount;
-  final Measurement measurement;
   final AudioPlayer musicPlayer = AudioPlayer();
   final FlutterTts voicePlayer = FlutterTts();
 
@@ -39,9 +38,11 @@ class Meditation {
   bool isPaused = false;
   Completer<void>? _resumeCompleter;
 
-  Meditation({required this.userAccount, required this.measurement}) {
+  Meditation({required this.userAccount}) {
     initializeAudioPlayers();
   }
+
+  bool checkEarlyExit();
 
   void initializeAudioPlayers() async {
     // Initialize the music player
@@ -150,7 +151,7 @@ class Meditation {
       await speakFuture; // Ensure the segment instruction has finished speaking
 
       if (isStopped) break;
-      if (measurement.checkStressLevel() == StressLevel.relaxed) break;
+      if (checkEarlyExit()) break;
     }
 
     // Speak the completion message
@@ -227,6 +228,28 @@ class MeditationSegment {
       targetBreathsPerMinute: json['targetBreathsPerMinute'] as int,
     );
   }
+}
+
+class BiometricMeditation extends Meditation {
+  final Measurement measurement;
+
+  BiometricMeditation({required super.userAccount, required this.measurement});
+
+  @override
+  bool checkEarlyExit() =>
+      measurement.checkStressLevel() == StressLevel.relaxed;
+}
+
+class ScheduledMeditation extends Meditation {
+  final DateTime scheduledTime;
+
+  ScheduledMeditation({
+    required super.userAccount,
+    required this.scheduledTime,
+  });
+
+  @override
+  bool checkEarlyExit() => false;
 }
 
 Future<Map<String, dynamic>> generateMeditationSession({
