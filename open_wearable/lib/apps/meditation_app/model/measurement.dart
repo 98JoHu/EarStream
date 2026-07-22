@@ -126,7 +126,7 @@ class Measurement {
       ValueNotifier(MonitoringPhase.calibration);
   ValueNotifier<ActivityLevel> get activityLevel =>
       _activityTracker.activityLevel;
-  ValueNotifier<Meditation?> meditation = ValueNotifier(null);
+  ValueNotifier<BiometricMeditation?> meditation = ValueNotifier(null);
 
   // Fields for handling the phases
   EarstreamState _state = EarstreamState.idle;
@@ -366,7 +366,7 @@ class Measurement {
         stressLevel.value = StressLevel.stressed;
         monitoringPhase.value = MonitoringPhase.meditation;
         meditation.value =
-            Meditation(userAccount: userAccount, measurement: this);
+            BiometricMeditation(userAccount: userAccount, measurement: this);
         meditation.value!.start();
       }
     });
@@ -377,7 +377,8 @@ class Measurement {
     stressLevel.value = StressLevel.stressed;
     monitoringPhase.value = MonitoringPhase.meditation;
     // TODO: tweek heart rate and heart rate variability to simulate stress
-    meditation.value = Meditation(userAccount: userAccount, measurement: this);
+    meditation.value =
+        BiometricMeditation(userAccount: userAccount, measurement: this);
     meditation.value!.start();
   }
 
