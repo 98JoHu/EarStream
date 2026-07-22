@@ -250,6 +250,15 @@ class ScheduledMeditation extends Meditation {
 
   @override
   bool checkEarlyExit() => false;
+
+  bool isDue() {
+    final now = DateTime.now();
+    return now.year == scheduledTime.year &&
+        now.month == scheduledTime.month &&
+        now.day == scheduledTime.day &&
+        now.hour == scheduledTime.hour &&
+        now.minute == scheduledTime.minute;
+  }
 }
 
 Future<Map<String, dynamic>> generateMeditationSession({
