@@ -31,6 +31,9 @@ class _TimerViewState extends State<TimerView> {
   @override
   void dispose() {
     _timer?.cancel();
+    if (_currentMeditation.value != null) {
+      _currentMeditation.value!.stop();
+    }
     super.dispose();
   }
 
