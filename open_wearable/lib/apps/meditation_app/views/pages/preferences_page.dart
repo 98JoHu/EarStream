@@ -24,80 +24,42 @@ class PreferencesPage extends StatefulWidget implements DrawerPage {
 class _PreferencesPageState extends State<PreferencesPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _additionalPreferencesController;
-  late String _voiceGender;
-  late String _speakingSpeed;
-  late String _meditationType;
+  late Gender _voiceGender;
+  late SpeakingSpeed _speakingSpeed;
+  late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
   late double _stressThreshold;
 
-  static const genderOptions = [
+  static final voiceGenderOptions = [
     DropdownMenuEntry(
-      value: 'female',
+      value: Gender.female,
       label: '${AppEmojis.female} Female',
     ),
     DropdownMenuEntry(
-      value: 'male',
+      value: Gender.male,
       label: '${AppEmojis.male} Male',
     ),
   ];
-  static const speakingSpeedOptions = [
-    DropdownMenuEntry(
-      value: 'very slow',
-      label: '${AppEmojis.snail} Very Slow',
-    ),
-    DropdownMenuEntry(
-      value: 'slow',
-      label: '${AppEmojis.turtle} Slow (Recommended)',
-    ),
-    DropdownMenuEntry(
-      value: 'medium',
-      label: '${AppEmojis.walkingPerson} Medium',
-    ),
-    DropdownMenuEntry(
-      value: 'fast',
-      label: '${AppEmojis.runningPerson} Fast',
-    ),
-  ];
-  static const meditationTypeOptions = [
-    DropdownMenuEntry(
-      value: 'mindfulness',
-      label: '${AppEmojis.meditatingPerson} Mindfulness',
-    ),
-    DropdownMenuEntry(
-      value: 'breathing',
-      label: '${AppEmojis.breathing} Breathing',
-    ),
-    DropdownMenuEntry(
-      value: 'body_scan',
-      label: '${AppEmojis.bodyScan} Body Scan',
-    ),
-    DropdownMenuEntry(
-      value: 'visualization_journey',
-      label: '${AppEmojis.visualizationJourney} Visualization Journey',
-    ),
-  ];
-  static const meditationEnvironmentOptions = [
-    DropdownMenuEntry(
-      value: MeditationEnvironment.nature,
-      label: '${AppEmojis.tree} Peaceful nature',
-    ),
-    DropdownMenuEntry(
-      value: MeditationEnvironment.ocean,
-      label: '${AppEmojis.wave} Ocean beach',
-    ),
-    DropdownMenuEntry(
-      value: MeditationEnvironment.mountain,
-      label: '${AppEmojis.mountain} Mountain',
-    ),
-    DropdownMenuEntry(
-      value: MeditationEnvironment.forest,
-      label: '${AppEmojis.forest} Forest',
-    ),
-    DropdownMenuEntry(
-      value: MeditationEnvironment.garden,
-      label: '${AppEmojis.cherryBlossom} Garden',
-    ),
-  ];
+  static final speakingSpeedOptions = SpeakingSpeed.values.map((option) {
+    return DropdownMenuEntry(
+      value: option,
+      label:
+          '${option.emoji} ${option.label} ${option.isRecommended ? "(Recommended)" : ""}',
+    );
+  }).toList();
+  static final meditationTypeOptions = MeditationType.values.map((type) {
+    return DropdownMenuEntry(
+      value: type,
+      label: '${type.emoji} ${type.label}',
+    );
+  }).toList();
+  static final meditationEnvironmentOptions =
+      MeditationEnvironment.values.map((env) {
+    return DropdownMenuEntry(
+      value: env,
+      label: '${env.emoji} ${env.label}',
+    );
+  }).toList();
   static const stressThresholdOptions = [
     DropdownMenuEntry(
       value: 0.05,
@@ -123,9 +85,10 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _additionalPreferencesController = TextEditingController(
       text: widget.userAccount.additionalPreferences ?? '',
     );
-    _voiceGender = widget.userAccount.voiceGender ?? 'female';
-    _speakingSpeed = widget.userAccount.speakingSpeed ?? 'slow';
-    _meditationType = widget.userAccount.meditationType ?? 'mindfulness';
+    _voiceGender = widget.userAccount.voiceGender ?? Gender.female;
+    _speakingSpeed = widget.userAccount.speakingSpeed ?? SpeakingSpeed.slow;
+    _meditationType =
+        widget.userAccount.meditationType ?? MeditationType.mindfulness;
     _meditationEnvironment = widget.userAccount.meditationEnvironment ??
         MeditationEnvironment.nature;
     _stressThreshold = widget.userAccount.stressThreshold ?? 0.10;
@@ -196,9 +159,9 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<String>(
+                  FormDropdown<Gender>(
                     initialSelection: _voiceGender,
-                    entries: genderOptions,
+                    entries: voiceGenderOptions,
                     onSelected: (value) =>
                         setState(() => _voiceGender = value!),
                   ),
@@ -208,7 +171,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<String>(
+                  FormDropdown<SpeakingSpeed>(
                     initialSelection: _speakingSpeed,
                     entries: speakingSpeedOptions,
                     onSelected: (value) =>
@@ -220,7 +183,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<String>(
+                  FormDropdown<MeditationType>(
                     initialSelection: _meditationType,
                     entries: meditationTypeOptions,
                     onSelected: (value) =>

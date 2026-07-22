@@ -1,32 +1,119 @@
-enum Gender { male, female, nonBinary, unspecified }
+import '../widgets/emojis.dart';
+
+enum Gender {
+  male(
+    label: "Male",
+    emoji: AppEmojis.male,
+  ),
+  female(
+    label: "Female",
+    emoji: AppEmojis.female,
+  ),
+  nonBinary(
+    label: "Non-Binary",
+  ),
+  unspecified(
+    label: "Unspecified",
+  );
+
+  final String label;
+  final String? emoji;
+
+  const Gender({
+    required this.label,
+    this.emoji,
+  });
+}
+
+enum SpeakingSpeed {
+  verySlow(
+    label: "Very Slow",
+    isRecommended: false,
+    emoji: AppEmojis.turtle,
+  ),
+  slow(
+    label: "Slow",
+    isRecommended: true,
+    emoji: AppEmojis.snail,
+  ),
+  medium(
+    label: "Medium",
+    isRecommended: false,
+    emoji: AppEmojis.walkingPerson,
+  ),
+  fast(
+    label: "Fast",
+    isRecommended: false,
+    emoji: AppEmojis.runningPerson,
+  );
+
+  final String label;
+  final String emoji;
+  final bool isRecommended;
+  const SpeakingSpeed({
+    required this.label,
+    required this.emoji,
+    required this.isRecommended,
+  });
+}
 
 enum FitnessLevel { sedentary, moderate, active, athlete }
 
 enum MeditationEnvironment {
   nature(
     label: "Peaceful Nature",
+    emoji: AppEmojis.tree,
     assetPath: "Peaceful_Nature.wav",
   ),
   ocean(
     label: "Ocean beach",
+    emoji: AppEmojis.wave,
     assetPath: "Ocean_Beach.wav",
   ),
   mountain(
     label: "Mountain",
+    emoji: AppEmojis.mountain,
     assetPath: "Mountain.wav",
   ),
   forest(
     label: "Forest",
+    emoji: AppEmojis.forest,
     assetPath: "Forest.wav",
   ),
   garden(
     label: "Garden",
+    emoji: AppEmojis.cherryBlossom,
     assetPath: "Garden.mp3",
   );
 
   final String label;
+  final String emoji;
   final String assetPath;
-  const MeditationEnvironment({required this.label, required this.assetPath});
+  const MeditationEnvironment(
+      {required this.label, required this.emoji, required this.assetPath});
+}
+
+enum MeditationType {
+  mindfulness(
+    label: "Mindfulness",
+    emoji: AppEmojis.meditatingPerson,
+  ),
+  breathing(
+    label: "Breathing",
+    emoji: AppEmojis.breathing,
+  ),
+  bodyScan(
+    label: "Body Scan",
+    emoji: AppEmojis.bodyScan,
+  ),
+  visualizationJourney(
+    label: "Visualization Journey",
+    emoji: AppEmojis.visualizationJourney,
+  );
+
+  final String label;
+  final String emoji;
+  const MeditationType({required this.label, required this.emoji});
 }
 
 class UserAccount {
@@ -39,9 +126,9 @@ class UserAccount {
   FitnessLevel? fitnessLevel;
 
   // Meditation preferences
-  String? voiceGender;
-  String? speakingSpeed;
-  String? meditationType;
+  Gender? voiceGender;
+  SpeakingSpeed? speakingSpeed;
+  MeditationType? meditationType;
   MeditationEnvironment? meditationEnvironment;
   String? additionalPreferences;
   double? stressThreshold;
