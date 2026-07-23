@@ -30,6 +30,7 @@ class Meditation {
   final UserAccount userAccount;
   final AudioPlayer musicPlayer = AudioPlayer();
   final FlutterTts voicePlayer = FlutterTts();
+  final int maxSegments;
 
   final ValueNotifier<SessionProgress?> progress =
       ValueNotifier<SessionProgress?>(null);
@@ -38,7 +39,7 @@ class Meditation {
   bool isPaused = false;
   Completer<void>? _resumeCompleter;
 
-  Meditation({required this.userAccount}) {
+  Meditation({required this.userAccount, this.maxSegments = 10}) {
     initializeAudioPlayers();
   }
 
@@ -67,7 +68,7 @@ class Meditation {
       welcomeMessage: welcomeMessage,
       completionMessage: completionMessage,
       segments: List.generate(
-        10,
+        maxSegments,
         (index) => MeditationSegment(
           segmentId: index + 1,
           instruction: defaultSegmentMessage,
@@ -159,6 +160,8 @@ class Meditation {
     if (!isStopped) {
       await _speakRespectingPause(completionMessage);
     }
+
+    // TODO: implement finishing logic: pop to rate this session, etc.
   }
 
   Future<void> stop() async {

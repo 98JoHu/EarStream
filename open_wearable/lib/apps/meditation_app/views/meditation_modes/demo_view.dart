@@ -136,6 +136,7 @@ class _DemoViewState extends State<DemoView> {
           final meditation = _personalizedMeditation ??
               Meditation(
                 userAccount: context.read<Measurement>().userAccount,
+                maxSegments: 3,
               )
             ..start();
           return MeditationTile(
