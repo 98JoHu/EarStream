@@ -23,8 +23,10 @@ class HrHrvProcessor {
 
   Stream<HeartRateSample> get biometricStream => _metricStreamController.stream;
 
-  HrHrvProcessor(
-      {required double sampleFreq, required this.timestampExponent}) {
+  HrHrvProcessor({
+    required double sampleFreq,
+    required this.timestampExponent,
+  }) {
     _bandPassFilter = BandPassFilter(
       sampleFreq: sampleFreq,
       lowCut: 0.5,

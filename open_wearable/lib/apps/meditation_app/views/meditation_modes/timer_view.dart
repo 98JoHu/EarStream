@@ -88,7 +88,9 @@ class _TimerViewState extends State<TimerView> {
                         const Text(
                           'Timed Meditation',
                           style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w700),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -123,22 +125,28 @@ class _TimerViewState extends State<TimerView> {
                           children: [
                             OutlinedButton(
                               onPressed: () => {
-                                _scheduleMeditation(userAccount,
-                                    DateTime.now().add(Duration(minutes: 5)))
+                                _scheduleMeditation(
+                                  userAccount,
+                                  DateTime.now().add(Duration(minutes: 5)),
+                                ),
                               },
                               child: const Text('After 5 min'),
                             ),
                             OutlinedButton(
                               onPressed: () => {
-                                _scheduleMeditation(userAccount,
-                                    DateTime.now().add(Duration(minutes: 10)))
+                                _scheduleMeditation(
+                                  userAccount,
+                                  DateTime.now().add(Duration(minutes: 10)),
+                                ),
                               },
                               child: const Text('After 10 min'),
                             ),
                             OutlinedButton(
                               onPressed: () => {
-                                _scheduleMeditation(userAccount,
-                                    DateTime.now().add(Duration(minutes: 30)))
+                                _scheduleMeditation(
+                                  userAccount,
+                                  DateTime.now().add(Duration(minutes: 30)),
+                                ),
                               },
                               child: const Text('After 30 min'),
                             ),
@@ -163,7 +171,9 @@ class _TimerViewState extends State<TimerView> {
                                         .add(Duration(days: 1));
                                   }
                                   _scheduleMeditation(
-                                      userAccount, scheduledDateTime);
+                                    userAccount,
+                                    scheduledDateTime,
+                                  );
                                 }
                               },
                               icon: const Icon(Icons.schedule),
@@ -187,7 +197,9 @@ class _TimerViewState extends State<TimerView> {
                           const Text(
                             'Scheduled Meditations',
                             style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w700),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           ListView.builder(

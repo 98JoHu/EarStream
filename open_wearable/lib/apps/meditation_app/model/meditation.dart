@@ -362,7 +362,8 @@ Future<Map<String, dynamic>> generateMeditationSession({
       return jsonDecode(jsonContent) as Map<String, dynamic>;
     } else {
       throw Exception(
-          'Failed to generate meditation session: ${response.statusCode}');
+        'Failed to generate meditation session: ${response.statusCode}',
+      );
     }
   } catch (e) {
     print("Error generating meditation session: $e");

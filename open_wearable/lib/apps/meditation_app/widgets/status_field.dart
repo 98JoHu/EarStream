@@ -169,7 +169,8 @@ class OutlookConnectionManager extends ConnectionManager {
 
     if (response.statusCode != 200) {
       throw Exception(
-          'Outlook API rejected token (Code: ${response.statusCode})');
+        'Outlook API rejected token (Code: ${response.statusCode})',
+      );
     }
 
     // Pass the decoded JSON body forward to the next step
@@ -209,7 +210,8 @@ class DeepseekManager extends ConnectionManager {
     if (response.statusCode != 200) {
       userAccount.hasValidDeepseekKey = false; // Mark the key as invalid
       throw Exception(
-          'Deepseek API rejected key (Code: ${response.statusCode})');
+        'Deepseek API rejected key (Code: ${response.statusCode})',
+      );
     }
 
     return json.decode(response.body);
@@ -242,7 +244,8 @@ class ElevenLabsManager extends ConnectionManager {
     if (response.statusCode != 200) {
       userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
       throw Exception(
-          'ElevenLabs API rejected key (Code: ${response.statusCode})');
+        'ElevenLabs API rejected key (Code: ${response.statusCode})',
+      );
     }
 
     return json.decode(response.body);
@@ -279,7 +282,8 @@ class DashscopeManager extends ConnectionManager {
     if (response.statusCode != 200) {
       userAccount.hasValidDashscopeKey = false; // Mark the key as invalid
       throw Exception(
-          'Dashscope API rejected key (Code: ${response.statusCode})');
+        'Dashscope API rejected key (Code: ${response.statusCode})',
+      );
     }
 
     return json.decode(response.body);

@@ -249,6 +249,7 @@ class Measurement {
     });
 
     // Listen to the PPG stream and process incoming samples => HR and HRV
+    _metricSubscription?.cancel();
     _metricSubscription = _ppgStream.listen((data) {
       _processor.processPpgSample(data.timestamp, data.green, data.ambient);
     });
@@ -263,6 +264,7 @@ class Measurement {
     _activityTracker.stop();
     // Stop listening to the PPG stream
     _metricSubscription?.cancel();
+    _stressSubscription?.cancel();
   }
 
   void resume() {
@@ -273,6 +275,7 @@ class Measurement {
     // Resume detecting activity level
     _activityTracker.start();
     // Resume listening to the PPG stream
+    _metricSubscription?.cancel();
     _metricSubscription = _ppgStream.listen((data) {
       _processor.processPpgSample(data.timestamp, data.green, data.ambient);
     });

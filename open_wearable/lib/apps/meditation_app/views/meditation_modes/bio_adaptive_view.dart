@@ -24,7 +24,12 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_earstreamState == EarstreamState.running)
-          _buildBioAdaptiveContent(measurement),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: BioAdaptiveContent(measurement: measurement),
+            ),
+          ),
         SizedBox(height: _earstreamState == EarstreamState.running ? 24 : 0),
         MeditationTile(meditation: measurement.meditation),
         ElevatedButton.icon(
@@ -86,65 +91,70 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
       ],
     );
   }
+}
 
-  Widget _buildBioAdaptiveContent(Measurement measurement) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+class BioAdaptiveContent extends StatelessWidget {
+  const BioAdaptiveContent({
+    super.key,
+    required this.measurement,
+  });
+
+  final Measurement measurement;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _MeasurementTile(
-                    label: "Heart Rate",
-                    unit: "BPM",
-                    icon: Icons.favorite,
-                    iconColor: Colors.redAccent,
-                    backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                    listenable: measurement.heartRate,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _MeasurementTile(
-                    label: "RMSSD",
-                    unit: "ms",
-                    icon: Icons.air,
-                    iconColor: Colors.blueAccent,
-                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
-                    listenable: measurement.rmssd
-                        .where((value) => value != null)
-                        .map((value) => value!.toStringAsFixed(1)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _MonitoringPhaseTile(
-              monitoringPhase: measurement.monitoringPhase,
-              progress: measurement.progress,
-            ),
-            const SizedBox(height: 16),
-            _StressLevelTile(listenable: measurement.stressLevel),
-            const SizedBox(height: 16),
-            _ActivityLevelTile(listenable: measurement.activityLevel),
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A), // Slate background
-                borderRadius: BorderRadius.circular(16),
+            Expanded(
+              child: _MeasurementTile(
+                label: "Heart Rate",
+                unit: "BPM",
+                icon: Icons.favorite,
+                iconColor: Colors.redAccent,
+                backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
+                listenable: measurement.heartRate,
               ),
-              child: HeartRateChart(
-                heartRateStream:
-                    measurement.heartRate, // Pass the heart rate stream here
-                visibleWindow:
-                    const Duration(seconds: 30), // Show 30s rolling chart
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _MeasurementTile(
+                label: "RMSSD",
+                unit: "ms",
+                icon: Icons.air,
+                iconColor: Colors.blueAccent,
+                backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
+                listenable: measurement.rmssd
+                    .where((value) => value != null)
+                    .map((value) => value!.toStringAsFixed(1)),
               ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 16),
+        _MonitoringPhaseTile(
+          monitoringPhase: measurement.monitoringPhase,
+          progress: measurement.progress,
+        ),
+        const SizedBox(height: 16),
+        _StressLevelTile(listenable: measurement.stressLevel),
+        const SizedBox(height: 16),
+        _ActivityLevelTile(listenable: measurement.activityLevel),
+        const SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A), // Slate background
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: HeartRateChart(
+            heartRateStream:
+                measurement.heartRate, // Pass the heart rate stream here
+            visibleWindow:
+                const Duration(seconds: 30), // Show 30s rolling chart
+          ),
+        ),
+      ],
     );
   }
 }
@@ -208,7 +218,7 @@ class _MeasurementTile extends StatelessWidget {
                     },
                   ),
                 ),
-              )
+              ),
           ],
         ),
       ],
@@ -436,7 +446,11 @@ class _HeartRateChartState extends State<HeartRateChart> {
       aspectRatio: 1.8,
       child: Padding(
         padding: const EdgeInsets.only(
-            right: 18.0, left: 12.0, top: 24.0, bottom: 12.0),
+          right: 18.0,
+          left: 12.0,
+          top: 24.0,
+          bottom: 12.0,
+        ),
         child: LineChart(
           LineChartData(
             // Axis boundaries: keeps the chart sliding smoothly to the right
@@ -468,7 +482,9 @@ class _HeartRateChartState extends State<HeartRateChart> {
                       child: Text(
                         "${value.toInt()}s",
                         style: const TextStyle(
-                            color: Colors.white38, fontSize: 10),
+                          color: Colors.white38,
+                          fontSize: 10,
+                        ),
                       ),
                     );
                   },
@@ -484,7 +500,9 @@ class _HeartRateChartState extends State<HeartRateChart> {
                       child: Text(
                         "${value.toInt()}",
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
                       ),
                     );
                   },
@@ -501,7 +519,8 @@ class _HeartRateChartState extends State<HeartRateChart> {
                 barWidth: 3,
                 isStrokeCapRound: true,
                 dotData: const FlDotData(
-                    show: false), // Hide dots for continuous line look
+                  show: false,
+                ), // Hide dots for continuous line look
 
                 // Subtle gradient fill under the line
                 belowBarData: BarAreaData(

@@ -89,6 +89,8 @@ class ActivityTracker {
   });
 
   void start() {
+    _accelerometerSubscription?.cancel();
+    _gyroscopeSubscription?.cancel();
     _accelerometerSubscription =
         accelerometerStream.listen(_processAccelerometerData);
     _gyroscopeSubscription = gyroscopeStream.listen(_processGyroscopeData);

@@ -4,6 +4,7 @@ import '../../model/measurement.dart';
 import '../../model/meditation.dart';
 import '../../widgets/custom_dropdown.dart';
 import '../../widgets/meditation_tile.dart';
+import 'bio_adaptive_view.dart' show BioAdaptiveContent;
 import 'package:provider/provider.dart';
 
 enum Step {
@@ -87,7 +88,6 @@ class _DemoViewState extends State<DemoView> {
   }
 
   void _finish() {
-    print("Meditation completed. Returning to demo selection.");
     setState(() {
       _selectedMode = null;
       _currentStepIndex = 0;
@@ -131,7 +131,12 @@ class _DemoViewState extends State<DemoView> {
       case Step.meditation:
         // Depending on the selected mode, start the meditation session with or without biosignal adaptation.
         if (_selectedMode == DemoMode.biosignalAdaptive) {
-          return const Text("Biosignal-Adaptive Meditation Session");
+          final Measurement measurement = context.read<Measurement>();
+          measurement.start();
+          return BioAdaptiveController(
+            measurement: measurement,
+            onMeasurementStop: _finish,
+          );
         } else {
           final meditation = _personalizedMeditation ??
               Meditation(
@@ -145,6 +150,40 @@ class _DemoViewState extends State<DemoView> {
           );
         }
     }
+  }
+}
+
+class BioAdaptiveController extends StatelessWidget {
+  final Measurement measurement;
+  final VoidCallback? onMeasurementStop;
+
+  const BioAdaptiveController(
+      {super.key, required this.measurement, this.onMeasurementStop});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        BioAdaptiveContent(measurement: measurement),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                measurement.stop();
+                onMeasurementStop?.call();
+              },
+              child: const Text('Stop Measuring'),
+            ),
+            OutlinedButton(
+              onPressed: measurement.reset,
+              child: const Text('Reset'),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
@@ -324,8 +363,10 @@ class _SettingsViewState extends State<SettingsView> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text('Voice Gender',
-              style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Voice Gender',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           VoiceGenderDropdown(
             initialSelection: Gender.female,
@@ -334,8 +375,10 @@ class _SettingsViewState extends State<SettingsView> {
             },
           ),
           const SizedBox(height: 24),
-          const Text('Speaking Speed',
-              style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Speaking Speed',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           SpeakingSpeedDropdown(
             initialSelection: SpeakingSpeed.slow,
@@ -344,8 +387,10 @@ class _SettingsViewState extends State<SettingsView> {
             },
           ),
           const SizedBox(height: 24),
-          const Text('Meditation Type',
-              style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Meditation Type',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           MeditationTypeDropdown(
             initialSelection: MeditationType.mindfulness,
@@ -354,8 +399,10 @@ class _SettingsViewState extends State<SettingsView> {
             },
           ),
           const SizedBox(height: 24),
-          const Text('Meditation Environment',
-              style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text(
+            'Meditation Environment',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           MeditationEnvironmentDropdown(
             initialSelection: MeditationEnvironment.nature,
@@ -430,8 +477,11 @@ class _SealCheckViewState extends State<SealCheckView> {
         const SizedBox(height: 24),
         Row(
           children: [
-            Icon(Icons.hearing_outlined,
-                color: Theme.of(context).colorScheme.primary, size: 24),
+            Icon(
+              Icons.hearing_outlined,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
             const SizedBox(width: 10),
             const Expanded(
               child: Text(

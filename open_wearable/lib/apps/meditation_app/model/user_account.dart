@@ -89,8 +89,11 @@ enum MeditationEnvironment {
   final String label;
   final String emoji;
   final String assetPath;
-  const MeditationEnvironment(
-      {required this.label, required this.emoji, required this.assetPath});
+  const MeditationEnvironment({
+    required this.label,
+    required this.emoji,
+    required this.assetPath,
+  });
 }
 
 enum MeditationType {

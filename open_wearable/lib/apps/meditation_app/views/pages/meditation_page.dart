@@ -12,7 +12,10 @@ import '../../model/user_account.dart';
 
 enum MeditationMode {
   bioAdaptive(
-      label: "Bio-SignalAdaptive", icon: Icons.bolt, view: BioAdaptiveView()),
+    label: "Bio-SignalAdaptive",
+    icon: Icons.bolt,
+    view: BioAdaptiveView(),
+  ),
   timer(label: "Timed", icon: Icons.alarm, view: TimerView()),
   demo(label: "Demo", icon: Icons.play_circle_outline, view: DemoView());
 
