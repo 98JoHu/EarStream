@@ -26,7 +26,7 @@ class SessionProgress {
   });
 }
 
-abstract class Meditation {
+class Meditation {
   final UserAccount userAccount;
   final AudioPlayer musicPlayer = AudioPlayer();
   final FlutterTts voicePlayer = FlutterTts();
@@ -42,7 +42,8 @@ abstract class Meditation {
     initializeAudioPlayers();
   }
 
-  bool checkEarlyExit();
+  // This method can be overridden in subclasses to implement early exit conditions.
+  bool checkEarlyExit() => false;
 
   void initializeAudioPlayers() async {
     // Initialize the music player
@@ -247,9 +248,6 @@ class ScheduledMeditation extends Meditation {
     required super.userAccount,
     required this.scheduledTime,
   });
-
-  @override
-  bool checkEarlyExit() => false;
 
   bool isDue() {
     final now = DateTime.now();

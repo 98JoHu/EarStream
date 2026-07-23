@@ -218,7 +218,6 @@ class Measurement {
   }
 
   void start() {
-    print("Starting EarStreAM measurement...");
     // Reset the stopwatch to 0 and start it
     _stopwatch
       ..reset()
@@ -256,7 +255,6 @@ class Measurement {
   }
 
   void stop() {
-    print("Stopping EarStreAM measurement...");
     // Stop the stopwatch
     _stopwatch.stop();
     // App is now stopped
@@ -268,7 +266,6 @@ class Measurement {
   }
 
   void resume() {
-    print("Resuming EarStreAM measurement...");
     // Resume the stopwatch
     _stopwatch.start();
     // App is now running
@@ -298,7 +295,6 @@ class Measurement {
   }
 
   void reset() {
-    print("Resetting EarStreAM measurement...");
     // Reset the stopwatch
     _stopwatch.reset();
     // App is now idle

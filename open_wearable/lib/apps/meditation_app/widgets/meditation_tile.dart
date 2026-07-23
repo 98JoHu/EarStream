@@ -3,9 +3,12 @@ import '../model/meditation.dart';
 
 class MeditationTile extends StatelessWidget {
   final ValueNotifier<Meditation?> meditation;
+  final VoidCallback? onMeditationComplete;
+
   const MeditationTile({
     super.key,
     required this.meditation,
+    this.onMeditationComplete,
   });
 
   @override
@@ -108,6 +111,8 @@ class MeditationTile extends StatelessWidget {
                       onPressed: () => {
                         meditation.value!.stop(),
                         meditation.value = null,
+                        // Call the callback to notify that the meditation has completed
+                        onMeditationComplete?.call(),
                       },
                       icon: const Icon(Icons.stop),
                       label: const Text("Stop"),
