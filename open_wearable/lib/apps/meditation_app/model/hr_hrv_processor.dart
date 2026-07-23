@@ -13,6 +13,8 @@ class HrHrvProcessor {
   static const Duration _hrvWindowDuration = Duration(minutes: 5);
   static const Duration _warmupDuration = Duration(seconds: 10);
   DateTime? _firstSampleTime;
+  DateTime? _lastEmitTime;
+  static const Duration _emitInterval = Duration(seconds: 3);
 
   // timestamp exponent for converting timestamps to milliseconds
   final int timestampExponent;
@@ -112,13 +114,16 @@ class HrHrvProcessor {
         }
       }
     }
-
     HeartRateSample sample = HeartRateSample(
       heartRate: smoothedHeartRate.round(),
       rmssd: hrvScore,
     );
 
-    _metricStreamController.add(sample);
+    if (_lastEmitTime == null ||
+        now.difference(_lastEmitTime!) >= _emitInterval) {
+      _lastEmitTime = now;
+      _metricStreamController.add(sample);
+    }
   }
 
   void dispose() {
