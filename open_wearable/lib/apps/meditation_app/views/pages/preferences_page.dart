@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'drawer_page.dart';
 import '../../model/user_account.dart';
-import '../../widgets/emojis.dart';
 import '../../widgets/custom_dropdown.dart';
 
 class PreferencesPage extends StatefulWidget implements DrawerPage {
@@ -29,55 +28,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
   late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
   late double _stressThreshold;
-
-  static final voiceGenderOptions = [
-    DropdownMenuEntry(
-      value: Gender.female,
-      label: '${AppEmojis.female} Female',
-    ),
-    DropdownMenuEntry(
-      value: Gender.male,
-      label: '${AppEmojis.male} Male',
-    ),
-  ];
-  static final speakingSpeedOptions = SpeakingSpeed.values.map((option) {
-    return DropdownMenuEntry(
-      value: option,
-      label:
-          '${option.emoji} ${option.label} ${option.isRecommended ? "(Recommended)" : ""}',
-    );
-  }).toList();
-  static final meditationTypeOptions = MeditationType.values.map((type) {
-    return DropdownMenuEntry(
-      value: type,
-      label: '${type.emoji} ${type.label}',
-    );
-  }).toList();
-  static final meditationEnvironmentOptions =
-      MeditationEnvironment.values.map((env) {
-    return DropdownMenuEntry(
-      value: env,
-      label: '${env.emoji} ${env.label}',
-    );
-  }).toList();
-  static const stressThresholdOptions = [
-    DropdownMenuEntry(
-      value: 0.05,
-      label: '${AppEmojis.chart} 5% - Very Sensitive',
-    ),
-    DropdownMenuEntry(
-      value: 0.10,
-      label: '${AppEmojis.chart} 10% - Recommended',
-    ),
-    DropdownMenuEntry(
-      value: 0.15,
-      label: '${AppEmojis.chart} 15% - Moderate',
-    ),
-    DropdownMenuEntry(
-      value: 0.20,
-      label: '${AppEmojis.chart} 20% - Less Sensitive',
-    ),
-  ];
 
   @override
   void initState() {
@@ -159,9 +109,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<Gender>(
+                  VoiceGenderDropdown(
                     initialSelection: _voiceGender,
-                    entries: voiceGenderOptions,
                     onSelected: (value) =>
                         setState(() => _voiceGender = value!),
                   ),
@@ -171,9 +120,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<SpeakingSpeed>(
+                  SpeakingSpeedDropdown(
                     initialSelection: _speakingSpeed,
-                    entries: speakingSpeedOptions,
                     onSelected: (value) =>
                         setState(() => _speakingSpeed = value!),
                   ),
@@ -183,9 +131,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<MeditationType>(
+                  MeditationTypeDropdown(
                     initialSelection: _meditationType,
-                    entries: meditationTypeOptions,
                     onSelected: (value) =>
                         setState(() => _meditationType = value!),
                   ),
@@ -195,9 +142,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  FormDropdown<MeditationEnvironment>(
+                  MeditationEnvironmentDropdown(
                     initialSelection: _meditationEnvironment,
-                    entries: meditationEnvironmentOptions,
                     onSelected: (value) =>
                         setState(() => _meditationEnvironment = value!),
                   ),
@@ -232,9 +178,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                   const SizedBox(height: 12),
-                  FormDropdown<double>(
+                  StressThresholdDropdown(
                     initialSelection: _stressThreshold,
-                    entries: stressThresholdOptions,
                     onSelected: (value) =>
                         setState(() => _stressThreshold = value!),
                   ),

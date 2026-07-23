@@ -29,12 +29,12 @@ enum SpeakingSpeed {
   verySlow(
     label: "Very Slow",
     isRecommended: false,
-    emoji: AppEmojis.turtle,
+    emoji: AppEmojis.snail,
   ),
   slow(
     label: "Slow",
     isRecommended: true,
-    emoji: AppEmojis.snail,
+    emoji: AppEmojis.turtle,
   ),
   medium(
     label: "Medium",
