@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:open_earable_flutter/open_earable_flutter.dart';
 import '../../model/user_account.dart';
 import '../../model/measurement.dart';
 import '../../model/meditation.dart';
 import '../../widgets/custom_dropdown.dart';
 import '../../widgets/meditation_tile.dart';
+import '../../widgets/seal_check.dart';
 import 'bio_adaptive_view.dart' show BioAdaptiveContent;
 import 'package:provider/provider.dart';
 
@@ -440,6 +442,8 @@ class _SealCheckViewState extends State<SealCheckView> {
 
   @override
   Widget build(BuildContext context) {
+    final Wearable? wearable = context.read<Wearable?>();
+
     return Column(
       children: [
         Row(
@@ -500,14 +504,14 @@ class _SealCheckViewState extends State<SealCheckView> {
               ),
         ),
         const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            // TODO: Implement seal check functionality
-            onPressed: () {},
-            icon: const Icon(Icons.play_arrow),
-            label: Text('Run Seal Check'),
-          ),
+        SealCheck(
+          wearable: wearable,
+          onSealCheckCompleted: () {
+            setState(() {
+              _isCheckCompleted = true;
+            });
+          },
+          showResponsePoints: false,
         ),
         const SizedBox(height: 24),
         DemoNavBar(
