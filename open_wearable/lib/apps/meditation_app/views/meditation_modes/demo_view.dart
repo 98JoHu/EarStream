@@ -6,6 +6,7 @@ import '../../model/meditation.dart';
 import '../../widgets/custom_dropdown.dart';
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/seal_check.dart';
+import '../../widgets/api_warning.dart';
 import 'bio_adaptive_view.dart' show BioAdaptiveContent;
 import 'package:provider/provider.dart';
 
@@ -118,14 +119,14 @@ class _DemoViewState extends State<DemoView> {
     switch (_currentStep) {
       case Step.settings:
         return SettingsView(
-          userAccount: context.read<Measurement>().userAccount,
+          userAccount: context.read<UserAccount>(),
           onBack: _back,
           onContinue: _continue,
           onSkip: _skip,
         );
       case Step.sealCheck:
         return SealCheckView(
-          userAccount: context.read<Measurement>().userAccount,
+          userAccount: context.read<UserAccount>(),
           onBack: _back,
           onContinue: _continue,
           onSkip: _skip,
@@ -146,9 +147,17 @@ class _DemoViewState extends State<DemoView> {
                 maxSegments: 3,
               )
             ..start();
-          return MeditationTile(
-            meditation: ValueNotifier<Meditation?>(meditation),
-            onMeditationComplete: _finish,
+          return Column(
+            children: [
+              MeditationTile(
+                meditation: ValueNotifier<Meditation?>(meditation),
+                onMeditationComplete: _finish,
+              ),
+              if (!context.read<UserAccount>().hasValidDeepseekKey) ...[
+                const SizedBox(height: 16),
+                APIWarning(serviceName: "Deepseek"),
+              ],
+            ],
           );
         }
     }
@@ -164,10 +173,16 @@ class BioAdaptiveController extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final userAccount = context.read<UserAccount>();
+
     return Column(
       children: [
         BioAdaptiveContent(measurement: measurement),
         const SizedBox(height: 16),
+        if (!userAccount.hasValidDeepseekKey) ...[
+          APIWarning(serviceName: "Deepseek"),
+          const SizedBox(height: 16),
+        ],
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [

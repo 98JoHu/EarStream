@@ -3,8 +3,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
+import '../../model/user_account.dart';
 import '../../model/activity_tracker.dart' show ActivityLevel;
 import '../../widgets/meditation_tile.dart';
+import '../../widgets/api_warning.dart';
 
 class BioAdaptiveView extends StatefulWidget {
   const BioAdaptiveView({super.key});
@@ -19,6 +21,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
   @override
   Widget build(BuildContext context) {
     final measurement = context.read<Measurement>();
+    final UserAccount userAccount = context.read<UserAccount>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -30,7 +33,12 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               child: BioAdaptiveContent(measurement: measurement),
             ),
           ),
-        SizedBox(height: _earstreamState == EarstreamState.running ? 24 : 0),
+        if (_earstreamState == EarstreamState.running &&
+            !userAccount.hasValidDeepseekKey) ...[
+          SizedBox(height: 16),
+          APIWarning(serviceName: "Deepseek"),
+          SizedBox(height: 16),
+        ],
         MeditationTile(meditation: measurement.meditation),
         ElevatedButton.icon(
           onPressed: () => {

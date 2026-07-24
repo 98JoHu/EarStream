@@ -220,7 +220,6 @@ class DeepseekManager extends ConnectionManager {
   @override
   Future<void> updateUser(dynamic result) async {
     // Flag current API key as valid
-    print('Deepseek Synced. Account Info: $result');
     userAccount.hasValidDeepseekKey = true;
   }
 }

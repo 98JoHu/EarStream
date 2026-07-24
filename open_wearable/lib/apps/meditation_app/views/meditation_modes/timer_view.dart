@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../model/measurement.dart';
 import '../../model/meditation.dart' show ScheduledMeditation;
 import '../../widgets/meditation_tile.dart';
+import '../../widgets/api_warning.dart';
 
 class TimerView extends StatefulWidget {
   const TimerView({super.key});
@@ -67,14 +67,21 @@ class _TimerViewState extends State<TimerView> {
   @override
   Widget build(BuildContext context) {
     // TODO: access user account a different way
-    final measurement = context.read<Measurement>();
-    final userAccount = measurement.userAccount;
+    final userAccount = context.read<UserAccount>();
 
     return ValueListenableBuilder<ScheduledMeditation?>(
       valueListenable: _currentMeditation,
       builder: (context, currentMeditation, child) {
         if (currentMeditation != null) {
-          return MeditationTile(meditation: _currentMeditation);
+          return Column(
+            children: [
+              if (!userAccount.hasValidDeepseekKey) ...[
+                APIWarning(serviceName: "Deepseek"),
+                const SizedBox(height: 16),
+              ],
+              MeditationTile(meditation: _currentMeditation),
+            ],
+          );
         } else {
           return SingleChildScrollView(
             child: Column(
