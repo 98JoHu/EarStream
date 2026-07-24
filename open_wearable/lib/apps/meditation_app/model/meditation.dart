@@ -54,8 +54,8 @@ class Meditation {
     // Initialize the voice player
     await voicePlayer.awaitSpeakCompletion(true);
     await voicePlayer.setLanguage("en-US");
-    await voicePlayer.setSpeechRate(0.4);
-    await voicePlayer.setVolume(1.0);
+    await voicePlayer.setSpeechRate(0.3);
+    await voicePlayer.setVolume(0.8);
   }
 
   // Generate default instructions for fallback meditation
@@ -99,8 +99,8 @@ class Meditation {
 
     if (userAccount.hasValidDeepseekKey) {
       try {
-        final sessionData =
-            await generateMeditationSession(userAccount: userAccount);
+        final sessionData = await generateMeditationSession(
+            userAccount: userAccount, maxSegments: maxSegments);
         welcomeMessage = sessionData['welcomeMessage'] as String;
         completionMessage = sessionData['completionMessage'] as String;
         segments = (sessionData['segments'] as List)
@@ -108,6 +108,7 @@ class Meditation {
             .toList();
       } catch (e) {
         print("Error generating meditation session: $e");
+        return;
       }
     }
 
@@ -124,13 +125,14 @@ class Meditation {
 
       index++;
       final segmentStart = DateTime.now();
+      final segmentDuration = Duration(seconds: segment.durationSeconds);
       var pausedDuration = Duration.zero;
       var speaking = true;
 
       final speakFuture = _speakRespectingPause(segment.instruction);
       speakFuture.whenComplete(() => speaking = false);
 
-      while (speaking) {
+      while (true) {
         if (isPaused) {
           final pauseStart = DateTime.now();
           await _waitForResume();
@@ -140,6 +142,8 @@ class Meditation {
 
         final elapsed =
             DateTime.now().difference(segmentStart) - pausedDuration;
+
+        if (!speaking && elapsed >= segmentDuration) break;
 
         progress.value = SessionProgress(
           currentSegment: index,
@@ -161,7 +165,7 @@ class Meditation {
       await _speakRespectingPause(completionMessage);
     }
 
-    // TODO: implement finishing logic: pop to rate this session, etc.
+    // TODO: implement finishing logic: popup to rate this session, etc.
   }
 
   Future<void> stop() async {
@@ -348,18 +352,17 @@ Future<Map<String, dynamic>> generateMeditationSession({
           {'role': 'system', 'content': systemPrompt},
           {'role': 'user', 'content': userPrompt},
         ],
-        'max_tokens': 1000,
+        'max_tokens': 10000,
         'temperature': 0.7,
       }),
     );
-    print(systemPrompt);
-    print(userPrompt);
 
     if (response.statusCode == 200) {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       final jsonContent = decoded['choices'][0]['message']['content'];
-      print("Deepseek API response: $jsonContent");
-      return jsonDecode(jsonContent) as Map<String, dynamic>;
+      final session = jsonDecode(jsonContent) as Map<String, dynamic>;
+      print("Generated meditation session: ${jsonEncode(session)}");
+      return session;
     } else {
       throw Exception(
         'Failed to generate meditation session: ${response.statusCode}',
