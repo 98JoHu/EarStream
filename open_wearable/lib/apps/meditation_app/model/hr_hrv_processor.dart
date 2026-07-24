@@ -132,6 +132,15 @@ class HrHrvProcessor {
 }
 
 class SlidingWindowPeakDetector {
+  // Minimum rise (in filtered-signal units) a candidate must have over both
+  // neighbors to count as a peak. Without this, any noise wiggle or dicrotic
+  // notch that happens to be a local max gets counted as a heartbeat, which
+  // inflates both heart rate and RMSSD. Calibrated against a real recorded
+  // session (not just a synthetic signal): 0.1 (matching main's constant)
+  // was too strict for this device's actual signal and produced almost no
+  // readings; 0.02 gave frequent, physiologically plausible readings.
+  static const double _minProminence = 0.02;
+
   late num windowDuration;
   late num minInterPeakDistance;
   final int timestampExponent;
@@ -169,7 +178,11 @@ class SlidingWindowPeakDetector {
     final (_, vNext) = _history[idx];
 
     // 4. Check if the middle point represents a mathematical local maximum peak
-    if (vCurr > vPrev && vCurr >= vNext) {
+    //    with enough prominence over both neighbors to be a real heartbeat.
+    if (vCurr > vPrev &&
+        vCurr >= vNext &&
+        (vCurr - vPrev) > _minProminence &&
+        (vCurr - vNext) > _minProminence) {
       // 5. Enforce minimum inter-peak lockout distance constraint
       final lastPeak = _peakTimestamps.isNotEmpty ? _peakTimestamps.last : 0;
       if (tCurr - lastPeak >= minInterPeakDistance) {
