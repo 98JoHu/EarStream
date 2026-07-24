@@ -122,6 +122,7 @@ class Measurement {
 
   // Expose calculated values to UI
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);
+  StressLevel get currentStressLevel => stressLevel.value;
   ValueNotifier<MonitoringPhase> monitoringPhase =
       ValueNotifier(MonitoringPhase.calibration);
   ValueNotifier<ActivityLevel> get activityLevel =>
@@ -353,15 +354,15 @@ class Measurement {
     final subscription = _processor.biometricStream.listen((data) {
       // if user is stressed already then don't change the stress level
       if (stressLevel.value == StressLevel.stressed) {
+        // TODO: check if user is still stressed and if not then change the stress level to relaxed
         return;
       }
 
       // Check if the user is stressed based on heart rate and RMSSD thresholds
       final (heartRate, rmssd) = (data.heartRate, data.rmssd);
       // TODO: take activity level into account when determining stress level
-      if (heartRate > userAccount.stressThresholds.$1 &&
-          rmssd != null &&
-          rmssd < userAccount.stressThresholds.$2) {
+      if (checkStressLevel(heartRate, rmssd) == StressLevel.stressed) {
+        // Start a meditation session if the user is stressed
         stressLevel.value = StressLevel.stressed;
         monitoringPhase.value = MonitoringPhase.meditation;
         meditation.value =
@@ -373,17 +374,22 @@ class Measurement {
   }
 
   void simulateStress() {
+    // TODO: tweek heart rate and heart rate variability to simulate stress
     stressLevel.value = StressLevel.stressed;
     monitoringPhase.value = MonitoringPhase.meditation;
-    // TODO: tweek heart rate and heart rate variability to simulate stress
     meditation.value =
         BiometricMeditation(userAccount: userAccount, measurement: this);
     meditation.value!.start();
   }
 
-  StressLevel checkStressLevel() {
-    // TODO: Implement a more sophisticated stress detection algorithm that takes into account heart rate, HRV, and activity level.
-    return stressLevel.value;
+  StressLevel checkStressLevel(int heartRate, double? rmssd) {
+    // if heart rate is above the threshold and RMSSD is below the threshold, then the user is stressed
+    if (heartRate > userAccount.stressThresholds.$1 &&
+        rmssd != null &&
+        rmssd < userAccount.stressThresholds.$2) {
+      return StressLevel.stressed;
+    }
+    return StressLevel.relaxed;
   }
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {

@@ -241,7 +241,7 @@ class BiometricMeditation extends Meditation {
 
   @override
   bool checkEarlyExit() =>
-      measurement.checkStressLevel() == StressLevel.relaxed;
+      measurement.currentStressLevel == StressLevel.relaxed;
 }
 
 class ScheduledMeditation extends Meditation {
