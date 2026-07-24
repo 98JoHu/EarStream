@@ -100,7 +100,9 @@ class Meditation {
     if (userAccount.hasValidDeepseekKey) {
       try {
         final sessionData = await generateMeditationSession(
-            userAccount: userAccount, maxSegments: maxSegments);
+          userAccount: userAccount,
+          maxSegments: maxSegments,
+        );
         welcomeMessage = sessionData['welcomeMessage'] as String;
         completionMessage = sessionData['completionMessage'] as String;
         segments = (sessionData['segments'] as List)

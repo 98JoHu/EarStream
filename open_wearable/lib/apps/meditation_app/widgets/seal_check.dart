@@ -122,8 +122,9 @@ class SealCheckResult extends StatelessWidget {
       runSpacing: 8.0,
       spacing: 16.0,
       children: metrics
-          .map((metric) =>
-              _buildMetricColumn(label: metric.$1, value: metric.$2))
+          .map(
+            (metric) => _buildMetricColumn(label: metric.$1, value: metric.$2),
+          )
           .toList(),
     );
   }
@@ -169,8 +170,10 @@ class ResponsePointsDisplay extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.all(8),
-              child: Text('Response points',
-                  style: Theme.of(context).textTheme.titleMedium),
+              child: Text(
+                'Response points',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
             const Divider(height: 1),
             ...points.map((p) {

@@ -168,8 +168,11 @@ class BioAdaptiveController extends StatelessWidget {
   final Measurement measurement;
   final VoidCallback? onMeasurementStop;
 
-  const BioAdaptiveController(
-      {super.key, required this.measurement, this.onMeasurementStop});
+  const BioAdaptiveController({
+    super.key,
+    required this.measurement,
+    this.onMeasurementStop,
+  });
 
   @override
   Widget build(BuildContext context) {
