@@ -36,6 +36,8 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
   final UserAccount userAccount;
+  final Wearable? wearable;
+
   const MeditationPage({
     super.key,
     required this.ppgSensor,
@@ -43,6 +45,7 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     required this.userAccount,
+    this.wearable,
   });
 
   @override
@@ -111,8 +114,12 @@ class _MeditationPageState extends State<MeditationPage> {
               },
             ),
             const SizedBox(height: 24),
-            Provider<Measurement>(
-              create: (_) => _measurement!,
+            MultiProvider(
+              providers: [
+                Provider<Measurement>(create: (_) => _measurement!),
+                Provider<UserAccount>(create: (_) => widget.userAccount),
+                Provider<Wearable?>(create: (_) => widget.wearable),
+              ],
               child: _selectedMode.view,
             ),
           ],

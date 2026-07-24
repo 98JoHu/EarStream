@@ -49,12 +49,13 @@ class _MeditationViewState extends State<MeditationView> {
       gyroscopeSensor: widget.gyroscopeSensor,
       sensorConfigProvider: widget.sensorConfigProvider,
       userAccount: _mockUserAccount,
+      wearable: widget.wearable,
     ),
     ProfilePage(userAccount: _mockUserAccount),
     PreferencesPage(userAccount: _mockUserAccount),
     const WeeklyAnalyticsPage(),
     CalendarIntegrationPage(userAccount: _mockUserAccount),
-    const SealCheckPage(),
+    SealCheckPage(wearable: widget.wearable),
     ApiKeysPage(userAccount: _mockUserAccount),
   ];
 
