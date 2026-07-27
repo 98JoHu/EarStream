@@ -262,9 +262,9 @@ class TtsService {
               'role': 'user',
               'content': [
                 {'type': 'text', 'text': text}
-              ]
-            }
-          ]
+              ],
+            },
+          ],
         },
         'parameters': {
           'voice': 'Seren',

@@ -66,7 +66,6 @@ class _TimerViewState extends State<TimerView> {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: access user account a different way
     final userAccount = context.read<UserAccount>();
 
     return ValueListenableBuilder<ScheduledMeditation?>(
