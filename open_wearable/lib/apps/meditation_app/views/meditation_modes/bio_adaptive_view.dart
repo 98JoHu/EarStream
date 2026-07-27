@@ -213,7 +213,27 @@ class _MeasurementTile extends StatelessWidget {
                     stream: listenable,
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
-                        return const CircularProgressIndicator();
+                        return Row(
+                          children: [
+                            Text(
+                              "Loading...",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: iconColor,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1,
+                                backgroundColor: backgroundColor,
+                                color: iconColor,
+                              ),
+                            ),
+                          ],
+                        );
                       } else {
                         final value = snapshot.data;
                         return Text(
