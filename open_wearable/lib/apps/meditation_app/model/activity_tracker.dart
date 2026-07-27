@@ -104,6 +104,12 @@ class ActivityTracker {
     _gyroscopeSubscription?.cancel();
   }
 
+  void reset() {
+    _accelWindow.clear();
+    _gyroWindow.clear();
+    _activityLevel.value = ActivityLevel.resting;
+  }
+
   void dispose() {
     stop();
     _activityLevel.dispose();

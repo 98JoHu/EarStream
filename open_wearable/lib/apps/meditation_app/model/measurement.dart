@@ -340,20 +340,30 @@ class Measurement {
 
   void reset() {
     // Reset the stopwatch
-    _stopwatch.reset();
+    _stopwatch
+      ..stop()
+      ..reset();
+    // Cancel ticker watching for phase duration
+    _ticker?.cancel();
     // App is now idle
     _state = EarstreamState.idle;
     // Reset the monitoring phase to calibration
     monitoringPhase.value = MonitoringPhase.calibration;
     // Reset stress level to relaxed
     stressLevel.value = StressLevel.relaxed;
-    // Stop detecting activity level
-    _activityTracker.stop();
+    // Reset activity tracker
+    _activityTracker.reset();
     // Stop listening to the PPG stream and heart rate/HRV processing
     _metricSubscription?.cancel();
     _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
-    // TODO: reset filters / decide what to do with meditation
+    // Stop any ongoing meditation
+    if (meditation.value != null) {
+      meditation.value!.stop();
+      meditation.value = null;
+    }
+    // Reset filters from the HR/HRV processor
+    _processor.reset();
   }
 
   void dispose() {

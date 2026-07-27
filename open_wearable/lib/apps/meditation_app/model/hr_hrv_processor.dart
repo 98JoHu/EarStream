@@ -233,6 +233,22 @@ class HrHrvProcessor {
     );
   }
 
+  void reset() {
+    _firstSampleTime = null;
+    _lastEmitTime = null;
+    _buffer.clear();
+    _channelSelector.reset();
+    _ambientCanceler.reset();
+    _motionSuppressor.reset();
+    _imuCanceler.reset();
+    _dcBlockFilter.reset();
+    _bandPassFilter.reset();
+    _normalizer.reset();
+    _hrEstimate = 75.0;
+    _hrCovariance = 1.0;
+    _hrvEstimateMs = 35.0;
+  }
+
   ({double score, double averageMotion}) _estimateRecentWaveformQualityScore({
     required int latestTimestamp,
   }) {
@@ -501,6 +517,11 @@ class _HighPassFilter {
     alpha = rc / (rc + dt);
   }
 
+  void reset() {
+    _lastInput = null;
+    _lastOutput = null;
+  }
+
   double filter(double x) {
     if (_lastInput == null) {
       _lastInput = x;
@@ -547,6 +568,14 @@ class _BandPassFilter {
     b2 = (1 - alpha) / norm;
   }
 
+  void reset() {
+    x1 = 0;
+    x2 = 0;
+    y1 = 0;
+    y2 = 0;
+    _isFirstSample = true;
+  }
+
   double filter(double x) {
     // Pre-warm filter state on the first sample to avoid a step-function
     // transient: a band-pass filter has zero DC gain, so y1=y2=0 is correct,
@@ -567,9 +596,6 @@ class _BandPassFilter {
 }
 
 class _AdaptiveOpticalChannelSelector {
-  // heart_tracker's PpgFilter uses 0.02/0.08 at its validated 50Hz PPG rate.
-  // This app streams PPG at 200Hz (4x), so these are the equivalent alphas
-  // that give the same real-time EMA time constant at 200Hz.
   static const double _meanAlpha = 0.005;
   static const double _energyAlpha = 0.02;
 
@@ -629,6 +655,16 @@ class _AdaptiveOpticalChannelSelector {
     return 0;
   }
 
+  void reset() {
+    _isInitialized = false;
+    _meanGreen = 0;
+    _meanRed = 0;
+    _meanIr = 0;
+    _energyGreen = 0;
+    _energyRed = 0;
+    _energyIr = 0;
+  }
+
   double _ema(double state, double value, double alpha) {
     return (state * (1.0 - alpha)) + (value * alpha);
   }
@@ -652,10 +688,6 @@ class _AmbientLightCanceler {
       _meanAmbient = ambient;
       return 0;
     }
-
-    // heart_tracker's PpgFilter uses 0.02/0.04 at its validated 50Hz PPG
-    // rate. This app streams PPG at 200Hz (4x), so these are the equivalent
-    // alphas that give the same real-time EMA time constant at 200Hz.
     const meanAlpha = 0.005;
     const covarianceAlpha = 0.01;
 
@@ -681,12 +713,18 @@ class _AmbientLightCanceler {
     final cleaned = centeredGreen - (_ambientGain * centeredAmbient);
     return -cleaned;
   }
+
+  void reset() {
+    _isInitialized = false;
+    _meanGreen = 0;
+    _meanAmbient = 0;
+    _ambientVariance = 1.0;
+    _greenAmbientCovariance = 0.0;
+    _ambientGain = 0.65;
+  }
 }
 
 class _MultiReferenceMotionCanceler {
-  // heart_tracker's PpgFilter uses 8 taps/axis at its validated 50Hz
-  // accelerometer rate (160ms of history). This app streams the
-  // accelerometer at 100Hz (2x), so 16 taps covers the same 160ms.
   final _PadasipStyleMultiInputNlmsCanceler _canceler =
       _PadasipStyleMultiInputNlmsCanceler(
     tapsPerAxis: 16,
@@ -722,10 +760,6 @@ class _MultiReferenceMotionCanceler {
       return;
     }
 
-    // heart_tracker's PpgFilter uses 0.04/0.18/0.06 at its validated 50Hz
-    // accelerometer rate. This app streams the accelerometer at 100Hz (2x),
-    // so these are the equivalent alphas that give the same real-time EMA
-    // time constant at 100Hz.
     const gravityAlpha = 0.0202;
     const dynamicAlpha = 0.0945;
     const scaleAlpha = 0.0305;
@@ -753,6 +787,20 @@ class _MultiReferenceMotionCanceler {
         (_dynamicY * (1.0 - dynamicAlpha)) + (normalizedHpY * dynamicAlpha);
     _dynamicZ =
         (_dynamicZ * (1.0 - dynamicAlpha)) + (normalizedHpZ * dynamicAlpha);
+  }
+
+  void reset() {
+    _isInitialized = false;
+    _gravityX = 0;
+    _gravityY = 0;
+    _gravityZ = 0;
+    _dynamicX = 0;
+    _dynamicY = 0;
+    _dynamicZ = 0;
+    _referenceScaleX = 0.2;
+    _referenceScaleY = 0.2;
+    _referenceScaleZ = 0.2;
+    _canceler.reset();
   }
 
   double filter(
@@ -806,6 +854,22 @@ class _PadasipStyleMultiInputNlmsCanceler {
     _historyY = List<double>.filled(tapsPerAxis, 0, growable: false);
     _historyZ = List<double>.filled(tapsPerAxis, 0, growable: false);
     _featureVector = List<double>.filled(length, 0, growable: false);
+  }
+
+  void reset() {
+    _isInitialized = false;
+    for (var i = 0; i < _weights.length; i++) {
+      _weights[i] = 0;
+    }
+    for (var i = 0; i < tapsPerAxis; i++) {
+      _historyX[i] = 0;
+      _historyY[i] = 0;
+      _historyZ[i] = 0;
+    }
+    for (var i = 0; i < _featureVector.length; i++) {
+      _featureVector[i] = 0;
+    }
+    _smoothedError = 0;
   }
 
   double filter({
@@ -924,6 +988,14 @@ class _MotionNoiseSuppressor {
     );
   }
 
+  void reset() {
+    _isInitialized = false;
+    _lastOutput = 0;
+    _gravityMagnitude = 9.81;
+    _motionLevel = 0;
+    _history.clear();
+  }
+
   double filter(double rawValue) {
     if (!_isInitialized) {
       _isInitialized = true;
@@ -979,6 +1051,13 @@ class _BoundedSignalNormalizer {
   double _center = 0;
   double _envelope = 0.25;
   double _lastOutput = 0;
+
+  void reset() {
+    _isInitialized = false;
+    _center = 0;
+    _envelope = 0.25;
+    _lastOutput = 0;
+  }
 
   double filter(
     double value, {
