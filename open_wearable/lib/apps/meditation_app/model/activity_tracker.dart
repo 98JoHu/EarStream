@@ -81,6 +81,9 @@ class ActivityTracker {
   StreamSubscription<PpgMotionSample>? _accelerometerSubscription;
   StreamSubscription<PpgMotionSample>? _gyroscopeSubscription;
 
+  DateTime? _lastEmitTime;
+  static const Duration _emitInterval = Duration(seconds: 3);
+
   ActivityTracker({
     required this.accelerometerStream,
     required this.gyroscopeStream,
@@ -151,6 +154,13 @@ class ActivityTracker {
     if (_accelWindow.isEmpty || _gyroWindow.isEmpty) {
       return;
     }
+
+    final now = DateTime.now();
+    if (_lastEmitTime != null &&
+        now.difference(_lastEmitTime!) < _emitInterval) {
+      return;
+    }
+    _lastEmitTime = now;
 
     // Calculate the average magnitude of the accelerometer and gyroscope data
     final avgAccelDeviation =

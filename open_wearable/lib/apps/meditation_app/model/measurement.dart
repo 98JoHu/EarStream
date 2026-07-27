@@ -285,6 +285,11 @@ class Measurement {
     _metricSubscription?.cancel();
     _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
+    // Stop any ongoing meditation
+    if (meditation.value != null) {
+      meditation.value!.stop();
+      meditation.value = null;
+    }
   }
 
   void resume() {
