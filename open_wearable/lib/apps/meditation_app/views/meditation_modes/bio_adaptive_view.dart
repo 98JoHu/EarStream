@@ -146,10 +146,6 @@ class BioAdaptiveContent extends StatelessWidget {
           progress: measurement.progress,
         ),
         const SizedBox(height: 16),
-        _StressLevelTile(listenable: measurement.stressLevel),
-        const SizedBox(height: 16),
-        _ActivityLevelTile(listenable: measurement.activityLevel),
-        const SizedBox(height: 16),
         Container(
           decoration: BoxDecoration(
             color: const Color(0xFF0F172A), // Slate background
@@ -162,6 +158,10 @@ class BioAdaptiveContent extends StatelessWidget {
                 const Duration(seconds: 30), // Show 30s rolling chart
           ),
         ),
+        const SizedBox(height: 16),
+        _StressLevelTile(listenable: measurement.stressLevel),
+        const SizedBox(height: 16),
+        _ActivityLevelTile(listenable: measurement.activityLevel),
       ],
     );
   }
@@ -359,7 +359,7 @@ class _MonitoringPhaseTile extends StatelessWidget {
                 builder: (context, progressValue, child) {
                   if (progressValue == null) return const SizedBox.shrink();
                   return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: LinearProgressIndicator(
                       value: progressValue,
                       color: value.color,
