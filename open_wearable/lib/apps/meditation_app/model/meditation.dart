@@ -29,6 +29,7 @@ class SessionProgress {
 class Meditation {
   final UserAccount userAccount;
   final AudioPlayer musicPlayer = AudioPlayer();
+  late final TtsService ttsService;
   final FlutterTts voicePlayer = FlutterTts();
   final int maxSegments;
 
@@ -40,6 +41,7 @@ class Meditation {
   Completer<void>? _resumeCompleter;
 
   Meditation({required this.userAccount, this.maxSegments = 10}) {
+    ttsService = TtsService(userAccount: userAccount);
     initializeAudioPlayers();
   }
 
@@ -50,12 +52,6 @@ class Meditation {
     // Initialize the music player
     await musicPlayer.setReleaseMode(ReleaseMode.loop);
     await musicPlayer.setVolume(0.3);
-
-    // Initialize the voice player
-    await voicePlayer.awaitSpeakCompletion(true);
-    await voicePlayer.setLanguage("en-US");
-    await voicePlayer.setSpeechRate(0.3);
-    await voicePlayer.setVolume(0.8);
   }
 
   // Generate default instructions for fallback meditation
@@ -192,7 +188,7 @@ class Meditation {
       if (isPaused) await _waitForResume();
       if (isStopped) return;
 
-      await voicePlayer.speak(text);
+      await ttsService.speak(text);
       if (!isPaused) return;
     }
   }
@@ -214,6 +210,78 @@ class Meditation {
   void dispose() {
     musicPlayer.dispose();
     voicePlayer.stop();
+  }
+}
+
+class TtsService {
+  final UserAccount userAccount;
+  final AudioPlayer _premiumTtsPlayer = AudioPlayer();
+  final FlutterTts _fallbackTtsPlayer = FlutterTts();
+
+  TtsService({required this.userAccount}) {
+    _initializeFallbackTts();
+  }
+
+  void _initializeFallbackTts() async {
+    await _fallbackTtsPlayer.awaitSpeakCompletion(true);
+    await _fallbackTtsPlayer.setLanguage("en-US");
+    await _fallbackTtsPlayer.setSpeechRate(0.3);
+    await _fallbackTtsPlayer.setVolume(0.8);
+  }
+
+  Future<void> speak(String text) async {
+    if (userAccount.hasValidDashscopeKey) {
+      // Use Dashscope TTS
+      try {
+        final audioUrl = await _fetchDashscopeTtsUrl(text);
+        await _premiumTtsPlayer.play(UrlSource(audioUrl));
+      } catch (e) {
+        print("Error using Dashscope TTS: $e");
+        // Fallback to Flutter TTS if Dashscope fails
+        await _fallbackTtsPlayer.speak(text);
+      }
+    }
+    await _fallbackTtsPlayer.speak(text);
+  }
+
+  Future<String> _fetchDashscopeTtsUrl(String text) async {
+    final url = Uri.parse(
+      'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+    );
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer ${userAccount.dashscopeApiKey!}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'model': 'qwen3-tts-flash',
+        'input': {
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {'type': 'text', 'text': text}
+              ]
+            }
+          ]
+        },
+        'parameters': {
+          'voice': 'Seren',
+          'language_type': 'English',
+        },
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      print("Dashscope TTS response: ${response.body}");
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      return decoded['audio_url'] as String;
+    } else {
+      throw Exception(
+        'Failed to fetch Dashscope TTS URL: ${response.body}',
+      );
+    }
   }
 }
 
@@ -363,7 +431,7 @@ Future<Map<String, dynamic>> generateMeditationSession({
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       final jsonContent = decoded['choices'][0]['message']['content'];
       final session = jsonDecode(jsonContent) as Map<String, dynamic>;
-      print("Generated meditation session: ${jsonEncode(session)}");
+      // print("Generated meditation session: ${jsonEncode(session)}");
       return session;
     } else {
       throw Exception(
