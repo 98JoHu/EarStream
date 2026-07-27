@@ -148,14 +148,15 @@ class BioAdaptiveContent extends StatelessWidget {
         const SizedBox(height: 16),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A), // Slate background
+            color: Colors.white,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
           ),
           child: HeartRateChart(
             heartRateStream:
                 measurement.heartRate, // Pass the heart rate stream here
             visibleWindow:
-                const Duration(seconds: 30), // Show 30s rolling chart
+                const Duration(minutes: 1), // Show 1min rolling chart
           ),
         ),
         const SizedBox(height: 16),
@@ -380,13 +381,13 @@ class HeartRateChart extends StatefulWidget {
   // Pass in the clean broadcast stream from your BiometricPipelineManager
   final Stream<int> heartRateStream;
 
-  /// The duration of history to display on screen at once (e.g., last 30 seconds)
+  /// The duration of history to display on screen at once (e.g., last 3 minutes)
   final Duration visibleWindow;
 
   const HeartRateChart({
     super.key,
     required this.heartRateStream,
-    this.visibleWindow = const Duration(seconds: 30),
+    this.visibleWindow = const Duration(minutes: 3),
   });
 
   @override
@@ -439,7 +440,7 @@ class _HeartRateChartState extends State<HeartRateChart> {
       return const Center(
         child: Text(
           "Waiting for pulse data...",
-          style: TextStyle(color: Colors.white54, fontSize: 14),
+          style: TextStyle(color: Colors.grey, fontSize: 14),
         ),
       );
     }
@@ -450,6 +451,20 @@ class _HeartRateChartState extends State<HeartRateChart> {
     final double maxX = latestX < widget.visibleWindow.inSeconds
         ? widget.visibleWindow.inSeconds.toDouble()
         : latestX;
+
+    // Adaptive Y bounds: fit the currently visible data instead of a fixed
+    // 40-160 range, with a floor so a near-flat reading doesn't zoom in to
+    // the point of looking noisy.
+    final heartRates = _spots.map((spot) => spot.y);
+    final dataMinY = heartRates.reduce((a, b) => a < b ? a : b);
+    final dataMaxY = heartRates.reduce((a, b) => a > b ? a : b);
+    final yPadding = ((dataMaxY - dataMinY) * 0.25).clamp(5.0, double.infinity);
+    final minY = (dataMinY - yPadding).clamp(0.0, double.infinity);
+    final maxY = dataMaxY + yPadding;
+
+    // Wider, fixed tick spacing on the time axis instead of fl_chart's
+    // default (which packs in a label every ~2s).
+    final xAxisInterval = (widget.visibleWindow.inSeconds / 3).roundToDouble();
 
     return AspectRatio(
       aspectRatio: 1.8,
@@ -465,14 +480,14 @@ class _HeartRateChartState extends State<HeartRateChart> {
             // Axis boundaries: keeps the chart sliding smoothly to the right
             minX: minX,
             maxX: maxX,
-            minY: 40, // Standard resting HR lower bound
-            maxY: 160, // Standard active HR upper bound
+            minY: minY,
+            maxY: maxY,
 
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
               getDrawingHorizontalLine: (value) => FlLine(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.grey.shade200,
                 strokeWidth: 1,
               ),
             ),
@@ -485,13 +500,17 @@ class _HeartRateChartState extends State<HeartRateChart> {
                 sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 30,
+                  interval: xAxisInterval,
                   getTitlesWidget: (value, meta) {
+                    if (value == meta.max || value == meta.min) {
+                      return const SizedBox.shrink();
+                    }
                     return SideTitleWidget(
                       meta: meta,
                       child: Text(
                         "${value.toInt()}s",
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: Colors.grey[600],
                           fontSize: 10,
                         ),
                       ),
@@ -502,14 +521,18 @@ class _HeartRateChartState extends State<HeartRateChart> {
               leftTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
-                  reservedSize: 40,
+                  reservedSize: 30,
+                  interval: (maxY - minY) / 4,
                   getTitlesWidget: (value, meta) {
+                    if (value == meta.max || value == meta.min) {
+                      return const SizedBox.shrink();
+                    }
                     return SideTitleWidget(
                       meta: meta,
                       child: Text(
                         "${value.toInt()}",
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: Colors.grey[700],
                           fontSize: 11,
                         ),
                       ),
@@ -522,22 +545,28 @@ class _HeartRateChartState extends State<HeartRateChart> {
             lineBarsData: [
               LineChartBarData(
                 spots: _spots,
-                isCurved: true,
-                curveSmoothness: 0.35,
-                color: const Color(0xFFF43F5E), // Coral / Red pulse line
-                barWidth: 3,
+                isCurved: false,
+                color: Colors.redAccent,
+                barWidth: 2,
                 isStrokeCapRound: true,
-                dotData: const FlDotData(
-                  show: false,
-                ), // Hide dots for continuous line look
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, barData, index) =>
+                      FlDotCirclePainter(
+                    radius: 2,
+                    color: Colors.redAccent,
+                    strokeWidth: 1,
+                    strokeColor: Colors.white,
+                  ),
+                ),
 
                 // Subtle gradient fill under the line
                 belowBarData: BarAreaData(
                   show: true,
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFFF43F5E).withOpacity(0.3),
-                      const Color(0xFFF43F5E).withOpacity(0.0),
+                      Colors.redAccent.withValues(alpha: 0.1),
+                      Colors.redAccent.withValues(alpha: 0.0),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
