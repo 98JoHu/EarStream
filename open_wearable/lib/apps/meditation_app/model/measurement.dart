@@ -111,9 +111,11 @@ class Measurement {
   final UserAccount userAccount;
 
   late final Stream<PpgOpticalSample> _ppgStream;
+  late final Stream<PpgMotionSample> _accelerometerStream;
   late final HrHrvProcessor _processor;
   late final ActivityTracker _activityTracker;
   StreamSubscription<PpgOpticalSample>? _metricSubscription;
+  StreamSubscription<PpgMotionSample>? _accelMetricSubscription;
   StreamSubscription<HeartRateSample>? _stressSubscription;
   Stream<int> get heartRate =>
       _processor.biometricStream.map((biometrics) => biometrics.heartRate);
@@ -174,7 +176,7 @@ class Measurement {
         .cast<PpgOpticalSample>()
         .asBroadcastStream();
 
-    final accelerometerStream = accelerometerSensor.sensorStream
+    _accelerometerStream = accelerometerSensor.sensorStream
         .map<PpgMotionSample?>((data) {
           final values = _sensorValuesAsDoubles(data);
           if (values == null) {
@@ -211,7 +213,7 @@ class Measurement {
       timestampExponent: ppgSensor.timestampExponent,
     );
     _activityTracker = ActivityTracker(
-      accelerometerStream: accelerometerStream,
+      accelerometerStream: _accelerometerStream,
       gyroscopeStream: gyroscopeStream,
       timestampExponentAccelerometer: accelerometerSensor.timestampExponent,
       timestampExponentGyroscope: gyroscopeSensor.timestampExponent,
@@ -252,7 +254,23 @@ class Measurement {
     // Listen to the PPG stream and process incoming samples => HR and HRV
     _metricSubscription?.cancel();
     _metricSubscription = _ppgStream.listen((data) {
-      _processor.processPpgSample(data.timestamp, data.green, data.ambient);
+      _processor.processPpgSample(
+        data.timestamp,
+        data.red,
+        data.ir,
+        data.green,
+        data.ambient,
+      );
+    });
+    // Feed the accelerometer to the processor for motion cancellation/gating
+    _accelMetricSubscription?.cancel();
+    _accelMetricSubscription = _accelerometerStream.listen((data) {
+      _processor.processAccelerometerSample(
+        data.timestamp,
+        data.x,
+        data.y,
+        data.z,
+      );
     });
   }
 
@@ -263,8 +281,9 @@ class Measurement {
     _state = EarstreamState.stopped;
     // Stop detecting activity level
     _activityTracker.stop();
-    // Stop listening to the PPG stream
+    // Stop listening to the PPG and accelerometer streams
     _metricSubscription?.cancel();
+    _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
   }
 
@@ -278,7 +297,23 @@ class Measurement {
     // Resume listening to the PPG stream
     _metricSubscription?.cancel();
     _metricSubscription = _ppgStream.listen((data) {
-      _processor.processPpgSample(data.timestamp, data.green, data.ambient);
+      _processor.processPpgSample(
+        data.timestamp,
+        data.red,
+        data.ir,
+        data.green,
+        data.ambient,
+      );
+    });
+    // Resume listening to the accelerometer stream
+    _accelMetricSubscription?.cancel();
+    _accelMetricSubscription = _accelerometerStream.listen((data) {
+      _processor.processAccelerometerSample(
+        data.timestamp,
+        data.x,
+        data.y,
+        data.z,
+      );
     });
     // Resume with current phase
     switch (monitoringPhase.value) {
@@ -311,6 +346,7 @@ class Measurement {
     _activityTracker.stop();
     // Stop listening to the PPG stream and heart rate/HRV processing
     _metricSubscription?.cancel();
+    _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
     // TODO: reset filters / decide what to do with meditation
   }

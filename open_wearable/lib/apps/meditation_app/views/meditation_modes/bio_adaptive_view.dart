@@ -407,6 +407,7 @@ class _HeartRateChartState extends State<HeartRateChart> {
   }
 
   void _subscribeToStream() {
+    _subscription?.cancel();
     _subscription = widget.heartRateStream.listen((heartRate) {
       // Guard against zero/unwarmed data points
       if (heartRate <= 0) return;
