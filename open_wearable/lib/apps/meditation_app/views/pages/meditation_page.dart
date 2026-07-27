@@ -83,6 +83,12 @@ class _MeditationPageState extends State<MeditationPage> {
   }
 
   @override
+  void dispose() {
+    _measurement?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     if (_measurement == null) {
       return const Center(child: CircularProgressIndicator());

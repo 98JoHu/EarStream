@@ -135,6 +135,10 @@ class HrHrvProcessor {
     _evaluateVitals(timestamp);
   }
 
+  void dispose() {
+    _metricStreamController.close();
+  }
+
   void _evaluateVitals(int latestTimestamp) {
     if (_buffer.length < 20 ||
         (_buffer.last.timestamp - _buffer.first.timestamp) <
@@ -479,10 +483,6 @@ class HrHrvProcessor {
     _hrvEstimateMs = (_hrvEstimateMs * (1.0 - _hrvSmoothingAlpha)) +
         (measurementMs * _hrvSmoothingAlpha);
     return _hrvEstimateMs;
-  }
-
-  void dispose() {
-    _metricStreamController.close();
   }
 }
 

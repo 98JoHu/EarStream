@@ -261,7 +261,7 @@ class TtsService {
             {
               'role': 'user',
               'content': [
-                {'type': 'text', 'text': text}
+                {'type': 'text', 'text': text},
               ],
             },
           ],

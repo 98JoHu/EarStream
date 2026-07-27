@@ -132,10 +132,10 @@ class Measurement {
   ValueNotifier<BiometricMeditation?> meditation = ValueNotifier(null);
 
   // Fields for handling the phases
-  EarstreamState _state = EarstreamState.idle;
-  EarstreamState get state => _state;
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _ticker;
+  EarstreamState _state = EarstreamState.idle;
+  EarstreamState get state => _state;
   ValueNotifier<double?> progress = ValueNotifier(null);
 
   Measurement({
@@ -333,7 +333,7 @@ class Measurement {
         _stressSubscription = monitorStress();
         break;
       case MonitoringPhase.meditation:
-        // TODO: Resume meditation if it was ongoing
+        // TODO: Resume meditation if it was ongoing => think about how to handle this case, maybe store the meditation state and resume it
         break;
     }
   }
@@ -367,7 +367,28 @@ class Measurement {
   }
 
   void dispose() {
-    // TODO: Clean up resources
+    // Cancel the ticker and stopwatch
+    _ticker?.cancel();
+    // Cancel all stream subscriptions if they are active
+    _metricSubscription?.cancel();
+    _accelMetricSubscription?.cancel();
+    _stressSubscription?.cancel();
+    // Dispose of the activity tracker and HR/HRV processor
+    _activityTracker.dispose();
+    _processor.dispose();
+    // Dispose of the ValueNotifiers
+    stressLevel.dispose();
+    monitoringPhase.dispose();
+    progress.dispose();
+    if (meditation.value != null) {
+      meditation.value!.dispose();
+      meditation.value = null;
+    }
+    meditation.dispose();
+    // Turn off the sensors to save battery
+    _turnOffSensor(ppgSensor);
+    _turnOffSensor(accelerometerSensor);
+    _turnOffSensor(gyroscopeSensor);
   }
 
   StreamSubscription<HeartRateSample> adjustBaseline() {
@@ -538,6 +559,21 @@ class Measurement {
       y: y,
       z: z,
     );
+  }
+
+  void _turnOffSensor(Sensor sensor) {
+    final configuration = sensor.relatedConfigurations.firstOrNull;
+    final offValue = configuration?.offValue;
+    if (configuration == null || offValue == null) {
+      return;
+    }
+
+    sensorConfigProvider.addSensorConfiguration(
+      configuration,
+      offValue,
+      markPending: false,
+    );
+    configuration.setConfiguration(offValue);
   }
 
   double _configureSensorForStreaming(

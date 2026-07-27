@@ -111,7 +111,8 @@ class ActivityTracker {
   }
 
   void dispose() {
-    stop();
+    _accelerometerSubscription?.cancel();
+    _gyroscopeSubscription?.cancel();
     _activityLevel.dispose();
   }
 
