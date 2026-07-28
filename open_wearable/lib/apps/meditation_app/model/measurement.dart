@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'dart:async';
+import 'dart:math';
 import 'user_account.dart';
 import 'activity_tracker.dart';
 import 'meditation.dart';
@@ -138,6 +139,26 @@ class Measurement {
   EarstreamState get state => _state;
   ValueNotifier<double?> progress = ValueNotifier(null);
 
+  // Scripted stress-demo scenario (see simulateStress()), ported from the
+  // main branch's MockHrSensor: a deterministic 2-minute HR/HRV build-up
+  // used for demos, with the same Ornstein-Uhlenbeck wandering on top.
+  Timer? _stressScenarioTimer;
+  DateTime? _stressScenarioStartTime;
+  double _scenarioHrOuState = 0;
+  double _scenarioHrvOuState = 0;
+  double _scenarioGaussianSpare = 0;
+  bool _scenarioHasGaussianSpare = false;
+  final Random _scenarioRandom = Random();
+
+  static const double _scenarioBaseHr = 71.0;
+  static const double _scenarioBaseHrv = 80.0;
+  static const double _scenarioPhase1EndHr = 80.0;
+  static const double _scenarioPhase1EndHrv = 50.0;
+  static const double _scenarioPeakHr = 97.0;
+  static const double _scenarioPeakHrv = 12.0;
+  static const double _scenarioOuAlpha = 0.9672; // exp(-1/30), 30s time const
+  static const double _scenarioOuSigmaStep = 0.763; // BPM per tick
+
   Measurement({
     required this.ppgSensor,
     required this.accelerometerSensor,
@@ -227,6 +248,8 @@ class Measurement {
       ..start();
     // App is now running
     _state = EarstreamState.running;
+    // Start with calibration phase
+    monitoringPhase.value = MonitoringPhase.calibration;
     // Detect activity level
     _activityTracker.start();
 
@@ -248,6 +271,8 @@ class Measurement {
         _stopwatch
           ..reset()
           ..start();
+        // Start the subscription (if any) for the phase just entered
+        _activatePhaseSubscription();
       }
     });
 
@@ -285,6 +310,8 @@ class Measurement {
     _metricSubscription?.cancel();
     _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
+    // Stop any simulated stress scenario
+    _stressScenarioTimer?.cancel();
     // Stop any ongoing meditation
     if (meditation.value != null) {
       meditation.value!.stop();
@@ -321,6 +348,13 @@ class Measurement {
       );
     });
     // Resume with current phase
+    _activatePhaseSubscription();
+  }
+
+  /// Starts the stress-detection subscription (if any) for the current
+  /// [monitoringPhase] value. Called both when entering a new phase (see the
+  /// ticker in [start]) and when [resume]ing into whatever phase was active.
+  void _activatePhaseSubscription() {
     switch (monitoringPhase.value) {
       case MonitoringPhase.calibration:
         break;
@@ -357,6 +391,8 @@ class Measurement {
     _metricSubscription?.cancel();
     _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
+    // Stop any simulated stress scenario
+    _stressScenarioTimer?.cancel();
     // Stop any ongoing meditation
     if (meditation.value != null) {
       meditation.value!.stop();
@@ -373,6 +409,7 @@ class Measurement {
     _metricSubscription?.cancel();
     _accelMetricSubscription?.cancel();
     _stressSubscription?.cancel();
+    _stressScenarioTimer?.cancel();
     // Dispose of the activity tracker and HR/HRV processor
     _activityTracker.dispose();
     _processor.dispose();
@@ -446,12 +483,45 @@ class Measurement {
   }
 
   void simulateStress() {
-    // TODO: tweek heart rate and heart rate variability to simulate stress
-    stressLevel.value = StressLevel.stressed;
-    monitoringPhase.value = MonitoringPhase.meditation;
-    meditation.value =
-        BiometricMeditation(userAccount: userAccount, measurement: this);
-    meditation.value!.start();
+    // Cancel any existing subscriptions or timers
+    _metricSubscription?.cancel();
+    _accelMetricSubscription?.cancel();
+    _stressSubscription?.cancel();
+
+    // Start a new timer for the stress scenario
+    _stressScenarioTimer?.cancel();
+    _stressScenarioStartTime = DateTime.now();
+
+    // Reset the Ornstein-Uhlenbeck states for HR and HRV
+    _scenarioHrOuState = 0;
+    _scenarioHrvOuState = 0;
+
+    // Start a periodic timer to simulate HR and HRV values every second
+    _stressScenarioTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      final tSec =
+          DateTime.now().difference(_stressScenarioStartTime!).inSeconds;
+      final (hr, hrv) = _scenarioValues(tSec);
+
+      // Mean-reverting random walk around the deterministic trend, same as
+      // MockHrSensor: gives the curve a realistic wobble instead of a
+      // perfectly smooth ramp.
+      _scenarioHrOuState = (_scenarioOuAlpha * _scenarioHrOuState) +
+          (_scenarioOuSigmaStep * _scenarioGaussian());
+      final hrvOuSigma = (hrv * 0.025).clamp(0.5, 3.0);
+      _scenarioHrvOuState = (_scenarioOuAlpha * _scenarioHrvOuState) +
+          (hrvOuSigma * _scenarioGaussian());
+
+      final noisyHr = (hr + _scenarioHrOuState).clamp(40.0, 120.0);
+      final noisyHrv = (hrv + _scenarioHrvOuState).clamp(5.0, 200.0);
+      _processor.emitSimulatedSample(noisyHr.round(), noisyHrv);
+    });
+
+    // Move to the monitoring phase
+    monitoringPhase.value = MonitoringPhase.monitoring;
+    // Simulate stress on activity tracker
+    _activityTracker.simulateStress();
+    // Start monitoring stress based on the simulated HR and HRV values
+    _stressSubscription = monitorStress();
   }
 
   StressLevel checkStressLevel(int heartRate, double? rmssd) {
@@ -462,6 +532,46 @@ class Measurement {
       return StressLevel.stressed;
     }
     return StressLevel.relaxed;
+  }
+
+  /// Deterministic 2-minute HR/HRV build-up (baseline -> peak stress), ported
+  /// from the main branch's MockHrSensor. Phase 1 (0-90s) ramps gently below
+  /// the stress thresholds; phase 2 (90-120s) spikes to peak stress; after
+  /// 120s it holds at peak.
+  (double hr, double hrv) _scenarioValues(int tSec) {
+    double hr, hrv;
+    if (tSec <= 90) {
+      final frac = tSec / 90.0;
+      hr = _scenarioBaseHr + (_scenarioPhase1EndHr - _scenarioBaseHr) * frac;
+      hrv =
+          _scenarioBaseHrv - (_scenarioBaseHrv - _scenarioPhase1EndHrv) * frac;
+    } else {
+      final frac = ((tSec - 90) / 30.0).clamp(0.0, 1.0);
+      hr = _scenarioPhase1EndHr +
+          (_scenarioPeakHr - _scenarioPhase1EndHr) * frac;
+      hrv = _scenarioPhase1EndHrv -
+          (_scenarioPhase1EndHrv - _scenarioPeakHrv) * frac;
+    }
+    return (hr.clamp(40.0, 120.0), hrv.clamp(5.0, 200.0));
+  }
+
+  /// Polar Box-Muller transform — standard-normal samples for the scenario's
+  /// Ornstein-Uhlenbeck wandering (same algorithm as MockHrSensor).
+  double _scenarioGaussian() {
+    if (_scenarioHasGaussianSpare) {
+      _scenarioHasGaussianSpare = false;
+      return _scenarioGaussianSpare;
+    }
+    double u, v, s;
+    do {
+      u = _scenarioRandom.nextDouble() * 2 - 1;
+      v = _scenarioRandom.nextDouble() * 2 - 1;
+      s = u * u + v * v;
+    } while (s >= 1.0 || s == 0.0);
+    final mul = sqrt(-2.0 * log(s) / s);
+    _scenarioGaussianSpare = v * mul;
+    _scenarioHasGaussianSpare = true;
+    return u * mul;
   }
 
   List<double>? _sensorValuesAsDoubles(SensorValue data) {

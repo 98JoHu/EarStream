@@ -116,6 +116,15 @@ class ActivityTracker {
     _activityLevel.dispose();
   }
 
+  void simulateStress() {
+    // Cancel subscriptions to stop processing real data
+    _accelerometerSubscription?.cancel();
+    _gyroscopeSubscription?.cancel();
+
+    // Pretend that the user is resting for the stress period
+    _activityLevel.value = ActivityLevel.resting;
+  }
+
   void _processAccelerometerData(PpgMotionSample sample) {
     // Convert to g units
     sample = PpgMotionSample(

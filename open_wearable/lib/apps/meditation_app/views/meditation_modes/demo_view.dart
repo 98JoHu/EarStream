@@ -224,7 +224,6 @@ class DemoSelection extends StatelessWidget {
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
-              // TODO: Scale image accordingly
               child: Image.asset(
                 "lib/apps/meditation_app/assets/ubicomp_logo.png",
                 width: 40,

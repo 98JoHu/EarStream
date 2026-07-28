@@ -148,6 +148,15 @@ class HrHrvProcessor {
     _evaluateVitals(timestamp);
   }
 
+  /// Pushes a synthetic sample directly onto [biometricStream], bypassing the
+  /// PPG pipeline entirely. Used for demo scenarios (see
+  /// Measurement.simulateStress), never by the real sensor path.
+  void emitSimulatedSample(int heartRate, double? rmssd) {
+    _metricStreamController.add(
+      HeartRateSample(heartRate: heartRate, rmssd: rmssd),
+    );
+  }
+
   void dispose() {
     _metricStreamController.close();
   }
