@@ -6,9 +6,11 @@ import 'dart:math';
 /// apps/heart_tracker/model/ppg_filter.dart): adaptive channel selection,
 /// ambient-light cancellation, accelerometer-referenced motion cancellation,
 /// motion-aware outlier suppression, DC-block + band-pass filtering, bounded
-/// normalization, then a windowed (10s buffer, ~1Hz) peak-based HR/HRV
-/// estimate with quality gating. Kept as a separate copy (not an import) so
-/// the meditation app doesn't depend on the heart_tracker app.
+/// normalization, then a windowed (10s buffer, ~1Hz) peak detector with
+/// quality gating feeds both the HR estimate and a rolling RR-interval
+/// history (up to 5 minutes, minimum 1 minute before HRV is reported) used
+/// for RMSSD. Kept as a separate copy (not an import) so the meditation app
+/// doesn't depend on the heart_tracker app.
 ///
 /// Unlike the Heart Tracker page, this has no gyroscope and no optical
 /// temperature input, so the in-ear temperature gate is simply omitted.
@@ -54,8 +56,17 @@ class HrHrvProcessor {
   final double _hrProcessNoise = 0.02;
   final double _hrMeasurementNoise = 5.0;
 
-  double _hrvEstimateMs = 35.0;
-  final double _hrvSmoothingAlpha = 0.18;
+  // Rolling RR-interval history used for HRV (RMSSD): grows to a 5-minute
+  // window and then slides, with at least 1 minute of history required
+  // before HRV is reported (matches short-term HRV recording-length
+  // guidance, e.g. Shaffer & Ginsberg 2017). Kept separate from `_buffer`,
+  // which only holds the last 10s of conditioned *signal* for peak
+  // detection — RR intervals detected from that signal are accumulated
+  // here instead of being discarded once the signal buffer trims them.
+  final List<_TimestampedInterval> _rrHistory = [];
+  int? _lastRecordedPeakTimestamp;
+  late final double _hrvWindowTicks;
+  late final double _hrvMinimumWindowTicks;
 
   DateTime? _firstSampleTime;
   DateTime? _lastEmitTime;
@@ -83,6 +94,8 @@ class HrHrvProcessor {
     _windowDurationTicks = 10.0 * _ticksPerSecond;
     _minimumWindowTicks = 4.0 * _ticksPerSecond;
     _evaluationPeriodTicks = max(1.0, _ticksPerSecond);
+    _hrvWindowTicks = 300.0 * _ticksPerSecond;
+    _hrvMinimumWindowTicks = 60.0 * _ticksPerSecond;
   }
 
   /// Feeds a raw accelerometer sample (m/s^2). Used only for motion
@@ -196,19 +209,74 @@ class HrHrvProcessor {
 
     final smoothedHeartRate = _kalmanUpdateHeartRate(peakHeartRate);
 
-    double? smoothedHrvMs;
-    if (ibiTicks.length >= 2) {
-      final robustIbiTicks = _removeIbiOutliers(ibiTicks);
-      final rmssdTicks = _computeRmssd(robustIbiTicks);
-      if (rmssdTicks != null && rmssdTicks.isFinite && rmssdTicks > 0) {
-        final hrvMs = rmssdTicks * _ticksToMilliseconds;
-        if (hrvMs.isFinite && hrvMs >= 5 && hrvMs <= 300) {
-          smoothedHrvMs = _smoothHrv(hrvMs);
+    _updateRrHistory(peaks, latestTimestamp);
+    final rmssdMs = _computeRollingRmssdMs();
+
+    _maybeEmit(smoothedHeartRate, rmssdMs);
+  }
+
+  /// Folds newly-detected peaks (from the current 10s signal window) into
+  /// the rolling RR-interval history, then prunes entries older than the
+  /// 5-minute HRV window. `peaks` is a *full* re-detection over the last
+  /// 10s each call (not incremental), so only peaks strictly newer than the
+  /// last one already recorded are turned into intervals — this avoids
+  /// double-counting the same beat across overlapping evaluation cycles
+  /// while still correctly bridging the interval from the last recorded
+  /// peak into the first newly-seen one.
+  void _updateRrHistory(List<int> peaks, int latestTimestamp) {
+    var previousPeak = _lastRecordedPeakTimestamp;
+    for (final peak in peaks) {
+      if (previousPeak != null && peak > previousPeak) {
+        final intervalTicks = (peak - previousPeak).toDouble();
+        final intervalSeconds = intervalTicks / _ticksPerSecond;
+        if (intervalSeconds >= _minBeatIntervalSec &&
+            intervalSeconds <= _maxBeatIntervalSec) {
+          _rrHistory.add(
+            _TimestampedInterval(
+              timestamp: peak,
+              intervalTicks: intervalTicks,
+            ),
+          );
         }
       }
+      if (previousPeak == null || peak > previousPeak) {
+        previousPeak = peak;
+      }
+    }
+    _lastRecordedPeakTimestamp = previousPeak;
+
+    _rrHistory.removeWhere(
+      (entry) => entry.timestamp < latestTimestamp - _hrvWindowTicks,
+    );
+  }
+
+  /// RMSSD over the rolling RR-interval history: grows from a 1-minute
+  /// minimum up to a 5-minute sliding window, recomputed every evaluation
+  /// cycle alongside HR (matching Shaffer & Ginsberg 2017 short-term HRV
+  /// recording lengths), rather than smoothed frame-to-frame.
+  double? _computeRollingRmssdMs() {
+    if (_rrHistory.length < 2) {
+      return null;
+    }
+    final windowSpanTicks =
+        (_rrHistory.last.timestamp - _rrHistory.first.timestamp).toDouble();
+    if (windowSpanTicks < _hrvMinimumWindowTicks) {
+      return null;
     }
 
-    _maybeEmit(smoothedHeartRate, smoothedHrvMs);
+    final intervalTicks =
+        _rrHistory.map((entry) => entry.intervalTicks).toList(growable: false);
+    final robustIntervalTicks = _removeIbiOutliers(intervalTicks);
+    final rmssdTicks = _computeRmssd(robustIntervalTicks);
+    if (rmssdTicks == null || !rmssdTicks.isFinite || rmssdTicks <= 0) {
+      return null;
+    }
+
+    final hrvMs = rmssdTicks * _ticksToMilliseconds;
+    if (!hrvMs.isFinite || hrvMs < 5 || hrvMs > 300) {
+      return null;
+    }
+    return hrvMs;
   }
 
   void _maybeEmit(double heartRate, double? rmssd) {
@@ -456,21 +524,22 @@ class HrHrvProcessor {
     return _hrEstimate;
   }
 
-  double _smoothHrv(double measurementMs) {
-    if (!measurementMs.isFinite || measurementMs <= 0) {
-      return _hrvEstimateMs;
-    }
-    _hrvEstimateMs = (_hrvEstimateMs * (1.0 - _hrvSmoothingAlpha)) +
-        (measurementMs * _hrvSmoothingAlpha);
-    return _hrvEstimateMs;
-  }
-
   void dispose() {
     _metricStreamController.close();
   }
 }
 
 enum _SignalQuality { unavailable, bad, fair, good }
+
+class _TimestampedInterval {
+  final int timestamp;
+  final double intervalTicks;
+
+  const _TimestampedInterval({
+    required this.timestamp,
+    required this.intervalTicks,
+  });
+}
 
 class _ConditionedSample {
   final int timestamp;
