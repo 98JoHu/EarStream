@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import '../../model/user_account.dart';
@@ -333,6 +334,43 @@ class SettingsView extends DemoStepView {
 }
 
 class _SettingsViewState extends State<SettingsView> {
+  final _random = Random();
+
+  late Gender _voiceGender;
+  late SpeakingSpeed _speakingSpeed;
+  late MeditationType _meditationType;
+  late MeditationEnvironment _meditationEnvironment;
+
+  @override
+  void initState() {
+    super.initState();
+    _voiceGender = widget.userAccount.voiceGender ?? Gender.female;
+    _speakingSpeed = widget.userAccount.speakingSpeed ?? SpeakingSpeed.slow;
+    _meditationType =
+        widget.userAccount.meditationType ?? MeditationType.mindfulness;
+    _meditationEnvironment = widget.userAccount.meditationEnvironment ??
+        MeditationEnvironment.nature;
+  }
+
+  T _randomEntry<T>(List<DropdownMenuEntry<T>> entries) =>
+      entries[_random.nextInt(entries.length)].value;
+
+  void _randomiseSelection() {
+    setState(() {
+      _voiceGender = _randomEntry(voiceGenderOptions);
+      _speakingSpeed = _randomEntry(speakingSpeedOptions);
+      _meditationType = _randomEntry(meditationTypeOptions);
+      _meditationEnvironment = _randomEntry(meditationEnvironmentOptions);
+    });
+  }
+
+  void _savePreferences() {
+    widget.userAccount.voiceGender = _voiceGender;
+    widget.userAccount.speakingSpeed = _speakingSpeed;
+    widget.userAccount.meditationType = _meditationType;
+    widget.userAccount.meditationEnvironment = _meditationEnvironment;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -375,8 +413,7 @@ class _SettingsViewState extends State<SettingsView> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              // TODO: add functionality to randomize preferences
-              onPressed: () {},
+              onPressed: _randomiseSelection,
               icon: const Icon(Icons.casino_outlined),
               label: const Text('Surprise me'),
             ),
@@ -388,9 +425,10 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 8),
           VoiceGenderDropdown(
-            initialSelection: Gender.female,
+            key: ValueKey(_voiceGender),
+            initialSelection: _voiceGender,
             onSelected: (value) {
-              // TODO: Handle voice gender
+              if (value != null) setState(() => _voiceGender = value);
             },
           ),
           const SizedBox(height: 24),
@@ -400,9 +438,10 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 8),
           SpeakingSpeedDropdown(
-            initialSelection: SpeakingSpeed.slow,
+            key: ValueKey(_speakingSpeed),
+            initialSelection: _speakingSpeed,
             onSelected: (value) {
-              // TODO: Handle speaking speed
+              if (value != null) setState(() => _speakingSpeed = value);
             },
           ),
           const SizedBox(height: 24),
@@ -412,9 +451,10 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 8),
           MeditationTypeDropdown(
-            initialSelection: MeditationType.mindfulness,
+            key: ValueKey(_meditationType),
+            initialSelection: _meditationType,
             onSelected: (value) {
-              // TODO: Handle meditation type
+              if (value != null) setState(() => _meditationType = value);
             },
           ),
           const SizedBox(height: 24),
@@ -424,15 +464,24 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 8),
           MeditationEnvironmentDropdown(
-            initialSelection: MeditationEnvironment.nature,
+            key: ValueKey(_meditationEnvironment),
+            initialSelection: _meditationEnvironment,
             onSelected: (value) {
-              // TODO: Handle meditation environment
+              if (value != null) {
+                setState(() => _meditationEnvironment = value);
+              }
             },
           ),
           const SizedBox(height: 24),
           DemoNavBar(
-            onBack: widget.onBack,
-            onContinue: widget.onContinue,
+            onBack: () {
+              _savePreferences();
+              widget.onBack();
+            },
+            onContinue: () {
+              _savePreferences();
+              widget.onContinue();
+            },
             onSkip: null, // No skip option for settings
           ),
         ],

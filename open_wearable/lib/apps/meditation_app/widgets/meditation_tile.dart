@@ -56,7 +56,12 @@ class MeditationTile extends StatelessWidget {
           valueListenable: meditation.phase,
           builder: (context, phase, child) {
             if (phase == MeditationPhase.finished) {
-              return _FinishedMoodCheck(onMoodSelected: onMeditationComplete);
+              return _FinishedMoodCheck(
+                onMoodSelected: () {
+                  meditation.stop();
+                  onMeditationComplete?.call();
+                },
+              );
             }
 
             return Column(
@@ -216,6 +221,8 @@ class _FinishedMoodCheck extends StatelessWidget {
     return InkWell(
       onTap: () {
         // TODO: Implement logic to handle mood rating selection and stress reduction tracking
+        // Stop meditation session
+
         onMoodSelected?.call();
       },
       borderRadius: BorderRadius.circular(12),
