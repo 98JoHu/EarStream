@@ -463,13 +463,15 @@ class Measurement {
     final subscription = _processor.biometricStream.listen((data) {
       // if user is stressed already then don't change the stress level
       if (stressLevel.value == StressLevel.stressed) {
-        // TODO: check if user is still stressed and if not then change the stress level to relaxed
+        return;
+      }
+      // if user is highly active, suppress stress detection
+      if (_activityTracker.shouldSupressStressDetection()) {
         return;
       }
 
       // Check if the user is stressed based on heart rate and RMSSD thresholds
       final (heartRate, rmssd) = (data.heartRate, data.rmssd);
-      // TODO: take activity level into account when determining stress level
       if (checkStressLevel(heartRate, rmssd) == StressLevel.stressed) {
         // Start a meditation session if the user is stressed
         stressLevel.value = StressLevel.stressed;

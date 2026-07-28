@@ -84,6 +84,15 @@ class ActivityTracker {
   DateTime? _lastEmitTime;
   static const Duration _emitInterval = Duration(seconds: 3);
 
+  // Rolling history of classified activity levels, used to suppress stress
+  // detection during/after sustained physical activity (see
+  // shouldSupressStressDetection).
+  final List<(DateTime, ActivityLevel)> _activityHistory = [];
+  static const Duration _activityHistoryWindow = Duration(minutes: 5);
+  static const double _lightOrMoreSuppressionRatio = 0.4;
+  static const double _moderateOrMoreSuppressionRatio = 0.2;
+  static const double _vigorousOrMoreSuppressionRatio = 0.05;
+
   ActivityTracker({
     required this.accelerometerStream,
     required this.gyroscopeStream,
@@ -107,6 +116,7 @@ class ActivityTracker {
   void reset() {
     _accelWindow.clear();
     _gyroWindow.clear();
+    _activityHistory.clear();
     _activityLevel.value = ActivityLevel.resting;
   }
 
@@ -123,6 +133,26 @@ class ActivityTracker {
 
     // Pretend that the user is resting for the stress period
     _activityLevel.value = ActivityLevel.resting;
+  }
+
+  bool shouldSupressStressDetection() {
+    if (_activityHistory.isEmpty) {
+      return false;
+    }
+
+    double ratioAtLeast(ActivityLevel level) {
+      final count = _activityHistory
+          .where((entry) => entry.$2.index >= level.index)
+          .length;
+      return count / _activityHistory.length;
+    }
+
+    return ratioAtLeast(ActivityLevel.light) >= _lightOrMoreSuppressionRatio ||
+        ratioAtLeast(ActivityLevel.moderate) >=
+            _moderateOrMoreSuppressionRatio ||
+        ratioAtLeast(ActivityLevel.vigorous) >=
+            _vigorousOrMoreSuppressionRatio ||
+        ratioAtLeast(ActivityLevel.intense) > 0;
   }
 
   void _processAccelerometerData(PpgMotionSample sample) {
@@ -186,22 +216,29 @@ class ActivityTracker {
         _gyroWindow.map((s) => s.magnitude).reduce((a, b) => a + b) /
             _gyroWindow.length;
 
+    final ActivityLevel level;
     if (avgAccelDeviation < ActivityLevel.resting.accelarationThreshold &&
         avgGyroMagnitude < ActivityLevel.resting.gyroscopeThreshold) {
-      _activityLevel.value = ActivityLevel.resting;
+      level = ActivityLevel.resting;
     } else if (avgAccelDeviation < ActivityLevel.light.accelarationThreshold &&
         avgGyroMagnitude < ActivityLevel.light.gyroscopeThreshold) {
-      _activityLevel.value = ActivityLevel.light;
+      level = ActivityLevel.light;
     } else if (avgAccelDeviation <
             ActivityLevel.moderate.accelarationThreshold &&
         avgGyroMagnitude < ActivityLevel.moderate.gyroscopeThreshold) {
-      _activityLevel.value = ActivityLevel.moderate;
+      level = ActivityLevel.moderate;
     } else if (avgAccelDeviation <
             ActivityLevel.vigorous.accelarationThreshold &&
         avgGyroMagnitude < ActivityLevel.vigorous.gyroscopeThreshold) {
-      _activityLevel.value = ActivityLevel.vigorous;
+      level = ActivityLevel.vigorous;
     } else {
-      _activityLevel.value = ActivityLevel.intense;
+      level = ActivityLevel.intense;
     }
+
+    _activityLevel.value = level;
+    _activityHistory.add((now, level));
+    _activityHistory.removeWhere(
+      (entry) => now.difference(entry.$1) > _activityHistoryWindow,
+    );
   }
 }
