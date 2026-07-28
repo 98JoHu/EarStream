@@ -26,21 +26,30 @@ class SessionProgress {
   });
 }
 
+enum MeditationPhase {
+  preparing,
+  welcome,
+  segment,
+  completion,
+  finished,
+}
+
 class Meditation {
   final UserAccount userAccount;
   final AudioPlayer musicPlayer = AudioPlayer();
   late final TtsService ttsService;
-  final FlutterTts voicePlayer = FlutterTts();
   final int maxSegments;
 
   final ValueNotifier<SessionProgress?> progress =
       ValueNotifier<SessionProgress?>(null);
+  late final ValueNotifier<MeditationPhase> phase;
 
   bool isStopped = false;
-  bool isPaused = false;
+  final ValueNotifier<bool> isPaused = ValueNotifier<bool>(false);
   Completer<void>? _resumeCompleter;
 
   Meditation({required this.userAccount, this.maxSegments = 10}) {
+    phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
     ttsService = TtsService(userAccount: userAccount);
     initializeAudioPlayers();
   }
@@ -112,9 +121,11 @@ class Meditation {
 
     // Speak the welcome message
     if (!isStopped) {
+      phase.value = MeditationPhase.welcome;
       await _speakRespectingPause(welcomeMessage);
     }
 
+    phase.value = MeditationPhase.segment;
     // Start the meditation segments
     int index = 0;
     for (final segment in segments) {
@@ -131,7 +142,7 @@ class Meditation {
       speakFuture.whenComplete(() => speaking = false);
 
       while (true) {
-        if (isPaused) {
+        if (isPaused.value) {
           final pauseStart = DateTime.now();
           await _waitForResume();
           pausedDuration += DateTime.now().difference(pauseStart);
@@ -160,10 +171,12 @@ class Meditation {
 
     // Speak the completion message
     if (!isStopped) {
+      phase.value = MeditationPhase.completion;
       await _speakRespectingPause(completionMessage);
     }
 
-    // TODO: implement finishing logic: popup to rate this session, etc.
+    // Mark the meditation as finished
+    phase.value = MeditationPhase.finished;
   }
 
   Future<void> stop() async {
@@ -173,7 +186,7 @@ class Meditation {
     _resumeCompleter = null;
 
     await musicPlayer.stop();
-    await voicePlayer.stop();
+    await ttsService.stop();
   }
 
   Future<void> _waitForResume() {
@@ -185,23 +198,23 @@ class Meditation {
   // resume() and re-speaks from the start once the user comes back.
   Future<void> _speakRespectingPause(String text) async {
     while (true) {
-      if (isPaused) await _waitForResume();
+      if (isPaused.value) await _waitForResume();
       if (isStopped) return;
 
       await ttsService.speak(text);
-      if (!isPaused) return;
+      if (!isPaused.value) return;
     }
   }
 
   void pause() {
-    isPaused = true;
+    isPaused.value = true;
     _resumeCompleter ??= Completer<void>();
     musicPlayer.pause();
-    voicePlayer.stop(); // flutter_tts can't reliably resume mid-utterance
+    ttsService.stop();
   }
 
   void resume() {
-    isPaused = false;
+    isPaused.value = false;
     musicPlayer.resume();
     _resumeCompleter?.complete();
     _resumeCompleter = null;
@@ -209,7 +222,8 @@ class Meditation {
 
   void dispose() {
     musicPlayer.dispose();
-    voicePlayer.stop();
+    ttsService.stop();
+    isPaused.dispose();
   }
 }
 
@@ -242,6 +256,11 @@ class TtsService {
       }
     }
     await _fallbackTtsPlayer.speak(text);
+  }
+
+  Future<void> stop() async {
+    await _premiumTtsPlayer.stop();
+    await _fallbackTtsPlayer.stop();
   }
 
   Future<String> _fetchDashscopeTtsUrl(String text) async {

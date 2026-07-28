@@ -150,7 +150,7 @@ class _DemoViewState extends State<DemoView> {
           return Column(
             children: [
               MeditationTile(
-                meditation: ValueNotifier<Meditation?>(meditation),
+                meditationNotifier: ValueNotifier<Meditation?>(meditation),
                 onMeditationComplete: _finish,
               ),
               if (!context.read<UserAccount>().hasValidDeepseekKey) ...[

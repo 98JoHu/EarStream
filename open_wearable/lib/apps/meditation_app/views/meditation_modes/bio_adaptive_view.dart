@@ -39,7 +39,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           APIWarning(serviceName: "Deepseek"),
           SizedBox(height: 16),
         ],
-        MeditationTile(meditation: measurement.meditation),
+        MeditationTile(meditationNotifier: measurement.meditation),
         ElevatedButton.icon(
           onPressed: () => {
             switch (measurement.state) {

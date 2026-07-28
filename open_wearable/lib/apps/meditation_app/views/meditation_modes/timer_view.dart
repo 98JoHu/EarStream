@@ -78,7 +78,7 @@ class _TimerViewState extends State<TimerView> {
                 APIWarning(serviceName: "Deepseek"),
                 const SizedBox(height: 16),
               ],
-              MeditationTile(meditation: _currentMeditation),
+              MeditationTile(meditationNotifier: _currentMeditation),
             ],
           );
         } else {
