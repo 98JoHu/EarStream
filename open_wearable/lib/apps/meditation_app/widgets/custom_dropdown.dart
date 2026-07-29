@@ -55,12 +55,14 @@ class FormDropdown<T> extends StatelessWidget {
   final T initialSelection;
   final List<DropdownMenuEntry<T>> entries;
   final ValueChanged<T?> onSelected;
+  final double? menuHeight;
 
   const FormDropdown({
     super.key,
     required this.initialSelection,
     required this.entries,
     required this.onSelected,
+    this.menuHeight,
   });
 
   @override
@@ -68,6 +70,7 @@ class FormDropdown<T> extends StatelessWidget {
     return DropdownMenu<T>(
       initialSelection: initialSelection,
       expandedInsets: EdgeInsets.zero,
+      menuHeight: menuHeight,
       dropdownMenuEntries: entries,
       onSelected: (T? value) {
         if (value != null) {
@@ -166,4 +169,31 @@ class StressThresholdDropdown extends StatelessWidget {
         entries: stressThresholdOptions,
         onSelected: onSelected,
       );
+}
+
+class ElevenLabsVoiceDropdown extends StatelessWidget {
+  final List<({String voice, String id})> voices;
+  final String? initialSelection;
+  final ValueChanged<String?> onSelected;
+
+  const ElevenLabsVoiceDropdown({
+    super.key,
+    required this.voices,
+    required this.initialSelection,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FormDropdown<String>(
+      initialSelection: initialSelection ?? voices.first.id,
+      menuHeight: 300,
+      entries: voices
+          .map(
+            (voice) => DropdownMenuEntry(value: voice.id, label: voice.voice),
+          )
+          .toList(),
+      onSelected: onSelected,
+    );
+  }
 }

@@ -28,6 +28,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
   late double _stressThreshold;
+  late String? _elevenLabsVoiceId;
 
   @override
   void initState() {
@@ -42,6 +43,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _meditationEnvironment = widget.userAccount.meditationEnvironment ??
         MeditationEnvironment.nature;
     _stressThreshold = widget.userAccount.stressThreshold ?? 0.10;
+    _elevenLabsVoiceId = widget.userAccount.elevenLabsVoiceId;
   }
 
   @override
@@ -60,6 +62,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
         widget.userAccount.additionalPreferences =
             _additionalPreferencesController.text;
         widget.userAccount.stressThreshold = _stressThreshold;
+        widget.userAccount.elevenLabsVoiceId = _elevenLabsVoiceId;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -184,7 +187,24 @@ class _PreferencesPageState extends State<PreferencesPage> {
                         setState(() => _stressThreshold = value!),
                   ),
                   const SizedBox(height: 24),
-                  // TODO: Add eleven labs voice selection
+                  if (widget.userAccount.hasValidElevenLabsKey &&
+                      widget.userAccount.availableElevenLabsVoices != null) ...[
+                    const Text(
+                      'Eleven Labs Voice Selection',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevenLabsVoiceDropdown(
+                      voices: widget.userAccount.availableElevenLabsVoices!,
+                      initialSelection: _elevenLabsVoiceId,
+                      onSelected: (value) {
+                        setState(() {
+                          _elevenLabsVoiceId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),

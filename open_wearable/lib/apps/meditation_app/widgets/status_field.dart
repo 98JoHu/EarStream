@@ -234,12 +234,11 @@ class ElevenLabsManager extends ConnectionManager {
     }
 
     final response = await http.get(
-      Uri.parse('https://api.elevenlabs.io/v1/user'),
+      Uri.parse('https://api.elevenlabs.io/v1/voices'),
       headers: {
-        'xi-api-key': 'Bearer ${userAccount.elevenLabsApiKey}',
+        'xi-api-key': '${userAccount.elevenLabsApiKey}',
       },
     );
-
     if (response.statusCode != 200) {
       userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
       throw Exception(
@@ -252,11 +251,14 @@ class ElevenLabsManager extends ConnectionManager {
 
   @override
   Future<void> updateUser(dynamic result) async {
-    // Extract relevant account info from the result and update your user model
-    // Example:
-    // userAccount.elevenLabsSubscriptionLevel = result['subscription']['plan'];
-    print('ElevenLabs Synced. Account Info: $result');
+    final voices = result["voices"] as List;
     userAccount.hasValidElevenLabsKey = true; // Mark the key as valid
+    userAccount.availableElevenLabsVoices = voices
+        .map(
+          (voice) =>
+              (voice: voice["name"] as String, id: voice["voice_id"] as String),
+        )
+        .toList();
   }
 }
 
