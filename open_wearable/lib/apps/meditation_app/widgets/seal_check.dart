@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SealCheck extends StatefulWidget {
   final Wearable? wearable;
@@ -22,7 +27,10 @@ class _SealCheckState extends State<SealCheck> {
 
   Future<void> _startMeasurement() async {
     if (!widget.wearable!.hasCapability<AudioResponseManager>()) {
-      // TODO: Show an error message to the user indicating that the capability is not available
+      _showSnackBar(
+        "This wearable doesn't support the seal check.",
+        isError: true,
+      );
       return;
     }
     final capability =
@@ -33,13 +41,13 @@ class _SealCheckState extends State<SealCheck> {
 
     try {
       final result = await capability.measureAudioResponse({});
-      print(result);
       setState(() {
         _measurementResult = result;
       });
       widget.onSealCheckCompleted?.call();
+      _showSnackBar("Seal check completed successfully.");
     } catch (e) {
-      // TODO: Show an error message to the user indicating that the measurement failed
+      _showSnackBar("Seal check failed: $e", isError: true);
     } finally {
       setState(() {
         _isMeasuring = false;
@@ -47,8 +55,35 @@ class _SealCheckState extends State<SealCheck> {
     }
   }
 
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            isError ? Theme.of(context).colorScheme.error : Colors.green,
+      ),
+    );
+  }
+
   Future<void> _saveJson() async {
-    // TODO: Implement JSON saving logic
+    final result = _measurementResult;
+    if (result == null) {
+      _showSnackBar("No measurement result to save.", isError: true);
+      return;
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final file = File(
+      '${tempDir.path}/seal_check_${DateTime.now().millisecondsSinceEpoch}.json',
+    );
+    await file.writeAsString(jsonEncode(result));
+
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: 'Seal Check Result',
+      ),
+    );
   }
 
   @override

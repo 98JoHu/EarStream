@@ -222,7 +222,6 @@ class _FinishedMoodCheck extends StatelessWidget {
       onTap: () {
         // TODO: Implement logic to handle mood rating selection and stress reduction tracking
         // Stop meditation session
-
         onMoodSelected?.call();
       },
       borderRadius: BorderRadius.circular(12),

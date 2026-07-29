@@ -587,7 +587,6 @@ class _SealCheckViewState extends State<SealCheckView> {
           canContinue:
               _isCheckCompleted, // Enable continue only if check is completed
         ),
-        // TODO: Add visual feedback for seal check result (success/failure)
       ],
     );
   }
