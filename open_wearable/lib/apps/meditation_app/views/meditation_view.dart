@@ -33,6 +33,7 @@ class MeditationView extends StatefulWidget {
 
 class _MeditationViewState extends State<MeditationView> {
   int _selectedIndex = 0;
+  int _meditationPageKey = 0;
   final UserAccount _mockUserAccount = UserAccount(
     username: 'johndoe',
     firstName: 'John',
@@ -70,6 +71,11 @@ class _MeditationViewState extends State<MeditationView> {
           selectedIndex: _selectedIndex,
           onDestinationSelected: (int index) {
             setState(() {
+              if (index == 0) {
+                // Force MeditationPage to remount so it always lands back on
+                // the mode picker, even if it was already the selected page.
+                _meditationPageKey++;
+              }
               _selectedIndex = index;
             });
             // Close the drawer after selecting a destination
@@ -120,7 +126,17 @@ class _MeditationViewState extends State<MeditationView> {
         ),
       ),
       body: SafeArea(
-        child: _pages[_selectedIndex],
+        child: _selectedIndex == 0
+            ? MeditationPage(
+                key: ValueKey(_meditationPageKey),
+                ppgSensor: widget.ppgSensor,
+                accelerometerSensor: widget.accelerometerSensor,
+                gyroscopeSensor: widget.gyroscopeSensor,
+                sensorConfigProvider: widget.sensorConfigProvider,
+                userAccount: _mockUserAccount,
+                wearable: widget.wearable,
+              )
+            : _pages[_selectedIndex],
       ),
     );
   }
