@@ -193,51 +193,70 @@ class _TimerViewState extends State<TimerView> {
                 ),
                 const SizedBox(height: 16),
                 if (_scheduledMeditations.isNotEmpty)
-                  // TODO: Extract widget
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const Text(
-                            'Scheduled Meditations',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _scheduledMeditations.length,
-                            itemBuilder: (context, index) {
-                              final meditation = _scheduledMeditations[index];
-                              return ListTile(
-                                title: Text(
-                                  'Scheduled at ${DateFormat('MM/dd/yyyy hh:mm').format(meditation.scheduledTime)}',
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.cancel),
-                                  onPressed: () {
-                                    setState(() {
-                                      _scheduledMeditations.removeAt(index);
-                                    });
-                                  },
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                  ScheduledMeditationList(
+                    scheduledMeditations: _scheduledMeditations,
+                    onCancel: (meditation) {
+                      setState(() {
+                        _scheduledMeditations.remove(meditation);
+                      });
+                    },
                   ),
               ],
             ),
           );
         }
       },
+    );
+  }
+}
+
+class ScheduledMeditationList extends StatelessWidget {
+  final List<ScheduledMeditation> scheduledMeditations;
+  final ValueChanged<ScheduledMeditation> onCancel;
+
+  const ScheduledMeditationList({
+    super.key,
+    required this.scheduledMeditations,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text(
+              'Scheduled Meditations',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: scheduledMeditations.length,
+              separatorBuilder: (context, index) => const Divider(),
+              itemBuilder: (context, index) {
+                final meditation = scheduledMeditations[index];
+                return ListTile(
+                  title: Text(
+                    'Scheduled at ${DateFormat('MM/dd/yyyy hh:mm').format(meditation.scheduledTime)}',
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.cancel),
+                    onPressed: () => onCancel(meditation),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
