@@ -422,13 +422,18 @@ class Measurement {
     progress.dispose();
     if (meditation.value != null) {
       meditation.value!.dispose();
-      meditation.value = null;
     }
     meditation.dispose();
-    // Turn off the sensors to save battery
-    _turnOffSensor(ppgSensor);
-    _turnOffSensor(accelerometerSensor);
-    _turnOffSensor(gyroscopeSensor);
+    // Turn off the sensors to save battery. Deferred to a microtask because
+    // this notifies SensorConfigurationProvider, an ancestor of this widget;
+    // calling that synchronously here would notify it while the widget tree
+    // is still locked for this disposal pass ("setState() or
+    // markNeedsBuild() called when widget tree was locked").
+    scheduleMicrotask(() {
+      _turnOffSensor(ppgSensor);
+      _turnOffSensor(accelerometerSensor);
+      _turnOffSensor(gyroscopeSensor);
+    });
   }
 
   StreamSubscription<HeartRateSample> adjustBaseline() {
