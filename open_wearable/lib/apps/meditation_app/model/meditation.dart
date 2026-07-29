@@ -121,7 +121,6 @@ class Meditation {
             .toList();
       } catch (e) {
         print("Error generating meditation session: $e");
-        return;
       }
     }
 
@@ -228,55 +227,32 @@ class Meditation {
 
   void dispose() {
     musicPlayer.dispose();
-    ttsService.stop();
+    ttsService.dispose();
     isPaused.dispose();
   }
 }
 
-class TtsService {
-  final UserAccount userAccount;
-  final AudioPlayer _premiumTtsPlayer = AudioPlayer();
-  final FlutterTts _fallbackTtsPlayer = FlutterTts();
+abstract interface class TtsProvider {
+  bool get isAvailable;
+  Future<Source> synthesize(String text);
+}
 
-  TtsService({required this.userAccount}) {
-    _initializeFallbackTts();
-  }
+class DashscopeTtsProvider implements TtsProvider {
+  final UserAccount account;
+  DashscopeTtsProvider(this.account);
 
-  void _initializeFallbackTts() async {
-    await _fallbackTtsPlayer.awaitSpeakCompletion(true);
-    await _fallbackTtsPlayer.setLanguage("en-US");
-    await _fallbackTtsPlayer.setSpeechRate(0.3);
-    await _fallbackTtsPlayer.setVolume(0.8);
-  }
+  @override
+  bool get isAvailable => account.hasValidDashscopeKey;
 
-  Future<void> speak(String text) async {
-    if (userAccount.hasValidDashscopeKey) {
-      // Use Dashscope TTS
-      try {
-        final audioUrl = await _fetchDashscopeTtsUrl(text);
-        await _premiumTtsPlayer.play(UrlSource(audioUrl));
-      } catch (e) {
-        print("Error using Dashscope TTS: $e");
-        // Fallback to Flutter TTS if Dashscope fails
-        await _fallbackTtsPlayer.speak(text);
-      }
-    }
-    await _fallbackTtsPlayer.speak(text);
-  }
-
-  Future<void> stop() async {
-    await _premiumTtsPlayer.stop();
-    await _fallbackTtsPlayer.stop();
-  }
-
-  Future<String> _fetchDashscopeTtsUrl(String text) async {
-    final url = Uri.parse(
+  @override
+  Future<Source> synthesize(String text) async {
+    final endpoint = Uri.parse(
       'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
     );
-    final response = await http.post(
-      url,
+    final res = await http.post(
+      endpoint,
       headers: {
-        'Authorization': 'Bearer ${userAccount.dashscopeApiKey!}',
+        'Authorization': 'Bearer ${account.dashscopeApiKey!}',
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
@@ -297,16 +273,117 @@ class TtsService {
         },
       }),
     );
-
-    if (response.statusCode == 200) {
-      print("Dashscope TTS response: ${response.body}");
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      return decoded['audio_url'] as String;
-    } else {
-      throw Exception(
-        'Failed to fetch Dashscope TTS URL: ${response.body}',
-      );
+    if (res.statusCode != 200) {
+      throw Exception('Dashscope ${res.statusCode}: ${res.body}');
     }
+    final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+    final url = decoded['output']['audio']['url'] as String;
+    return UrlSource(url);
+  }
+}
+
+class ElevenLabsTtsProvider implements TtsProvider {
+  final UserAccount account;
+  ElevenLabsTtsProvider(this.account);
+
+  @override
+  bool get isAvailable => account.hasValidElevenLabsKey;
+
+  @override
+  Future<Source> synthesize(String text) async {
+    final voiceId = account.elevenLabsVoiceId ??
+        account.availableElevenLabsVoices!.first.id;
+    final key = account.elevenLabsApiKey!;
+    final endpoint = Uri.parse(
+      'https://api.elevenlabs.io/v1/text-to-speech/$voiceId',
+    );
+    final res = await http.post(
+      endpoint,
+      headers: {
+        'xi-api-key': key,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'text': text,
+        'model_id': 'eleven_flash_v2_5', // fast + cheap
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('ElevenLabs ${res.statusCode}: ${res.body}');
+    }
+    return BytesSource(res.bodyBytes);
+  }
+}
+
+class TtsService {
+  final List<TtsProvider> _providers;
+  final FlutterTts _fallbackTts;
+  final AudioPlayer _player = AudioPlayer();
+
+  TtsService({required UserAccount userAccount})
+      : _providers = [
+          DashscopeTtsProvider(userAccount),
+          ElevenLabsTtsProvider(userAccount),
+        ],
+        _fallbackTts = FlutterTts() {
+    _initializeFallbackTts(userAccount);
+  }
+
+  // Picked from this device's `getVoices()` output (Android's Google TTS
+  // engine doesn't expose a gender field, unlike iOS/macOS/Windows) — swap
+  // these if either doesn't actually sound right.
+  static const _femaleVoice = {'name': 'en-us-x-sfg-local', 'locale': 'en-US'};
+  static const _maleVoice = {'name': 'en-us-x-iob-local', 'locale': 'en-US'};
+
+  void _initializeFallbackTts(UserAccount userAccount) async {
+    await _fallbackTts.awaitSpeakCompletion(true);
+    await _fallbackTts.setLanguage("en-US");
+    await _fallbackTts.setSpeechRate(userAccount.speakingSpeed?.speed ?? 0.3);
+    await _fallbackTts.setVolume(0.8);
+
+    if (userAccount.voiceGender == Gender.male) {
+      await _fallbackTts.setVoice(_maleVoice);
+    } else if (userAccount.voiceGender == Gender.female) {
+      await _fallbackTts.setVoice(_femaleVoice);
+    }
+  }
+
+  // audioplayers defaults every player to an exclusive ("gain") Android audio
+  // focus request, which pauses musicPlayer the instant this player starts —
+  // gainTransientMayDuck just lowers the music's volume instead, letting it
+  // keep playing under the narration.
+  static final _premiumTtsAudioContext = AudioContext(
+    android: AudioContextAndroid(
+      audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+    ),
+  );
+
+  Future<void> speak(String text) async {
+    for (final provider in _providers) {
+      if (provider.isAvailable) {
+        try {
+          final source = await provider.synthesize(text);
+          await _player.setAudioContext(_premiumTtsAudioContext);
+          await _player.play(source);
+          return;
+        } catch (e) {
+          print("Error using ${provider.runtimeType}: $e");
+        }
+      }
+    }
+
+    // Fallback to FlutterTts if no premium provider is available or fails
+    await _fallbackTts.speak(text);
+  }
+
+  Future<void> stop() async {
+    await _player.stop();
+    await _fallbackTts.stop();
+  }
+
+  void dispose() {
+    _player.dispose();
+    _fallbackTts.stop();
   }
 }
 
