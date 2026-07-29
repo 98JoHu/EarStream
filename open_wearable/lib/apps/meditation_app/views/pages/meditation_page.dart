@@ -117,9 +117,9 @@ class _MeditationPageState extends State<MeditationPage> {
 
     return MultiProvider(
       providers: [
-        Provider<Measurement>(create: (_) => _measurement!),
-        Provider<UserAccount>(create: (_) => widget.userAccount),
-        Provider<Wearable?>(create: (_) => widget.wearable),
+        Provider<Measurement>.value(value: _measurement!),
+        Provider<UserAccount>.value(value: widget.userAccount),
+        Provider<Wearable?>.value(value: widget.wearable),
       ],
       child: SingleChildScrollView(
         child: Padding(
