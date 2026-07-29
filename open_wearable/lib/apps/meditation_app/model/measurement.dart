@@ -122,6 +122,7 @@ class Measurement {
       _processor.biometricStream.map((biometrics) => biometrics.heartRate);
   Stream<double?> get rmssd =>
       _processor.biometricStream.map((biometrics) => biometrics.rmssd);
+  HeartRateSample? get latestBiometrics => _processor.latestSample;
 
   // Expose calculated values to UI
   ValueNotifier<StressLevel> stressLevel = ValueNotifier(StressLevel.relaxed);

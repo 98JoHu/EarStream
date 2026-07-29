@@ -6,13 +6,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'user_account.dart';
 import 'measurement.dart';
-
-final String welcomeMessage =
-    "Welcome. I'm here to guide you through a calming meditation. Let's begin together.";
-final String completionMessage =
-    "Wonderful work. You have taken a meaningful step towards calm. Carry this peace with you.";
-final defaultSegmentMessage =
-    '''Take a deep breath in...  hold gently for a moment... and slowly release. Feel the tension melting away with each exhale. Your body is becoming more relaxed... your mind more peaceful. Continue breathing naturally... finding your center... allowing calmness to flow through you.''';
+import 'meditation_session_generator.dart';
 
 class SessionProgress {
   final int currentSegment;
@@ -49,6 +43,8 @@ class Meditation {
   final ValueNotifier<bool> isPaused = ValueNotifier<bool>(false);
   Completer<void>? _resumeCompleter;
 
+  MeditationScript? _script;
+
   Meditation({
     required this.userAccount,
     this.maxSegments = 10,
@@ -56,11 +52,12 @@ class Meditation {
   }) {
     phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
     ttsService = TtsService(userAccount: userAccount);
-    initializeAudioPlayers();
   }
 
   // This method can be overridden in subclasses to implement early exit conditions.
   bool checkEarlyExit() => false;
+
+  HeartRateSample? readCurrentBiometrics() => null;
 
   void initializeAudioPlayers() async {
     // Initialize the music player
@@ -68,120 +65,49 @@ class Meditation {
     await musicPlayer.setVolume(0.3);
   }
 
-  // Generate default instructions for fallback meditation
-  ({
-    String welcomeMessage,
-    String completionMessage,
-    List<MeditationSegment> segments
-  }) _loadFallbackSession() {
-    return (
-      welcomeMessage: welcomeMessage,
-      completionMessage: completionMessage,
-      segments: List.generate(
-        maxSegments,
-        (index) => MeditationSegment(
-          segmentId: index + 1,
-          instruction: defaultSegmentMessage,
-          durationSeconds: meditationSegmentDuration?.inSeconds ?? 30,
-          targetBreathsPerMinute: 6,
-        ),
-      ),
-    );
-  }
-
   Future<void> start() async {
     isStopped = false;
-
     // Start background music
-    musicPlayer.audioCache =
-        AudioCache(prefix: "lib/apps/meditation_app/assets/audio/");
-    await musicPlayer.play(
-      AssetSource(
-        userAccount.meditationEnvironment?.assetPath ??
-            MeditationEnvironment.nature.assetPath,
-      ),
+    await _startBackgroundMusic();
+
+    // build meditation script
+    _script = createMeditationScript(
+      account: userAccount,
+      maxSegments: maxSegments,
+      segmentDuration: meditationSegmentDuration,
     );
 
-    final session = _loadFallbackSession();
-    var welcomeMessage = session.welcomeMessage;
-    var completionMessage = session.completionMessage;
-    var segments = session.segments;
-
-    if (userAccount.hasValidDeepseekKey) {
-      try {
-        final sessionData = await generateMeditationSession(
-          userAccount: userAccount,
-          maxSegments: maxSegments,
-          meditationSegmentDuration: meditationSegmentDuration,
-        );
-        welcomeMessage = sessionData['welcomeMessage'] as String;
-        completionMessage = sessionData['completionMessage'] as String;
-        segments = (sessionData['segments'] as List)
-            .map((segment) => MeditationSegment.fromJson(segment))
-            .toList();
-      } catch (e) {
-        print("Error generating meditation session: $e");
-      }
+    MeditationFrame opening;
+    try {
+      opening = await _script!.begin();
+    } catch (e) {
+      print("Error generating meditation opening: $e");
+      _script!.dispose();
+      _script = StaticMeditationScript.fallback(
+        segmentCount: maxSegments,
+        segmentDuration: meditationSegmentDuration,
+      );
+      opening = await _script!.begin();
     }
+
+    if (isStopped) return _endRun();
 
     // Speak the welcome message
-    if (!isStopped) {
-      phase.value = MeditationPhase.welcome;
-      await _speakRespectingPause(welcomeMessage);
-    }
+    phase.value = MeditationPhase.welcome;
+    await _speakRespectingPause(opening.welcomeMessage);
 
+    // Run through the meditation segments
     phase.value = MeditationPhase.segment;
-    // Start the meditation segments
-    int index = 0;
-    for (final segment in segments) {
-      // if the meditation has been stopped, break out of the loop
-      if (isStopped) break;
-
-      index++;
-      final segmentStart = DateTime.now();
-      final segmentDuration = Duration(seconds: segment.durationSeconds);
-      var pausedDuration = Duration.zero;
-      var speaking = true;
-
-      final speakFuture = _speakRespectingPause(segment.instruction);
-      speakFuture.whenComplete(() => speaking = false);
-
-      while (true) {
-        if (isPaused.value) {
-          final pauseStart = DateTime.now();
-          await _waitForResume();
-          pausedDuration += DateTime.now().difference(pauseStart);
-        }
-        if (isStopped) break;
-
-        final elapsed =
-            DateTime.now().difference(segmentStart) - pausedDuration;
-
-        if (!speaking && elapsed >= segmentDuration) break;
-
-        progress.value = SessionProgress(
-          currentSegment: index,
-          totalSegments: segments.length,
-          segmentElapsed: elapsed,
-        );
-
-        await Future.delayed(const Duration(seconds: 1));
-      }
-
-      await speakFuture; // Ensure the segment instruction has finished speaking
-
-      if (isStopped) break;
-      if (checkEarlyExit()) break;
-    }
+    await _runSegments(opening.firstSegment);
 
     // Speak the completion message
-    if (!isStopped) {
-      phase.value = MeditationPhase.completion;
-      await _speakRespectingPause(completionMessage);
-    }
+    if (isStopped) return _endRun();
+    phase.value = MeditationPhase.completion;
+    await _speakRespectingPause(opening.completionMessage);
 
     // Mark the meditation as finished
     phase.value = MeditationPhase.finished;
+    _endRun();
   }
 
   Future<void> stop() async {
@@ -192,23 +118,6 @@ class Meditation {
 
     await musicPlayer.stop();
     await ttsService.stop();
-  }
-
-  Future<void> _waitForResume() {
-    _resumeCompleter ??= Completer<void>();
-    return _resumeCompleter!.future;
-  }
-
-  // Speaks [text], but if pause() cuts it off mid-utterance, waits for
-  // resume() and re-speaks from the start once the user comes back.
-  Future<void> _speakRespectingPause(String text) async {
-    while (true) {
-      if (isPaused.value) await _waitForResume();
-      if (isStopped) return;
-
-      await ttsService.speak(text);
-      if (!isPaused.value) return;
-    }
   }
 
   void pause() {
@@ -229,6 +138,96 @@ class Meditation {
     musicPlayer.dispose();
     ttsService.dispose();
     isPaused.dispose();
+  }
+
+  Future<void> _waitForResume() {
+    _resumeCompleter ??= Completer<void>();
+    return _resumeCompleter!.future;
+  }
+
+  Future<void> _speakRespectingPause(String text) async {
+    while (true) {
+      if (isPaused.value) await _waitForResume();
+      if (isStopped) return;
+
+      await ttsService.speak(text);
+      if (!isPaused.value) return;
+    }
+  }
+
+  Future<void> _startBackgroundMusic() async {
+    musicPlayer.audioCache =
+        AudioCache(prefix: "lib/apps/meditation_app/assets/audio/");
+    await musicPlayer.setReleaseMode(ReleaseMode.loop);
+    await musicPlayer.setVolume(0.3);
+    await musicPlayer.play(
+      AssetSource(
+        userAccount.meditationEnvironment?.assetPath ??
+            MeditationEnvironment.nature.assetPath,
+      ),
+    );
+  }
+
+  Future<void> _runSegments(MeditationSegment first) async {
+    MeditationSegment? segment = first;
+    int index = 0;
+
+    while (segment != null && !isStopped) {
+      index++;
+      final current = segment;
+      final segmentStart = DateTime.now();
+      final segmentDuration = Duration(seconds: current.durationSeconds);
+      var pausedDuration = Duration.zero;
+      var speaking = true;
+
+      final speakFuture = _speakRespectingPause(current.instruction);
+      speakFuture.whenComplete(() => speaking = false);
+
+      // Prefetch of the next segment, started when speaking finishes.
+      Future<MeditationSegment?>? nextFuture;
+
+      while (true) {
+        if (isPaused.value) {
+          final pauseStart = DateTime.now();
+          await _waitForResume();
+          pausedDuration += DateTime.now().difference(pauseStart);
+        }
+        if (isStopped) break;
+
+        // The instruction just finished: sample biometrics now and begin
+        // generating the next segment during the remaining breathing pause.
+        if (!speaking && nextFuture == null) {
+          nextFuture = _script!.nextSegment(readCurrentBiometrics());
+        }
+
+        final elapsed =
+            DateTime.now().difference(segmentStart) - pausedDuration;
+        if (!speaking && elapsed >= segmentDuration) break;
+
+        progress.value = SessionProgress(
+          currentSegment: index,
+          totalSegments: maxSegments,
+          segmentElapsed: elapsed,
+        );
+
+        await Future.delayed(const Duration(seconds: 1));
+      }
+
+      await speakFuture; // ensure the instruction has finished speaking
+
+      if (isStopped) break;
+      if (checkEarlyExit()) break;
+
+      // The prefetch usually completed during the pause; await whatever's left.
+      // (If we broke before speaking ended, nextFuture may be null.)
+      segment =
+          await (nextFuture ?? _script!.nextSegment(readCurrentBiometrics()));
+    }
+  }
+
+  void _endRun() {
+    _script?.dispose();
+    _script = null;
   }
 }
 
@@ -365,6 +364,7 @@ class TtsService {
           final source = await provider.synthesize(text);
           await _player.setAudioContext(_premiumTtsAudioContext);
           await _player.play(source);
+          await _player.onPlayerComplete.first;
           return;
         } catch (e) {
           print("Error using ${provider.runtimeType}: $e");
@@ -387,29 +387,6 @@ class TtsService {
   }
 }
 
-class MeditationSegment {
-  final int segmentId;
-  final String instruction;
-  final int durationSeconds;
-  final int targetBreathsPerMinute;
-
-  MeditationSegment({
-    required this.segmentId,
-    required this.instruction,
-    required this.durationSeconds,
-    required this.targetBreathsPerMinute,
-  });
-
-  factory MeditationSegment.fromJson(Map<String, dynamic> json) {
-    return MeditationSegment(
-      segmentId: json['segmentId'] as int,
-      instruction: json['instruction'] as String,
-      durationSeconds: json['durationSeconds'] as int,
-      targetBreathsPerMinute: json['targetBreathsPerMinute'] as int,
-    );
-  }
-}
-
 class BiometricMeditation extends Meditation {
   final Measurement measurement;
 
@@ -423,6 +400,9 @@ class BiometricMeditation extends Meditation {
   @override
   bool checkEarlyExit() =>
       measurement.currentStressLevel == StressLevel.relaxed;
+
+  @override
+  HeartRateSample? readCurrentBiometrics() => measurement.latestBiometrics;
 }
 
 class ScheduledMeditation extends Meditation {
@@ -440,114 +420,5 @@ class ScheduledMeditation extends Meditation {
         now.day == scheduledTime.day &&
         now.hour == scheduledTime.hour &&
         now.minute == scheduledTime.minute;
-  }
-}
-
-Future<Map<String, dynamic>> generateMeditationSession({
-  required UserAccount userAccount,
-  int maxSegments = 10,
-  Duration? meditationSegmentDuration,
-}) async {
-  final url = Uri.parse('https://api.deepseek.com/chat/completions');
-  final meditationType = userAccount.meditationType ?? 'mindfulness';
-  final userContext = userAccount.getContextSummary();
-  final systemPrompt = '''
-      You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.
-      Your purpose is to lead personalized, adaptive meditations based on real-time biosignals (heart rate and HRV).
-
-      $userContext
-
-      MEDITATION TYPE: $meditationType
-      You are guiding a $meditationType meditation session. Stay true to this meditation type throughout all segments.
-
-      CRITICAL GUIDELINES:
-      1. ALWAYS include specific breathing instructions in every segment:
-        - "Breathe in slowly for 4 counts... and breathe out for 6 counts"
-        - "Let's take a deep breath together... in through your nose... out through your mouth"
-        - "Notice your breath... inhale deeply... exhale completely..."
-
-      2. Make it PERSONAL:
-        - Use their name naturally (not every sentence, but occasionally)
-        - Reference their specific stress triggers if mentioned
-        - Use their meditation environment imagery
-        - Adapt to their age and fitness level
-        - Consider their gender when choosing imagery/language
-
-      3. This is a MULTI-SEGMENT meditation:
-        - Create natural transitions, not endings
-        - Build on previous themes and progressions
-        - End with gentle pauses that invite continuation
-        - DO NOT say "the meditation is now over" unless explicitly asked
-
-      4. MEDITATION TYPE determines your approach:
-        - For 'breathing' or 'breath_focus': Focus heavily on breath awareness, breath counting (if appropriate), pranayama techniques
-        - For 'body_scan' or 'progressive_relaxation': Systematically guide attention through body parts, progressive relaxation
-        - For 'visualization': Create vivid imagery, sensory immersion
-        - For 'mindfulness': Emphasize present-moment awareness, observation without judgment, acceptance
-
-      5. VOICE QUALITY matters:
-        - Speak slowly and clearly
-        - Use soothing, descriptive language
-        - Create natural pauses with ellipses (...)
-        - Guide the breathing rhythm with your pacing
-
-      6. OUTPUT FORMAT:
-        - You MUST output valid JSON only
-        - No markdown, no meta-comments
-        - Just the spoken meditation words
-        - Approximately 280 words per segment
-
-      Expected JSON Output Structure:
-      {
-        "welcomeMessage": "string",
-        "segments": [
-          {
-            "segmentId": 1,
-            "instruction": "string",
-            "durationSeconds": ${meditationSegmentDuration?.inSeconds ?? 30},
-            "targetBreathsPerMinute": 6
-          },
-          ...
-        ],
-        "completionMessage": "string"
-      }
-
-      Remember: You're creating a calming, safe space for someone who may be stressed. Be warm, patient, and genuinely caring.''';
-  final userPrompt = '''
-      Generate a meditation session with $maxSegments segments. Each segment should be approximately 280 words, include specific breathing instructions, and be tailored to the user's profile and preferences. Ensure smooth transitions between segments and a gentle completion message. Output the result in valid JSON format as specified.''';
-
-  try {
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer ${userAccount.deepseekApiKey!}',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'model': 'deepseek-v4-pro',
-        'response_format': {'type': 'json_object'},
-        'messages': [
-          {'role': 'system', 'content': systemPrompt},
-          {'role': 'user', 'content': userPrompt},
-        ],
-        'max_tokens': 10000,
-        'temperature': 0.7,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      final jsonContent = decoded['choices'][0]['message']['content'];
-      final session = jsonDecode(jsonContent) as Map<String, dynamic>;
-      // print("Generated meditation session: ${jsonEncode(session)}");
-      return session;
-    } else {
-      throw Exception(
-        'Failed to generate meditation session: ${response.statusCode}',
-      );
-    }
-  } catch (e) {
-    print("Error generating meditation session: $e");
-    rethrow;
   }
 }

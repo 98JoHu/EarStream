@@ -220,6 +220,7 @@ class DemoSelection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // TODO: check biosignal adaptive mode currently not measuring anything
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

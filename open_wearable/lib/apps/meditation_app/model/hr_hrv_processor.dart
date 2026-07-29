@@ -78,6 +78,17 @@ class HrHrvProcessor {
 
   Stream<HeartRateSample> get biometricStream => _metricStreamController.stream;
 
+  HeartRateSample? _latestSample;
+
+  /// Last emitted heart-rate/RMSSD sample, read synchronously — unlike
+  /// [biometricStream], which only delivers *future* values to listeners.
+  HeartRateSample? get latestSample => _latestSample;
+
+  void _emit(HeartRateSample sample) {
+    _latestSample = sample;
+    _metricStreamController.add(sample);
+  }
+
   HrHrvProcessor({
     required this.sampleFreq,
     required this.timestampExponent,
@@ -152,9 +163,7 @@ class HrHrvProcessor {
   /// PPG pipeline entirely. Used for demo scenarios (see
   /// Measurement.simulateStress), never by the real sensor path.
   void emitSimulatedSample(int heartRate, double? rmssd) {
-    _metricStreamController.add(
-      HeartRateSample(heartRate: heartRate, rmssd: rmssd),
-    );
+    _emit(HeartRateSample(heartRate: heartRate, rmssd: rmssd));
   }
 
   void dispose() {
@@ -306,12 +315,7 @@ class HrHrvProcessor {
     }
     _lastEmitTime = now;
 
-    _metricStreamController.add(
-      HeartRateSample(
-        heartRate: heartRate.round(),
-        rmssd: rmssd,
-      ),
-    );
+    _emit(HeartRateSample(heartRate: heartRate.round(), rmssd: rmssd));
   }
 
   void reset() {
