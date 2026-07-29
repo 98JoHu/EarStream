@@ -367,7 +367,10 @@ class Measurement {
         _stressSubscription = monitorStress();
         break;
       case MonitoringPhase.meditation:
-        // TODO: Resume meditation if it was ongoing => think about how to handle this case, maybe store the meditation state and resume it
+        // if there was a meditation session ongoing, it has been stopped
+        monitoringPhase.value = MonitoringPhase.monitoring;
+        _stressSubscription?.cancel();
+        _stressSubscription = monitorStress();
         break;
     }
   }
