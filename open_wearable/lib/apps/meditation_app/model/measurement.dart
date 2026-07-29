@@ -159,6 +159,11 @@ class Measurement {
   static const double _scenarioOuAlpha = 0.9672; // exp(-1/30), 30s time const
   static const double _scenarioOuSigmaStep = 0.763; // BPM per tick
 
+  // Values for the demo view behaviour
+  double? demoThreshold;
+  Duration? baselineAdjustmentDuration;
+  Duration? meditationSegmentDuration;
+
   Measurement({
     required this.ppgSensor,
     required this.accelerometerSensor,
@@ -241,7 +246,16 @@ class Measurement {
     );
   }
 
-  void start() {
+  void start({
+    double? demoThreshold,
+    Duration? baselineAdjustmentDuration,
+    Duration? meditationSegmentDuration,
+  }) {
+    // if any of the parameters are provided, override the default values for this session
+    this.demoThreshold = demoThreshold;
+    this.baselineAdjustmentDuration = baselineAdjustmentDuration;
+    this.meditationSegmentDuration = meditationSegmentDuration;
+
     // Reset the stopwatch to 0 and start it
     _stopwatch
       ..reset()
@@ -255,7 +269,12 @@ class Measurement {
 
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      final duration = monitoringPhase.value.duration;
+      // If the user has provided a custom baseline adjustment duration, use it; otherwise, use the default duration for the current phase
+      bool changeBaselineDuration = baselineAdjustmentDuration != null &&
+          monitoringPhase.value == MonitoringPhase.baseline;
+      final duration = changeBaselineDuration
+          ? baselineAdjustmentDuration
+          : monitoringPhase.value.duration;
       if (duration == null) {
         progress.value = null;
         return;
@@ -484,8 +503,11 @@ class Measurement {
         // Start a meditation session if the user is stressed
         stressLevel.value = StressLevel.stressed;
         monitoringPhase.value = MonitoringPhase.meditation;
-        meditation.value =
-            BiometricMeditation(userAccount: userAccount, measurement: this);
+        meditation.value = BiometricMeditation(
+          userAccount: userAccount,
+          measurement: this,
+          meditationSegmentDuration: meditationSegmentDuration,
+        );
         meditation.value!.start();
       }
     });
@@ -535,10 +557,14 @@ class Measurement {
   }
 
   StressLevel checkStressLevel(int heartRate, double? rmssd) {
+    // determine the stress thresholds based on the user's baseline biometrics and any provided demo threshold
+    final (heartRateThreshold, rmssdThreshold) =
+        userAccount.stressThresholds(stressThreshold: demoThreshold);
+
     // if heart rate is above the threshold and RMSSD is below the threshold, then the user is stressed
-    if (heartRate > userAccount.stressThresholds.$1 &&
+    if (heartRate > heartRateThreshold &&
         rmssd != null &&
-        rmssd < userAccount.stressThresholds.$2) {
+        rmssd < rmssdThreshold) {
       return StressLevel.stressed;
     }
     return StressLevel.relaxed;

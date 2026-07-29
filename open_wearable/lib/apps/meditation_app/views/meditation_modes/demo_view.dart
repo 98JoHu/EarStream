@@ -136,7 +136,11 @@ class _DemoViewState extends State<DemoView> {
         // Depending on the selected mode, start the meditation session with or without biosignal adaptation.
         if (_selectedMode == DemoMode.biosignalAdaptive) {
           final Measurement measurement = context.read<Measurement>();
-          measurement.start();
+          measurement.start(
+            demoThreshold: 0.03,
+            baselineAdjustmentDuration: const Duration(seconds: 30),
+            meditationSegmentDuration: const Duration(seconds: 30),
+          );
           return BioAdaptiveController(
             measurement: measurement,
             onMeasurementStop: _finish,
@@ -146,6 +150,7 @@ class _DemoViewState extends State<DemoView> {
               Meditation(
                 userAccount: context.read<Measurement>().userAccount,
                 maxSegments: 3,
+                meditationSegmentDuration: const Duration(seconds: 30),
               )
             ..start();
           return Column(

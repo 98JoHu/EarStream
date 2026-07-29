@@ -39,6 +39,7 @@ class Meditation {
   final AudioPlayer musicPlayer = AudioPlayer();
   late final TtsService ttsService;
   final int maxSegments;
+  Duration? meditationSegmentDuration;
 
   final ValueNotifier<SessionProgress?> progress =
       ValueNotifier<SessionProgress?>(null);
@@ -48,7 +49,11 @@ class Meditation {
   final ValueNotifier<bool> isPaused = ValueNotifier<bool>(false);
   Completer<void>? _resumeCompleter;
 
-  Meditation({required this.userAccount, this.maxSegments = 10}) {
+  Meditation({
+    required this.userAccount,
+    this.maxSegments = 10,
+    this.meditationSegmentDuration,
+  }) {
     phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
     ttsService = TtsService(userAccount: userAccount);
     initializeAudioPlayers();
@@ -77,7 +82,7 @@ class Meditation {
         (index) => MeditationSegment(
           segmentId: index + 1,
           instruction: defaultSegmentMessage,
-          durationSeconds: 30,
+          durationSeconds: meditationSegmentDuration?.inSeconds ?? 30,
           targetBreathsPerMinute: 6,
         ),
       ),
@@ -107,6 +112,7 @@ class Meditation {
         final sessionData = await generateMeditationSession(
           userAccount: userAccount,
           maxSegments: maxSegments,
+          meditationSegmentDuration: meditationSegmentDuration,
         );
         welcomeMessage = sessionData['welcomeMessage'] as String;
         completionMessage = sessionData['completionMessage'] as String;
@@ -330,7 +336,12 @@ class MeditationSegment {
 class BiometricMeditation extends Meditation {
   final Measurement measurement;
 
-  BiometricMeditation({required super.userAccount, required this.measurement});
+  BiometricMeditation({
+    required super.userAccount,
+    super.maxSegments = 10,
+    super.meditationSegmentDuration,
+    required this.measurement,
+  });
 
   @override
   bool checkEarlyExit() =>
@@ -358,6 +369,7 @@ class ScheduledMeditation extends Meditation {
 Future<Map<String, dynamic>> generateMeditationSession({
   required UserAccount userAccount,
   int maxSegments = 10,
+  Duration? meditationSegmentDuration,
 }) async {
   final url = Uri.parse('https://api.deepseek.com/chat/completions');
   final meditationType = userAccount.meditationType ?? 'mindfulness';
@@ -406,7 +418,7 @@ Future<Map<String, dynamic>> generateMeditationSession({
         - You MUST output valid JSON only
         - No markdown, no meta-comments
         - Just the spoken meditation words
-        - Approximately 50 words per segment
+        - Approximately 280 words per segment
 
       Expected JSON Output Structure:
       {
@@ -415,7 +427,7 @@ Future<Map<String, dynamic>> generateMeditationSession({
           {
             "segmentId": 1,
             "instruction": "string",
-            "durationSeconds": 60,
+            "durationSeconds": ${meditationSegmentDuration?.inSeconds ?? 30},
             "targetBreathsPerMinute": 6
           },
           ...
@@ -425,7 +437,7 @@ Future<Map<String, dynamic>> generateMeditationSession({
 
       Remember: You're creating a calming, safe space for someone who may be stressed. Be warm, patient, and genuinely caring.''';
   final userPrompt = '''
-      Generate a meditation session with $maxSegments segments. Each segment should be approximately 50 words, include specific breathing instructions, and be tailored to the user's profile and preferences. Ensure smooth transitions between segments and a gentle completion message. Output the result in valid JSON format as specified.''';
+      Generate a meditation session with $maxSegments segments. Each segment should be approximately 280 words, include specific breathing instructions, and be tailored to the user's profile and preferences. Ensure smooth transitions between segments and a gentle completion message. Output the result in valid JSON format as specified.''';
 
   try {
     final response = await http.post(
