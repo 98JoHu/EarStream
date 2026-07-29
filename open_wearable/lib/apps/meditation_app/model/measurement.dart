@@ -176,7 +176,7 @@ class Measurement {
       accelerometerSensor,
       sensorConfigProvider,
       fallbackFrequency: 100.0,
-      targetFrequencyHz: 200,
+      targetFrequencyHz: 100,
     );
     _configureSensorForStreaming(
       gyroscopeSensor,
