@@ -109,7 +109,7 @@ class ActivityTracker {
     _gyroscopeSubscription = gyroscopeStream.listen(_processGyroscopeData);
   }
 
-  void stop() {
+  void pause() {
     _accelerometerSubscription?.cancel();
     _gyroscopeSubscription?.cancel();
   }
@@ -142,7 +142,7 @@ class ActivityTracker {
     _activityLevel.value = ActivityLevel.resting;
   }
 
-  bool shouldSupressStressDetection() {
+  bool shouldSuppressStressDetection() {
     if (_activityHistory.isEmpty) {
       return false;
     }

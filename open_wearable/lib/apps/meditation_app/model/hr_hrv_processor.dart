@@ -1,6 +1,15 @@
-import 'measurement.dart' show HeartRateSample;
 import 'dart:async';
 import 'dart:math';
+
+class HeartRateSample {
+  final int heartRate;
+  final double? rmssd;
+
+  const HeartRateSample({
+    required this.heartRate,
+    required this.rmssd,
+  });
+}
 
 /// Mirrors the Heart Tracker page's PpgFilter pipeline (see
 /// apps/heart_tracker/model/ppg_filter.dart): adaptive channel selection,
@@ -28,6 +37,7 @@ import 'dart:math';
 /// reference — see the per-class comments below.
 class HrHrvProcessor {
   final double sampleFreq;
+  final double accelerometerFreq;
   final int timestampExponent;
 
   static const double _minBeatIntervalSec = 0.25;
@@ -91,6 +101,7 @@ class HrHrvProcessor {
 
   HrHrvProcessor({
     required this.sampleFreq,
+    required this.accelerometerFreq,
     required this.timestampExponent,
   }) {
     _dcBlockFilter = _HighPassFilter(cutoffFreq: 0.12, sampleFreq: sampleFreq);
