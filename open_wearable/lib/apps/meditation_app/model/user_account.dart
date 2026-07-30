@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../widgets/emojis.dart';
 
 enum Gender {
@@ -250,11 +252,24 @@ class UserAccount {
           break;
       }
     }
+    // The age/gender/fitness adjustments are additive, so the unlucky
+    // combinations bottom out at or below zero — an over-65 sedentary woman
+    // lands on exactly 0.0. stressThresholds() would then derive an RMSSD
+    // threshold of 0, and "rmssd < 0" is never true, so stress could never be
+    // detected for that profile at all. Floor it at a physiologically sane
+    // value instead.
+    defaultRMSSD = max(defaultRMSSD, _minimumBaselineRMSSD);
+
     baselineHeartRate = defaultHeartRate;
     baselineRMSSD = defaultRMSSD;
 
     return (defaultHeartRate, defaultRMSSD);
   }
+
+  /// Lowest baseline RMSSD the profile defaults may produce. Roughly the
+  /// bottom of the adult resting range; below this the stress thresholds stop
+  /// being meaningful.
+  static const double _minimumBaselineRMSSD = 12.0;
 
   /// Thresholds derived from the baseline biometrics and a sensitivity
   /// fraction. Pass [stressThreshold] to override the account's saved
