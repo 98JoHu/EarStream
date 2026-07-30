@@ -133,6 +133,12 @@ class Measurement {
       _activityTracker.activityLevel;
   ValueNotifier<BiometricMeditation?> meditation = ValueNotifier(null);
 
+  /// Bumped by [reset]. The stream-driven widgets (the HR/RMSSD tiles and the
+  /// heart-rate chart) hold their last value in widget state, and a reset
+  /// emits nothing new to overwrite it — so the UI keys its subtree on this
+  /// counter and lets Flutter discard that state instead.
+  final ValueNotifier<int> resetGeneration = ValueNotifier(0);
+
   // Fields for handling the phases
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _ticker;
@@ -251,11 +257,17 @@ class Measurement {
     double? demoThreshold,
     Duration? baselineAdjustmentDuration,
     Duration? meditationSegmentDuration,
+    Duration? hrvMinimumWindow,
   }) {
     // if any of the parameters are provided, override the default values for this session
     this.demoThreshold = demoThreshold;
     this.baselineAdjustmentDuration = baselineAdjustmentDuration;
     this.meditationSegmentDuration = meditationSegmentDuration;
+    // Shortens how much RR history must accumulate before RMSSD is reported.
+    // Only demo flows set this — see HrHrvProcessor.hrvMinimumWindow.
+    if (hrvMinimumWindow != null) {
+      _processor.hrvMinimumWindow = hrvMinimumWindow;
+    }
 
     // Reset the stopwatch to 0 and start it
     _stopwatch
@@ -423,6 +435,9 @@ class Measurement {
     }
     // Reset filters from the HR/HRV processor
     _processor.reset();
+    // Drop the stale HR/RMSSD readouts and chart trace still held in widget
+    // state (see resetGeneration).
+    resetGeneration.value++;
   }
 
   void dispose() {
@@ -440,6 +455,7 @@ class Measurement {
     stressLevel.dispose();
     monitoringPhase.dispose();
     progress.dispose();
+    resetGeneration.dispose();
     if (meditation.value != null) {
       meditation.value!.dispose();
     }

@@ -140,6 +140,10 @@ class _DemoViewState extends State<DemoView> {
             demoThreshold: 0.03,
             baselineAdjustmentDuration: const Duration(seconds: 30),
             meditationSegmentDuration: const Duration(seconds: 30),
+            // 60s (the default) outlasts this demo's 30s calibration + 30s
+            // baseline, so RMSSD would first appear after the baseline phase
+            // it is supposed to feed. 15s lands it inside calibration.
+            hrvMinimumWindow: const Duration(seconds: 15),
           );
           return BioAdaptiveController(
             measurement: measurement,
@@ -203,7 +207,15 @@ class BioAdaptiveController extends StatelessWidget {
               child: const Text('Stop Measuring'),
             ),
             OutlinedButton(
-              onPressed: measurement.reset,
+              onPressed: () {
+                measurement.reset();
+                measurement.start(
+                  demoThreshold: 0.03,
+                  baselineAdjustmentDuration: const Duration(seconds: 30),
+                  meditationSegmentDuration: const Duration(seconds: 30),
+                  hrvMinimumWindow: const Duration(seconds: 15),
+                );
+              },
               child: const Text('Reset'),
             ),
           ],

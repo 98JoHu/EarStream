@@ -66,7 +66,7 @@ class HrHrvProcessor {
   final List<_TimestampedInterval> _rrHistory = [];
   int? _lastRecordedPeakTimestamp;
   late final double _hrvWindowTicks;
-  late final double _hrvMinimumWindowTicks;
+  double _hrvMinimumWindowTicks = 0;
 
   DateTime? _firstSampleTime;
   DateTime? _lastEmitTime;
@@ -106,8 +106,29 @@ class HrHrvProcessor {
     _minimumWindowTicks = 4.0 * _ticksPerSecond;
     _evaluationPeriodTicks = max(1.0, _ticksPerSecond);
     _hrvWindowTicks = 300.0 * _ticksPerSecond;
-    _hrvMinimumWindowTicks = 60.0 * _ticksPerSecond;
+    hrvMinimumWindow = _defaultHrvMinimumWindow;
   }
+
+  /// Minimum RR-history span required before RMSSD is reported at all.
+  ///
+  /// Defaults to 60s per short-term HRV recording-length guidance (Shaffer &
+  /// Ginsberg 2017), which is correct for a real session but longer than the
+  /// demo's compressed calibration+baseline phases — with the default, the
+  /// demo's baseline phase ends before the first non-null RMSSD ever arrives,
+  /// so the RMSSD baseline never adapts. Demo flows shorten this; the 5-minute
+  /// *upper* window ([_hrvWindowTicks]) is deliberately not adjustable, since
+  /// shortening it costs real accuracy rather than just latency.
+  static const Duration _defaultHrvMinimumWindow = Duration(seconds: 60);
+
+  set hrvMinimumWindow(Duration window) {
+    _hrvMinimumWindowTicks =
+        (window.inMicroseconds / 1000000.0) * _ticksPerSecond;
+  }
+
+  Duration get hrvMinimumWindow => Duration(
+        microseconds:
+            ((_hrvMinimumWindowTicks / _ticksPerSecond) * 1000000).round(),
+      );
 
   /// Feeds a raw accelerometer sample (m/s^2). Used only for motion
   /// cancellation/gating, not for HR/HRV itself.
@@ -322,6 +343,13 @@ class HrHrvProcessor {
     _firstSampleTime = null;
     _lastEmitTime = null;
     _buffer.clear();
+    // RR history outlives `_buffer` (5-minute window vs 10s), so it must be
+    // cleared explicitly — otherwise a reset session inherits the previous
+    // one's intervals, immediately satisfies the minimum-span gate, and
+    // reports RMSSD computed from pre-reset beats.
+    _rrHistory.clear();
+    _lastRecordedPeakTimestamp = null;
+    _latestSample = null;
     _channelSelector.reset();
     _ambientCanceler.reset();
     _motionSuppressor.reset();

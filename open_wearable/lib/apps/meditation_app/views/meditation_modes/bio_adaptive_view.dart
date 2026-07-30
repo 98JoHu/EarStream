@@ -111,7 +111,18 @@ class BioAdaptiveContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Keying on resetGeneration makes reset() tear this subtree down, which is
+    // what actually clears the StreamBuilder snapshots and the chart's
+    // accumulated points — neither re-emits on its own after a reset.
+    return ValueListenableBuilder<int>(
+      valueListenable: measurement.resetGeneration,
+      builder: (_, generation, __) => _content(ValueKey(generation)),
+    );
+  }
+
+  Widget _content(Key key) {
     return Column(
+      key: key,
       children: [
         Row(
           children: [
