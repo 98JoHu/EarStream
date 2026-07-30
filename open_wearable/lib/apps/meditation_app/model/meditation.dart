@@ -135,6 +135,10 @@ class Meditation {
   }
 
   void dispose() {
+    isStopped = true;
+    _resumeCompleter?.complete();
+    _resumeCompleter = null;
+
     musicPlayer.dispose();
     ttsService.dispose();
     isPaused.dispose();
