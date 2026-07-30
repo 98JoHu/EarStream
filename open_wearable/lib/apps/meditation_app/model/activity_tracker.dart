@@ -92,6 +92,7 @@ class ActivityTracker {
   static const double _lightOrMoreSuppressionRatio = 0.4;
   static const double _moderateOrMoreSuppressionRatio = 0.2;
   static const double _vigorousOrMoreSuppressionRatio = 0.05;
+  static const double _intenseSuppressionRatio = 0.02;
 
   ActivityTracker({
     required this.accelerometerStream,
@@ -158,7 +159,7 @@ class ActivityTracker {
             _moderateOrMoreSuppressionRatio ||
         ratioAtLeast(ActivityLevel.vigorous) >=
             _vigorousOrMoreSuppressionRatio ||
-        ratioAtLeast(ActivityLevel.intense) > 0;
+        ratioAtLeast(ActivityLevel.intense) >= _intenseSuppressionRatio;
   }
 
   void _processAccelerometerData(PpgMotionSample sample) {
