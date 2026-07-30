@@ -210,7 +210,7 @@ class BioAdaptiveController extends StatelessWidget {
               onPressed: () {
                 measurement.reset();
                 measurement.start(
-                  demoThreshold: 0.02,
+                  demoThreshold: 0.03,
                   baselineAdjustmentDuration: const Duration(seconds: 30),
                   meditationSegmentDuration: const Duration(seconds: 30),
                   hrvMinimumWindow: const Duration(seconds: 15),
