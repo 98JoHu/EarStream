@@ -29,30 +29,37 @@ enum SpeakingSpeed {
   verySlow(
     label: "Very Slow",
     isRecommended: false,
+    speed: 0.2,
     emoji: AppEmojis.snail,
   ),
   slow(
     label: "Slow",
     isRecommended: true,
+    speed: 0.3,
     emoji: AppEmojis.turtle,
   ),
   medium(
     label: "Medium",
     isRecommended: false,
+    speed: 0.4,
     emoji: AppEmojis.walkingPerson,
   ),
   fast(
     label: "Fast",
     isRecommended: false,
+    speed: 0.5,
     emoji: AppEmojis.runningPerson,
   );
 
   final String label;
   final String emoji;
   final bool isRecommended;
+  final double speed;
+
   const SpeakingSpeed({
     required this.label,
     required this.emoji,
+    required this.speed,
     required this.isRecommended,
   });
 }
@@ -142,6 +149,9 @@ class UserAccount {
   bool hasValidDeepseekKey = false;
   String? elevenLabsApiKey;
   bool hasValidElevenLabsKey = false;
+  List<({String voice, String id})>?
+      availableElevenLabsVoices; // Store available voices from ElevenLabs API
+  String? elevenLabsVoiceId;
   String? dashscopeApiKey;
   bool hasValidDashscopeKey = false;
 
@@ -246,11 +256,14 @@ class UserAccount {
     return (defaultHeartRate, defaultRMSSD);
   }
 
-  (int, double) get stressThresholds {
+  (int, double) stressThresholds({double? stressThreshold}) {
     final (baselineHeartRate, baselineRMSSD) = baselineBiometrics;
 
-    final threshold = stressThreshold ?? 0.1;
-    stressThreshold ??= threshold;
+    // if a treshold is provided, use it; otherwise, use the user's stored threshold or default to 10%
+    final threshold = stressThreshold ?? this.stressThreshold ?? 0.1;
+
+    // If the user's stored threshold is null, set it to 10% for future reference
+    this.stressThreshold ??= 0.1;
 
     final heartRateThreshold = (baselineHeartRate * (1 + threshold)).round();
     final rmssdThreshold = baselineRMSSD * (1 - threshold);
