@@ -210,7 +210,7 @@ class BioAdaptiveController extends StatelessWidget {
               onPressed: () {
                 measurement.reset();
                 measurement.start(
-                  demoThreshold: 0.03,
+                  demoThreshold: 0.02,
                   baselineAdjustmentDuration: const Duration(seconds: 30),
                   meditationSegmentDuration: const Duration(seconds: 30),
                   hrvMinimumWindow: const Duration(seconds: 15),
@@ -232,7 +232,6 @@ class DemoSelection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: check biosignal adaptive mode currently not measuring anything
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
