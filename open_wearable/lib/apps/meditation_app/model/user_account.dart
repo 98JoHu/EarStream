@@ -182,7 +182,7 @@ class UserAccount {
     this.baselineRMSSD,
   });
 
-  (int, double) get baselineBiometrics {
+  (int heartRate, double rmssd) get baselineBiometrics {
     // if values have been determined return them
     if (baselineHeartRate != null && baselineRMSSD != null) {
       return (baselineHeartRate!, baselineRMSSD!);
