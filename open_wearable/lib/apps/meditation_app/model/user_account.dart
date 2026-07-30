@@ -30,30 +30,37 @@ enum SpeakingSpeed {
     label: "Very Slow",
     isRecommended: false,
     emoji: AppEmojis.snail,
+    speed: 0.2,
   ),
   slow(
     label: "Slow",
     isRecommended: true,
     emoji: AppEmojis.turtle,
+    speed: 0.3,
   ),
   medium(
     label: "Medium",
     isRecommended: false,
     emoji: AppEmojis.walkingPerson,
+    speed: 0.5,
   ),
   fast(
     label: "Fast",
     isRecommended: false,
     emoji: AppEmojis.runningPerson,
+    speed: 0.7,
   );
 
   final String label;
   final String emoji;
   final bool isRecommended;
+  // flutter_tts speech rate, on its normalized 0.0-1.0 scale.
+  final double speed;
   const SpeakingSpeed({
     required this.label,
     required this.emoji,
     required this.isRecommended,
+    required this.speed,
   });
 }
 
@@ -142,6 +149,9 @@ class UserAccount {
   bool hasValidDeepseekKey = false;
   String? elevenLabsApiKey;
   bool hasValidElevenLabsKey = false;
+  // Populated by ElevenLabsManager.updateUser() once the key is verified.
+  String? elevenLabsVoiceId;
+  List<({String voice, String id})>? availableElevenLabsVoices;
   String? dashscopeApiKey;
   bool hasValidDashscopeKey = false;
 
@@ -246,11 +256,17 @@ class UserAccount {
     return (defaultHeartRate, defaultRMSSD);
   }
 
-  (int, double) get stressThresholds {
+  /// Thresholds derived from the baseline biometrics and a sensitivity
+  /// fraction. Pass [stressThreshold] to override the account's saved
+  /// sensitivity for a single call (e.g. a demo session) without persisting
+  /// it; omit it to use (and, the first time, cache) the account's own.
+  (int, double) stressThresholds({double? stressThreshold}) {
     final (baselineHeartRate, baselineRMSSD) = baselineBiometrics;
 
-    final threshold = stressThreshold ?? 0.1;
-    stressThreshold ??= threshold;
+    final threshold = stressThreshold ?? this.stressThreshold ?? 0.1;
+    if (stressThreshold == null) {
+      this.stressThreshold ??= threshold;
+    }
 
     final heartRateThreshold = (baselineHeartRate * (1 + threshold)).round();
     final rmssdThreshold = baselineRMSSD * (1 - threshold);
