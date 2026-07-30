@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'measurement.dart' show HeartRateSample;
+
 import 'user_account.dart';
+import 'hr_hrv_processor.dart' show HeartRateSample;
 
 class MeditationSegment {
   final int segmentId;

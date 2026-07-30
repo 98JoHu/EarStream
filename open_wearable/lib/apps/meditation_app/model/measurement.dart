@@ -8,6 +8,7 @@ import 'stress_detector.dart';
 import 'measurement_phase.dart';
 import 'activity_tracker.dart' show ActivityLevel;
 import 'meditation.dart' show BiometricMeditation;
+import 'hr_hrv_processor.dart' show HeartRateSample;
 
 class Measurement {
   final UserAccount userAccount;
@@ -99,6 +100,13 @@ class Measurement {
   // Publish the heart rate and RMSSD
   Stream<int> get heartRate => _source.biometrics.map((b) => b.heartRate);
   Stream<double?> get rmssd => _source.biometrics.map((b) => b.rmssd);
+
+  // Return the latest heart rate and RMSSD values
+  // TODO: This is a temporary solution until we have a proper way to get the latest biometrics from the source.
+  HeartRateSample? get latestBiometrics => HeartRateSample(
+        heartRate: 50,
+        rmssd: 20.0,
+      );
 
   // Publish the stress level
   ValueListenable<StressLevel> get stressLevel => _detector.stressLevel;

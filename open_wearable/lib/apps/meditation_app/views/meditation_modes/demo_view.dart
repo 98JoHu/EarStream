@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../../model/user_account.dart';
-import '../../model/measurement.dart';
 import '../../model/meditation.dart';
 import '../../widgets/custom_dropdown.dart';
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/seal_check.dart';
 import '../../widgets/api_warning.dart';
-import 'bio_adaptive_view.dart' show BioAdaptiveContent;
+import 'bio_adaptive_view.dart' show BioAdaptiveView;
 import 'package:provider/provider.dart';
 
 enum Step {
@@ -148,9 +147,12 @@ class _DemoViewState extends State<DemoView> {
         );
       case Step.meditation:
         if (_selectedMode == DemoMode.biosignalAdaptive) {
-          return _BioAdaptiveStep(
-            demo: widget,
-            onFinish: _finish,
+          // TODO: Add parameters so that the demo specifications are met
+          return BioAdaptiveView(
+            ppgSensor: widget.ppgSensor,
+            accelerometerSensor: widget.accelerometerSensor,
+            gyroscopeSensor: widget.gyroscopeSensor,
+            sensorConfigProvider: widget.sensorConfigProvider,
           );
         } else {
           final meditation = _personalizedMeditation ??
@@ -174,114 +176,6 @@ class _DemoViewState extends State<DemoView> {
           );
         }
     }
-  }
-}
-
-class _BioAdaptiveStep extends StatefulWidget {
-  final DemoView demo; // carries the sensors + config provider
-  final VoidCallback onFinish;
-
-  const _BioAdaptiveStep({required this.demo, required this.onFinish});
-
-  @override
-  State<_BioAdaptiveStep> createState() => _BioAdaptiveStepState();
-}
-
-class _BioAdaptiveStepState extends State<_BioAdaptiveStep> {
-  Measurement? _measurement;
-
-  @override
-  void initState() {
-    super.initState();
-    // Constructing a Measurement reconfigures the sensors, which notifies
-    // SensorConfigurationProvider. initState runs inside the build phase, so
-    // that notification has to wait for the frame to finish.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _measurement = Measurement(
-          ppgSensor: widget.demo.ppgSensor,
-          accelerometerSensor: widget.demo.accelerometerSensor,
-          gyroscopeSensor: widget.demo.gyroscopeSensor,
-          sensorConfigProvider: widget.demo.sensorConfigProvider,
-          userAccount: context.read<UserAccount>(),
-        )..start(
-            demoThreshold: 0.03,
-            baselineAdjustmentDuration: const Duration(seconds: 30),
-            meditationSegmentDuration: const Duration(seconds: 30),
-            hrvMinimumWindow: const Duration(seconds: 15),
-          );
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _measurement?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final measurement = _measurement;
-    if (measurement == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return BioAdaptiveController(
-      measurement: measurement,
-      onMeasurementStop: widget.onFinish,
-    );
-  }
-}
-
-class BioAdaptiveController extends StatelessWidget {
-  final Measurement measurement;
-  final VoidCallback? onMeasurementStop;
-
-  const BioAdaptiveController({
-    super.key,
-    required this.measurement,
-    this.onMeasurementStop,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final userAccount = context.read<UserAccount>();
-
-    return Column(
-      children: [
-        BioAdaptiveContent(measurement: measurement),
-        const SizedBox(height: 16),
-        if (!userAccount.hasValidDeepseekKey) ...[
-          APIWarning(serviceName: "Deepseek"),
-          const SizedBox(height: 16),
-        ],
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            ElevatedButton(
-              onPressed: () {
-                measurement.pause();
-                onMeasurementStop?.call();
-              },
-              child: const Text('Stop Measuring'),
-            ),
-            OutlinedButton(
-              onPressed: () {
-                measurement.reset();
-                measurement.start(
-                  demoThreshold: 0.03,
-                  baselineAdjustmentDuration: const Duration(seconds: 30),
-                  meditationSegmentDuration: const Duration(seconds: 30),
-                  hrvMinimumWindow: const Duration(seconds: 15),
-                );
-              },
-              child: const Text('Reset'),
-            ),
-          ],
-        ),
-      ],
-    );
   }
 }
 
