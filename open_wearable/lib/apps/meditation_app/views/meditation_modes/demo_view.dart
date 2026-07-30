@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
+import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../../model/user_account.dart';
 import '../../model/measurement.dart';
 import '../../model/meditation.dart';
@@ -42,7 +43,18 @@ abstract class DemoStepView extends StatefulWidget {
 }
 
 class DemoView extends StatefulWidget {
-  const DemoView({super.key});
+  final Sensor ppgSensor;
+  final Sensor accelerometerSensor;
+  final Sensor gyroscopeSensor;
+  final SensorConfigurationProvider sensorConfigProvider;
+
+  const DemoView({
+    super.key,
+    required this.ppgSensor,
+    required this.accelerometerSensor,
+    required this.gyroscopeSensor,
+    required this.sensorConfigProvider,
+  });
 
   @override
   State<DemoView> createState() => _DemoViewState();
@@ -106,53 +118,44 @@ class _DemoViewState extends State<DemoView> {
 
   @override
   Widget build(BuildContext context) {
+    final userAccount = context.read<UserAccount>();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: _selectedMode == null
             ? DemoSelection(onSelectMode: _selectMode)
-            : _stepContent(),
+            : _stepContent(userAccount),
       ),
     );
   }
 
-  Widget _stepContent() {
+  Widget _stepContent(UserAccount userAccount) {
     switch (_currentStep) {
       case Step.settings:
         return SettingsView(
-          userAccount: context.read<UserAccount>(),
+          userAccount: userAccount,
           onBack: _back,
           onContinue: _continue,
           onSkip: _skip,
         );
       case Step.sealCheck:
         return SealCheckView(
-          userAccount: context.read<UserAccount>(),
+          userAccount: userAccount,
           onBack: _back,
           onContinue: _continue,
           onSkip: _skip,
         );
       case Step.meditation:
-        // Depending on the selected mode, start the meditation session with or without biosignal adaptation.
         if (_selectedMode == DemoMode.biosignalAdaptive) {
-          final Measurement measurement = context.read<Measurement>();
-          measurement.start(
-            demoThreshold: 0.03,
-            baselineAdjustmentDuration: const Duration(seconds: 30),
-            meditationSegmentDuration: const Duration(seconds: 30),
-            // 60s (the default) outlasts this demo's 30s calibration + 30s
-            // baseline, so RMSSD would first appear after the baseline phase
-            // it is supposed to feed. 15s lands it inside calibration.
-            hrvMinimumWindow: const Duration(seconds: 15),
-          );
-          return BioAdaptiveController(
-            measurement: measurement,
-            onMeasurementStop: _finish,
+          return _BioAdaptiveStep(
+            demo: widget,
+            onFinish: _finish,
           );
         } else {
           final meditation = _personalizedMeditation ??
               Meditation(
-                userAccount: context.read<Measurement>().userAccount,
+                userAccount: userAccount,
                 maxSegments: 3,
                 meditationSegmentDuration: const Duration(seconds: 30),
               )
@@ -171,6 +174,63 @@ class _DemoViewState extends State<DemoView> {
           );
         }
     }
+  }
+}
+
+class _BioAdaptiveStep extends StatefulWidget {
+  final DemoView demo; // carries the sensors + config provider
+  final VoidCallback onFinish;
+
+  const _BioAdaptiveStep({required this.demo, required this.onFinish});
+
+  @override
+  State<_BioAdaptiveStep> createState() => _BioAdaptiveStepState();
+}
+
+class _BioAdaptiveStepState extends State<_BioAdaptiveStep> {
+  Measurement? _measurement;
+
+  @override
+  void initState() {
+    super.initState();
+    // Constructing a Measurement reconfigures the sensors, which notifies
+    // SensorConfigurationProvider. initState runs inside the build phase, so
+    // that notification has to wait for the frame to finish.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _measurement = Measurement(
+          ppgSensor: widget.demo.ppgSensor,
+          accelerometerSensor: widget.demo.accelerometerSensor,
+          gyroscopeSensor: widget.demo.gyroscopeSensor,
+          sensorConfigProvider: widget.demo.sensorConfigProvider,
+          userAccount: context.read<UserAccount>(),
+        )..start(
+            demoThreshold: 0.03,
+            baselineAdjustmentDuration: const Duration(seconds: 30),
+            meditationSegmentDuration: const Duration(seconds: 30),
+            hrvMinimumWindow: const Duration(seconds: 15),
+          );
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _measurement?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final measurement = _measurement;
+    if (measurement == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return BioAdaptiveController(
+      measurement: measurement,
+      onMeasurementStop: widget.onFinish,
+    );
   }
 }
 

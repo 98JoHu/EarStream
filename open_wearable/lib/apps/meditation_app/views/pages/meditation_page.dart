@@ -50,7 +50,12 @@ Widget _bioAdaptiveView(MeditationPage page) => BioAdaptiveView(
       sensorConfigProvider: page.sensorConfigProvider,
     );
 Widget _timerView(MeditationPage page) => const TimerView();
-Widget _demoView(MeditationPage page) => const DemoView();
+Widget _demoView(MeditationPage page) => DemoView(
+      ppgSensor: page.ppgSensor,
+      accelerometerSensor: page.accelerometerSensor,
+      gyroscopeSensor: page.gyroscopeSensor,
+      sensorConfigProvider: page.sensorConfigProvider,
+    );
 
 class MeditationPage extends StatefulWidget implements DrawerPage {
   final Sensor ppgSensor;
