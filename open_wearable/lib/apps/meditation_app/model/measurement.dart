@@ -193,6 +193,13 @@ class Measurement {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     required this.userAccount,
+  });
+
+  void start({
+    double? demoThreshold,
+    Duration? baselineAdjustmentDuration,
+    Duration? meditationSegmentDuration,
+    Duration? hrvMinimumWindow,
   }) {
     final double sampleFreq = _configureSensorForStreaming(
       ppgSensor,
@@ -210,7 +217,7 @@ class Measurement {
       gyroscopeSensor,
       sensorConfigProvider,
       fallbackFrequency: 100.0,
-      targetFrequencyHz: 200,
+      targetFrequencyHz: 100,
     );
 
     _ppgStream = ppgSensor.sensorStream
@@ -267,14 +274,7 @@ class Measurement {
       timestampExponentAccelerometer: accelerometerSensor.timestampExponent,
       timestampExponentGyroscope: gyroscopeSensor.timestampExponent,
     );
-  }
 
-  void start({
-    double? demoThreshold,
-    Duration? baselineAdjustmentDuration,
-    Duration? meditationSegmentDuration,
-    Duration? hrvMinimumWindow,
-  }) {
     // if any of the parameters are provided, override the default values for this session
     this.demoThreshold = demoThreshold;
     this.baselineAdjustmentDuration = baselineAdjustmentDuration;
