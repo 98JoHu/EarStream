@@ -201,7 +201,7 @@ class BioAdaptiveController extends StatelessWidget {
           children: [
             ElevatedButton(
               onPressed: () {
-                measurement.stop();
+                measurement.pause();
                 onMeasurementStop?.call();
               },
               child: const Text('Stop Measuring'),

@@ -8,8 +8,6 @@ import 'activity_tracker.dart';
 import 'meditation.dart';
 import 'hr_hrv_processor.dart';
 
-enum EarstreamState { idle, running, stopped }
-
 enum StressLevel {
   relaxed(
     label: "Relaxed",
@@ -142,8 +140,6 @@ class Measurement {
   // Fields for handling the phases
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _ticker;
-  EarstreamState _state = EarstreamState.idle;
-  EarstreamState get state => _state;
   ValueNotifier<double?> progress = ValueNotifier(null);
 
   // Scripted stress-demo scenario (see simulateStress()), ported from the
@@ -169,7 +165,6 @@ class Measurement {
   double _scenarioHrOuSigmaStep = 0.763;
 
   static const double _scenarioOuAlpha = 0.9672; // exp(-1/30), 30s time const
-
 
   // Scenario timeline, in seconds from the button press: a rising build-up
   // that deliberately stops short of the threshold, a spike that crosses it
@@ -294,8 +289,6 @@ class Measurement {
     _stopwatch
       ..reset()
       ..start();
-    // App is now running
-    _state = EarstreamState.running;
     // Start with calibration phase
     monitoringPhase.value = MonitoringPhase.calibration;
     // Detect activity level
@@ -352,11 +345,9 @@ class Measurement {
     });
   }
 
-  void stop() {
+  void pause() {
     // Stop the stopwatch
     _stopwatch.stop();
-    // App is now stopped
-    _state = EarstreamState.stopped;
     // Stop detecting activity level
     _activityTracker.stop();
     // Stop listening to the PPG and accelerometer streams
@@ -375,8 +366,6 @@ class Measurement {
   void resume() {
     // Resume the stopwatch
     _stopwatch.start();
-    // App is now running
-    _state = EarstreamState.running;
     // Resume detecting activity level
     _activityTracker.start();
     // Resume listening to the PPG stream
@@ -435,8 +424,6 @@ class Measurement {
       ..reset();
     // Cancel ticker watching for phase duration
     _ticker?.cancel();
-    // App is now idle
-    _state = EarstreamState.idle;
     // Reset the monitoring phase to calibration
     monitoringPhase.value = MonitoringPhase.calibration;
     // Reset stress level to relaxed

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:open_earable_flutter/open_earable_flutter.dart';
+import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
@@ -8,8 +10,20 @@ import '../../model/activity_tracker.dart' show ActivityLevel;
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/api_warning.dart';
 
+enum EarstreamState { idle, running, paused }
+
 class BioAdaptiveView extends StatefulWidget {
-  const BioAdaptiveView({super.key});
+  final Sensor ppgSensor;
+  final Sensor accelerometerSensor;
+  final Sensor gyroscopeSensor;
+  final SensorConfigurationProvider sensorConfigProvider;
+  const BioAdaptiveView({
+    super.key,
+    required this.ppgSensor,
+    required this.accelerometerSensor,
+    required this.gyroscopeSensor,
+    required this.sensorConfigProvider,
+  });
 
   @override
   State<BioAdaptiveView> createState() => _BioAdaptiveViewState();
@@ -17,20 +31,72 @@ class BioAdaptiveView extends StatefulWidget {
 
 class _BioAdaptiveViewState extends State<BioAdaptiveView> {
   EarstreamState _earstreamState = EarstreamState.idle;
+  late Measurement _measurement;
+
+  void _startEarstream(UserAccount account) {
+    _measurement = Measurement(
+      ppgSensor: widget.ppgSensor,
+      accelerometerSensor: widget.accelerometerSensor,
+      gyroscopeSensor: widget.gyroscopeSensor,
+      sensorConfigProvider: widget.sensorConfigProvider,
+      userAccount: account,
+    );
+    _measurement.start();
+    setState(() {
+      _earstreamState = EarstreamState.running;
+    });
+  }
+
+  void _pauseEarstream() {
+    _measurement.pause();
+    setState(() {
+      _earstreamState = EarstreamState.paused;
+    });
+  }
+
+  void _resetEarstream(UserAccount account) {
+    _measurement = Measurement(
+      ppgSensor: widget.ppgSensor,
+      accelerometerSensor: widget.accelerometerSensor,
+      gyroscopeSensor: widget.gyroscopeSensor,
+      sensorConfigProvider: widget.sensorConfigProvider,
+      userAccount: account,
+    );
+    setState(() {
+      _earstreamState = EarstreamState.idle;
+    });
+  }
+
+  void _simulateStress() {
+    _measurement.simulateStress();
+  }
+
+  void _resumeEarstream() {
+    _measurement.resume();
+    setState(() {
+      _earstreamState = EarstreamState.running;
+    });
+  }
+
+  @override
+  void dispose() {
+    _measurement.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final measurement = context.read<Measurement>();
     final UserAccount userAccount = context.read<UserAccount>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // TODO: write this more clean
         if (_earstreamState == EarstreamState.running)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: BioAdaptiveContent(measurement: measurement),
+              child: BioAdaptiveContent(measurement: _measurement),
             ),
           ),
         if (_earstreamState == EarstreamState.running &&
@@ -39,27 +105,71 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           APIWarning(serviceName: "Deepseek"),
           SizedBox(height: 16),
         ],
-        MeditationTile(meditationNotifier: measurement.meditation),
+        if (_earstreamState == EarstreamState.running)
+          MeditationTile(meditationNotifier: _measurement.meditation),
+        // Control Buttons
+        BioAdaptiveControls(
+          earstreamState: _earstreamState,
+          onStart: () => _startEarstream(userAccount),
+          onResume: _resumeEarstream,
+          onPause: _pauseEarstream,
+          onSimulateStress: _simulateStress,
+          onReset: () => _resetEarstream(userAccount),
+        ),
+      ],
+    );
+  }
+}
+
+class BioAdaptiveControls extends StatelessWidget {
+  final EarstreamState earstreamState;
+  final VoidCallback onStart;
+  final VoidCallback onResume;
+  final VoidCallback onPause;
+  final VoidCallback onSimulateStress;
+  final VoidCallback onReset;
+
+  const BioAdaptiveControls({
+    super.key,
+    required this.earstreamState,
+    required this.onStart,
+    required this.onResume,
+    required this.onPause,
+    required this.onSimulateStress,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isIdle = EarstreamState.idle == earstreamState;
+    final isRunning = EarstreamState.running == earstreamState;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         ElevatedButton.icon(
-          onPressed: () => {
-            switch (measurement.state) {
-              EarstreamState.idle => measurement.start(),
-              EarstreamState.running => measurement.stop(),
-              EarstreamState.stopped => measurement.resume(),
-            },
-            setState(() {
-              _earstreamState = measurement.state;
-            }),
-          },
           icon: Icon(
-            _earstreamState == EarstreamState.running
-                ? Icons.stop
-                : Icons.play_arrow,
+            isRunning ? Icons.pause : Icons.play_arrow,
           ),
+          onPressed: () {
+            switch (earstreamState) {
+              case EarstreamState.idle:
+                onStart();
+                break;
+              case EarstreamState.running:
+                onPause();
+                break;
+              case EarstreamState.paused:
+                onResume();
+                break;
+            }
+          },
           label: Text(
-            _earstreamState == EarstreamState.running
-                ? "Stop EarStreAM"
-                : "Start EarStreAM",
+            isIdle
+                ? "Start EarStreAM"
+                : isRunning
+                    ? "Stop EarStreAM"
+                    : "Resume EarStreAM",
           ),
         ),
         const SizedBox(height: 16),
@@ -69,11 +179,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => {
-                    _earstreamState == EarstreamState.running
-                        ? measurement.simulateStress()
-                        : null,
-                  },
+                  onPressed: isRunning ? onSimulateStress : null,
                   icon: const Icon(Icons.psychology),
                   label: const Text("Simulate Stress"),
                 ),
@@ -81,14 +187,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
               const SizedBox(width: 24),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => {
-                    _earstreamState == EarstreamState.running
-                        ? measurement.reset()
-                        : null,
-                    setState(() {
-                      _earstreamState = measurement.state;
-                    }),
-                  },
+                  onPressed: !isIdle ? onReset : null,
                   icon: const Icon(Icons.refresh),
                   label: const Text("Reset"),
                 ),
@@ -102,12 +201,11 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
 }
 
 class BioAdaptiveContent extends StatelessWidget {
+  final Measurement measurement;
   const BioAdaptiveContent({
     super.key,
     required this.measurement,
   });
-
-  final Measurement measurement;
 
   @override
   Widget build(BuildContext context) {

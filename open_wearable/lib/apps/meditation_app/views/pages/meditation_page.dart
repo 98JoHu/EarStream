@@ -7,42 +7,50 @@ import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../meditation_modes/bio_adaptive_view.dart';
 import '../meditation_modes/demo_view.dart';
 import '../meditation_modes/timer_view.dart';
-import '../../model/measurement.dart';
 import '../../model/user_account.dart';
 
 enum MeditationMode {
   bioAdaptive(
     label: "Biosignal-Adaptive",
     icon: Icons.bolt,
-    view: BioAdaptiveView(),
+    build: _bioAdaptiveView,
     description:
         'Stress-adaptive meditation is active and can respond to live biomarkers.',
   ),
   timer(
     label: "Timed",
     icon: Icons.alarm,
-    view: TimerView(),
+    build: _timerView,
     description: 'Meditation with a fixed time duration.',
   ),
   demo(
     label: "Demo",
     icon: Icons.play_circle_outline,
-    view: DemoView(),
+    build: _demoView,
     description: 'Demonstration of the meditation features.',
   );
 
   final String label;
   final IconData icon;
-  final Widget view;
+  final Widget Function(MeditationPage page) build;
   final String description;
 
   const MeditationMode({
     required this.label,
     required this.icon,
-    required this.view,
+    required this.build,
     required this.description,
   });
 }
+
+Widget _bioAdaptiveView(MeditationPage page) => BioAdaptiveView(
+      ppgSensor: page.ppgSensor,
+      accelerometerSensor: page.accelerometerSensor,
+      gyroscopeSensor: page.gyroscopeSensor,
+      sensorConfigProvider: page.sensorConfigProvider,
+    );
+Widget _timerView(MeditationPage page) => const TimerView();
+Widget _demoView(MeditationPage page) => const DemoView();
 
 class MeditationPage extends StatefulWidget implements DrawerPage {
   final Sensor ppgSensor;
@@ -76,38 +84,10 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
 }
 
 class _MeditationPageState extends State<MeditationPage> {
-  Measurement? _measurement;
   MeditationMode? _selectedMode;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        _measurement = Measurement(
-          ppgSensor: widget.ppgSensor,
-          accelerometerSensor: widget.accelerometerSensor,
-          gyroscopeSensor: widget.gyroscopeSensor,
-          sensorConfigProvider: widget.sensorConfigProvider,
-          userAccount: widget.userAccount,
-        );
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _measurement?.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_measurement == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     final selectedMode = _selectedMode;
     if (selectedMode == null) {
       return _ModePicker(
@@ -117,7 +97,6 @@ class _MeditationPageState extends State<MeditationPage> {
 
     return MultiProvider(
       providers: [
-        Provider<Measurement>.value(value: _measurement!),
         Provider<UserAccount>.value(value: widget.userAccount),
         Provider<Wearable?>.value(value: widget.wearable),
       ],
@@ -142,7 +121,7 @@ class _MeditationPageState extends State<MeditationPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              selectedMode.view,
+              selectedMode.build(widget),
             ],
           ),
         ),
