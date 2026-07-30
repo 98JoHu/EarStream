@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
@@ -5,6 +6,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
+import '../../model/measurement_phase.dart' show MonitoringPhase;
+import '../../model/stress_detector.dart' show StressLevel;
 import '../../model/user_account.dart';
 import '../../model/activity_tracker.dart' show ActivityLevel;
 import '../../widgets/meditation_tile.dart';
@@ -34,17 +37,17 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
   late Measurement _measurement;
 
   void _startEarstream(UserAccount account) {
-    _measurement = Measurement(
-      ppgSensor: widget.ppgSensor,
-      accelerometerSensor: widget.accelerometerSensor,
-      gyroscopeSensor: widget.gyroscopeSensor,
-      sensorConfigProvider: widget.sensorConfigProvider,
-      userAccount: account,
-    );
-    _measurement.start();
     setState(() {
+      _measurement = Measurement.live(
+        ppgSensor: widget.ppgSensor,
+        accelerometerSensor: widget.accelerometerSensor,
+        gyroscopeSensor: widget.gyroscopeSensor,
+        sensorConfigProvider: widget.sensorConfigProvider,
+        userAccount: account,
+      );
       _earstreamState = EarstreamState.running;
     });
+    _measurement.start();
   }
 
   void _pauseEarstream() {
@@ -55,20 +58,28 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
   }
 
   void _resetEarstream(UserAccount account) {
-    _measurement = Measurement(
-      ppgSensor: widget.ppgSensor,
-      accelerometerSensor: widget.accelerometerSensor,
-      gyroscopeSensor: widget.gyroscopeSensor,
-      sensorConfigProvider: widget.sensorConfigProvider,
-      userAccount: account,
-    );
+    _measurement.dispose();
     setState(() {
+      _measurement = Measurement.live(
+        ppgSensor: widget.ppgSensor,
+        accelerometerSensor: widget.accelerometerSensor,
+        gyroscopeSensor: widget.gyroscopeSensor,
+        sensorConfigProvider: widget.sensorConfigProvider,
+        userAccount: account,
+      );
       _earstreamState = EarstreamState.idle;
     });
   }
 
-  void _simulateStress() {
-    _measurement.simulateStress();
+  void _simulateStress(UserAccount account) {
+    _measurement.dispose();
+    setState(() {
+      _measurement = Measurement.simulated(
+        userAccount: account,
+        restingActivityLevel: ActivityLevel.resting,
+      );
+      _earstreamState = EarstreamState.running;
+    });
   }
 
   void _resumeEarstream() {
@@ -113,7 +124,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           onStart: () => _startEarstream(userAccount),
           onResume: _resumeEarstream,
           onPause: _pauseEarstream,
-          onSimulateStress: _simulateStress,
+          onSimulateStress: () => _simulateStress(userAccount),
           onReset: () => _resetEarstream(userAccount),
         ),
       ],
@@ -209,18 +220,7 @@ class BioAdaptiveContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keying on resetGeneration makes reset() tear this subtree down, which is
-    // what actually clears the StreamBuilder snapshots and the chart's
-    // accumulated points — neither re-emits on its own after a reset.
-    return ValueListenableBuilder<int>(
-      valueListenable: measurement.resetGeneration,
-      builder: (_, generation, __) => _content(ValueKey(generation)),
-    );
-  }
-
-  Widget _content(Key key) {
     return Column(
-      key: key,
       children: [
         Row(
           children: [
@@ -365,7 +365,7 @@ class _MeasurementTile extends StatelessWidget {
 }
 
 class _ActivityLevelTile extends StatelessWidget {
-  final ValueNotifier<ActivityLevel> listenable;
+  final ValueListenable<ActivityLevel> listenable;
   const _ActivityLevelTile({
     required this.listenable,
   });
@@ -406,7 +406,7 @@ class _ActivityLevelTile extends StatelessWidget {
 }
 
 class _StressLevelTile extends StatelessWidget {
-  final ValueNotifier<StressLevel> listenable;
+  final ValueListenable<StressLevel> listenable;
   const _StressLevelTile({
     required this.listenable,
   });
@@ -446,8 +446,8 @@ class _StressLevelTile extends StatelessWidget {
 }
 
 class _MonitoringPhaseTile extends StatelessWidget {
-  final ValueNotifier<MonitoringPhase> monitoringPhase;
-  final ValueNotifier<double?> progress;
+  final ValueListenable<MonitoringPhase> monitoringPhase;
+  final ValueListenable<double?> progress;
   const _MonitoringPhaseTile({
     required this.monitoringPhase,
     required this.progress,

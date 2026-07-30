@@ -7,6 +7,8 @@ import 'dart:async';
 import 'user_account.dart';
 import 'measurement.dart';
 import 'meditation_session_generator.dart';
+import 'hr_hrv_processor.dart' show HeartRateSample;
+import 'stress_detector.dart' show StressLevel;
 
 class SessionProgress {
   final int currentSegment;

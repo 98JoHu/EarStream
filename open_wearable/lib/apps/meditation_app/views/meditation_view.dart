@@ -33,7 +33,7 @@ class MeditationView extends StatefulWidget {
 
 class _MeditationViewState extends State<MeditationView> {
   int _selectedIndex = 0;
-  int _meditationPageKey = 0;
+  MeditationMode? _selectedMode;
   final UserAccount _mockUserAccount = UserAccount(
     username: 'johndoe',
     firstName: 'John',
@@ -43,25 +43,29 @@ class _MeditationViewState extends State<MeditationView> {
     fitnessLevel: FitnessLevel.moderate,
   );
 
-  late final List<DrawerPage> _pages = [
-    MeditationPage(
-      ppgSensor: widget.ppgSensor,
-      accelerometerSensor: widget.accelerometerSensor,
-      gyroscopeSensor: widget.gyroscopeSensor,
-      sensorConfigProvider: widget.sensorConfigProvider,
-      userAccount: _mockUserAccount,
-      wearable: widget.wearable,
-    ),
-    ProfilePage(userAccount: _mockUserAccount),
-    PreferencesPage(userAccount: _mockUserAccount),
-    const WeeklyAnalyticsPage(),
-    CalendarIntegrationPage(userAccount: _mockUserAccount),
-    SealCheckPage(wearable: widget.wearable),
-    ApiKeysPage(userAccount: _mockUserAccount),
-  ];
+  List<DrawerPage> get _pages => [
+        MeditationPage(
+          ppgSensor: widget.ppgSensor,
+          accelerometerSensor: widget.accelerometerSensor,
+          gyroscopeSensor: widget.gyroscopeSensor,
+          sensorConfigProvider: widget.sensorConfigProvider,
+          userAccount: _mockUserAccount,
+          wearable: widget.wearable,
+          selectedMode: _selectedMode,
+          onModeSelected: (mode) => setState(() => _selectedMode = mode),
+        ),
+        ProfilePage(userAccount: _mockUserAccount),
+        PreferencesPage(userAccount: _mockUserAccount),
+        const WeeklyAnalyticsPage(),
+        CalendarIntegrationPage(userAccount: _mockUserAccount),
+        SealCheckPage(wearable: widget.wearable),
+        ApiKeysPage(userAccount: _mockUserAccount),
+      ];
 
   @override
   Widget build(BuildContext context) {
+    final pages = _pages;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("EarStreAM"),
@@ -72,9 +76,10 @@ class _MeditationViewState extends State<MeditationView> {
           onDestinationSelected: (int index) {
             setState(() {
               if (index == 0) {
-                // Force MeditationPage to remount so it always lands back on
-                // the mode picker, even if it was already the selected page.
-                _meditationPageKey++;
+                // Always land back on the mode picker, even if the meditation
+                // page was already the selected one. Clearing this also
+                // unmounts the running mode view, disposing its measurement.
+                _selectedMode = null;
               }
               _selectedIndex = index;
             });
@@ -116,7 +121,7 @@ class _MeditationViewState extends State<MeditationView> {
               ],
             ),
           ),
-          children: _pages.map((DrawerPage page) {
+          children: pages.map((DrawerPage page) {
             return NavigationDrawerDestination(
               icon: Icon(page.icon),
               label: Text(page.label),
@@ -125,19 +130,7 @@ class _MeditationViewState extends State<MeditationView> {
           }).toList(),
         ),
       ),
-      body: SafeArea(
-        child: _selectedIndex == 0
-            ? MeditationPage(
-                key: ValueKey(_meditationPageKey),
-                ppgSensor: widget.ppgSensor,
-                accelerometerSensor: widget.accelerometerSensor,
-                gyroscopeSensor: widget.gyroscopeSensor,
-                sensorConfigProvider: widget.sensorConfigProvider,
-                userAccount: _mockUserAccount,
-                wearable: widget.wearable,
-              )
-            : _pages[_selectedIndex],
-      ),
+      body: SafeArea(child: pages[_selectedIndex]),
     );
   }
 }

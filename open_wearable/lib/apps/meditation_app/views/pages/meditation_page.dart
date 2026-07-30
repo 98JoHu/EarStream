@@ -57,13 +57,19 @@ Widget _demoView(MeditationPage page) => DemoView(
       sensorConfigProvider: page.sensorConfigProvider,
     );
 
-class MeditationPage extends StatefulWidget implements DrawerPage {
+class MeditationPage extends StatelessWidget implements DrawerPage {
   final Sensor ppgSensor;
   final Sensor accelerometerSensor;
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
   final UserAccount userAccount;
   final Wearable? wearable;
+
+  /// The mode being shown, or null for the picker. Owned by the parent so that
+  /// re-selecting this page in the drawer can send it back to the picker —
+  /// without that, the only way out would be remounting the whole page.
+  final MeditationMode? selectedMode;
+  final ValueChanged<MeditationMode> onModeSelected;
 
   const MeditationPage({
     super.key,
@@ -72,6 +78,8 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     required this.userAccount,
+    required this.selectedMode,
+    required this.onModeSelected,
     this.wearable,
   });
 
@@ -85,25 +93,16 @@ class MeditationPage extends StatefulWidget implements DrawerPage {
   IconData get selectedIcon => Icons.tune;
 
   @override
-  State<MeditationPage> createState() => _MeditationPageState();
-}
-
-class _MeditationPageState extends State<MeditationPage> {
-  MeditationMode? _selectedMode;
-
-  @override
   Widget build(BuildContext context) {
-    final selectedMode = _selectedMode;
+    final selectedMode = this.selectedMode;
     if (selectedMode == null) {
-      return _ModePicker(
-        onModeSelected: (mode) => setState(() => _selectedMode = mode),
-      );
+      return _ModePicker(onModeSelected: onModeSelected);
     }
 
     return MultiProvider(
       providers: [
-        Provider<UserAccount>.value(value: widget.userAccount),
-        Provider<Wearable?>.value(value: widget.wearable),
+        Provider<UserAccount>.value(value: userAccount),
+        Provider<Wearable?>.value(value: wearable),
       ],
       child: SingleChildScrollView(
         child: Padding(
@@ -126,7 +125,7 @@ class _MeditationPageState extends State<MeditationPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              selectedMode.build(widget),
+              selectedMode.build(this),
             ],
           ),
         ),

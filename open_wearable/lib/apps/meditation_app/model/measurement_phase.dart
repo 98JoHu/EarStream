@@ -12,12 +12,10 @@ typedef PhaseElapsed = Duration Function();
 class PhaseContext {
   final BiometricSource source;
   final StressDetector detector;
-  final UserAccount userAccount;
 
   const PhaseContext({
     required this.source,
     required this.detector,
-    required this.userAccount,
   });
 }
 
@@ -53,10 +51,11 @@ class CalibrationPhase extends MonitoringPhase {
 }
 
 class BaselinePhase extends MonitoringPhase {
+  final UserAccount userAccount;
   @override
   final Duration duration;
 
-  BaselinePhase({Duration? duration})
+  BaselinePhase({required this.userAccount, Duration? duration})
       : duration = duration ?? const Duration(minutes: 5);
 
   @override
@@ -71,8 +70,7 @@ class BaselinePhase extends MonitoringPhase {
     PhaseContext ctx,
     PhaseElapsed elapsed,
   ) {
-    final (baselineHeartRate, baselineRmssd) =
-        ctx.userAccount.baselineBiometrics;
+    final (baselineHeartRate, baselineRmssd) = userAccount.baselineBiometrics;
 
     return ctx.source.biometrics.listen((data) {
       final timeRatio =
@@ -84,10 +82,10 @@ class BaselinePhase extends MonitoringPhase {
       final dynamicHeartRate =
           (studyWeight * baselineHeartRate + measuredWeight * data.heartRate)
               .round();
-      ctx.userAccount.baselineHeartRate = dynamicHeartRate;
+      userAccount.baselineHeartRate = dynamicHeartRate;
 
       if (data.rmssd != null) {
-        ctx.userAccount.baselineRMSSD =
+        userAccount.baselineRMSSD =
             studyWeight * baselineRmssd + measuredWeight * data.rmssd!;
       }
     });
@@ -132,13 +130,9 @@ class MonitoringPhaseController {
 
   MonitoringPhaseController({
     required PhaseContext ctx,
-    Duration? baselineDuration,
+    required List<MonitoringPhase> phases,
   })  : _ctx = ctx,
-        _phases = [
-          CalibrationPhase(),
-          BaselinePhase(duration: baselineDuration),
-          StressMonitoringPhase(),
-        ] {
+        _phases = phases {
     phase = ValueNotifier(_phases.first);
   }
 
