@@ -29,33 +29,33 @@ enum SpeakingSpeed {
   verySlow(
     label: "Very Slow",
     isRecommended: false,
-    speed: 0.2,
     emoji: AppEmojis.snail,
+    speed: 0.2,
   ),
   slow(
     label: "Slow",
     isRecommended: true,
-    speed: 0.3,
     emoji: AppEmojis.turtle,
+    speed: 0.3,
   ),
   medium(
     label: "Medium",
     isRecommended: false,
-    speed: 0.4,
     emoji: AppEmojis.walkingPerson,
+    speed: 0.5,
   ),
   fast(
     label: "Fast",
     isRecommended: false,
-    speed: 0.5,
     emoji: AppEmojis.runningPerson,
+    speed: 0.7,
   );
 
   final String label;
   final String emoji;
   final bool isRecommended;
+  // flutter_tts speech rate, on its normalized 0.0-1.0 scale.
   final double speed;
-
   const SpeakingSpeed({
     required this.label,
     required this.emoji,
@@ -149,9 +149,9 @@ class UserAccount {
   bool hasValidDeepseekKey = false;
   String? elevenLabsApiKey;
   bool hasValidElevenLabsKey = false;
-  List<({String voice, String id})>?
-      availableElevenLabsVoices; // Store available voices from ElevenLabs API
+  // Populated by ElevenLabsManager.updateUser() once the key is verified.
   String? elevenLabsVoiceId;
+  List<({String voice, String id})>? availableElevenLabsVoices;
   String? dashscopeApiKey;
   bool hasValidDashscopeKey = false;
 
@@ -256,6 +256,10 @@ class UserAccount {
     return (defaultHeartRate, defaultRMSSD);
   }
 
+  /// Thresholds derived from the baseline biometrics and a sensitivity
+  /// fraction. Pass [stressThreshold] to override the account's saved
+  /// sensitivity for a single call (e.g. a demo session) without persisting
+  /// it; omit it to use (and, the first time, cache) the account's own.
   (int, double) stressThresholds({double? stressThreshold}) {
     final (baselineHeartRate, baselineRMSSD) = baselineBiometrics;
 
