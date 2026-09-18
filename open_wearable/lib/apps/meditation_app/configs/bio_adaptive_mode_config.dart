@@ -24,6 +24,10 @@ abstract final class BioAdaptiveModeConfig {
   static const Duration? guaranteedMeditationDelay = null;
   static const bool useBestEffortEstimates = false;
   static const bool allowStressSimulation = true;
+  // In the regular office-use mode, sustained movement prevents a new stress
+  // classification so motion-related HR/RMSSD changes do not start a
+  // meditation.
+  static const bool suppressStressDetectionDuringActivity = true;
 
   // Shared recovery rule for regular and demo biosignal-adaptive sessions.
   // The current generated segment is allowed to finish once measured HR is

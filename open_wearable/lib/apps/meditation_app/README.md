@@ -102,8 +102,9 @@ current HR > HR threshold
 current RMSSD < RMSSD threshold
 ```
 
-A missing RMSSD value cannot trigger stress. Physical activity can suppress a
-new stress classification, as described under Activity handling below.
+A missing RMSSD value cannot trigger stress. In the regular mode, physical
+activity can suppress a new stress classification, as described under
+Activity handling below.
 
 ### 4. Adaptive meditation and recovery
 
@@ -235,8 +236,14 @@ New stress detection is suppressed when the retained history contains at least:
 - 5% vigorous-or-higher activity; or
 - 2% intense activity.
 
-Once stress has already been detected, recovery tracking is not blocked by
-activity and remains HR-only.
+These percentages suppress new stress detection only in the regular
+biosignal-adaptive mode. The demo uses the same live classification and shows
+the same activity levels in the UI, but its mode configuration explicitly
+disables activity-based intervention suppression. Consequently, neither a
+physiological stress trigger nor the demo's guaranteed two-minute trigger can
+be blocked by activity. Once stress has already been detected in the regular
+mode, recovery tracking is likewise not blocked by activity and remains
+HR-only.
 
 ## Meditation generation
 

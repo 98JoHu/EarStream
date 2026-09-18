@@ -48,6 +48,8 @@ class Measurement {
       ctx: PhaseContext(
         source: _source,
         detector: _detector,
+        suppressStressDetectionDuringActivity:
+            sessionConfig.suppressStressDetectionDuringActivity,
       ),
       phases: phases,
     );

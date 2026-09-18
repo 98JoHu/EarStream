@@ -13,10 +13,12 @@ typedef PhaseElapsed = Duration Function();
 class PhaseContext {
   final BiometricSource source;
   final StressDetector detector;
+  final bool suppressStressDetectionDuringActivity;
 
   const PhaseContext({
     required this.source,
     required this.detector,
+    this.suppressStressDetectionDuringActivity = true,
   });
 }
 
@@ -181,7 +183,8 @@ class StressMonitoringPhase extends MonitoringPhase {
     return ctx.source.biometrics.listen((sample) {
       ctx.detector.onSample(
         sample,
-        suppress: ctx.source.suppressStressDetection,
+        suppress: ctx.suppressStressDetectionDuringActivity &&
+            ctx.source.suppressStressDetection,
       );
     });
   }

@@ -22,6 +22,7 @@ class BioAdaptiveSessionConfig {
   final bool useBestEffortEstimates;
   final MeditationPromptPolicy promptPolicy;
   final bool allowStressSimulation;
+  final bool suppressStressDetectionDuringActivity;
 
   const BioAdaptiveSessionConfig({
     required this.includeCalibration,
@@ -37,6 +38,7 @@ class BioAdaptiveSessionConfig {
     required this.useBestEffortEstimates,
     required this.promptPolicy,
     required this.allowStressSimulation,
+    required this.suppressStressDetectionDuringActivity,
   });
 
   /// Full-length production behaviour. It uses the same sensor-only baseline
@@ -57,6 +59,8 @@ class BioAdaptiveSessionConfig {
     useBestEffortEstimates: BioAdaptiveModeConfig.useBestEffortEstimates,
     promptPolicy: MeditationPromptPolicy.standard,
     allowStressSimulation: BioAdaptiveModeConfig.allowStressSimulation,
+    suppressStressDetectionDuringActivity:
+        BioAdaptiveModeConfig.suppressStressDetectionDuringActivity,
   );
 
   /// Time-condensed conference cycle described in the demo paper.
@@ -75,5 +79,7 @@ class BioAdaptiveSessionConfig {
     useBestEffortEstimates: DemoModeConfig.useBestEffortEstimates,
     promptPolicy: MeditationPromptPolicy.conferenceDemo,
     allowStressSimulation: DemoModeConfig.allowStressSimulation,
+    suppressStressDetectionDuringActivity:
+        DemoModeConfig.suppressStressDetectionDuringActivity,
   );
 }

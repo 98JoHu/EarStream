@@ -87,10 +87,12 @@ class ActivityTracker {
   DateTime? _lastEmitTime;
   static const Duration _emitInterval =
       BioAdaptiveModeConfig.activityClassificationInterval;
+  static const Duration _classificationWindow =
+      BioAdaptiveModeConfig.activityClassificationInterval;
 
   // Rolling history of classified activity levels, used to suppress stress
   // detection during/after sustained physical activity (see
-  // shouldSupressStressDetection).
+  // shouldSuppressStressDetection).
   final List<(DateTime, ActivityLevel)> _activityHistory = [];
   static const Duration _activityHistoryWindow =
       BioAdaptiveModeConfig.activityHistoryWindow;
@@ -127,6 +129,7 @@ class ActivityTracker {
     _accelWindow.clear();
     _gyroWindow.clear();
     _activityHistory.clear();
+    _lastEmitTime = null;
     _activityLevel.value = ActivityLevel.resting;
   }
 
@@ -152,15 +155,25 @@ class ActivityTracker {
   }
 
   bool shouldSuppressStressDetection() {
-    if (_activityHistory.isEmpty) {
+    final now = DateTime.now();
+    _activityHistory.removeWhere(
+      (entry) => now.difference(entry.$1) > _activityHistoryWindow,
+    );
+    return shouldSuppressForLevels(_activityHistory.map((entry) => entry.$2));
+  }
+
+  /// Applies the documented five-minute-history percentage rules to already
+  /// classified samples. Kept pure so the policy can be regression-tested
+  /// independently from live sensor timing.
+  static bool shouldSuppressForLevels(Iterable<ActivityLevel> levels) {
+    final history = levels.toList(growable: false);
+    if (history.isEmpty) {
       return false;
     }
 
     double ratioAtLeast(ActivityLevel level) {
-      final count = _activityHistory
-          .where((entry) => entry.$2.index >= level.index)
-          .length;
-      return count / _activityHistory.length;
+      final count = history.where((entry) => entry.index >= level.index).length;
+      return count / history.length;
     }
 
     return ratioAtLeast(ActivityLevel.light) >= _lightOrMoreSuppressionRatio ||
@@ -182,10 +195,10 @@ class ActivityTracker {
 
     // Add the sample to the window and remove old samples
     _accelWindow.add(sample);
-    _accelWindow.removeWhere(
-      (s) =>
-          s.timestamp <
-          sample.timestamp - 3 * pow(10, timestampExponentAccelerometer),
+    _trimToClassificationWindow(
+      _accelWindow,
+      sample.timestamp,
+      timestampExponentAccelerometer,
     );
 
     // Update the activity level based on the current window of samples
@@ -203,17 +216,24 @@ class ActivityTracker {
 
     // Add the sample to the window and remove old samples
     _gyroWindow.add(sample);
-    _gyroWindow.removeWhere(
-      (s) =>
-          s.timestamp <
-          sample.timestamp - 3 * pow(10, timestampExponentGyroscope),
+    _trimToClassificationWindow(
+      _gyroWindow,
+      sample.timestamp,
+      timestampExponentGyroscope,
     );
     // Update the activity level based on the current window of samples
     _updateActivityLevel();
   }
 
   void _updateActivityLevel() {
-    if (_accelWindow.isEmpty || _gyroWindow.isEmpty) {
+    if (!_coversClassificationWindow(
+          _accelWindow,
+          timestampExponentAccelerometer,
+        ) ||
+        !_coversClassificationWindow(
+          _gyroWindow,
+          timestampExponentGyroscope,
+        )) {
       return;
     }
 
@@ -232,29 +252,77 @@ class ActivityTracker {
         _gyroWindow.map((s) => s.magnitude).reduce((a, b) => a + b) /
             _gyroWindow.length;
 
-    final ActivityLevel level;
-    if (avgAccelDeviation < ActivityLevel.resting.accelarationThreshold &&
-        avgGyroMagnitude < ActivityLevel.resting.gyroscopeThreshold) {
-      level = ActivityLevel.resting;
-    } else if (avgAccelDeviation < ActivityLevel.light.accelarationThreshold &&
-        avgGyroMagnitude < ActivityLevel.light.gyroscopeThreshold) {
-      level = ActivityLevel.light;
-    } else if (avgAccelDeviation <
-            ActivityLevel.moderate.accelarationThreshold &&
-        avgGyroMagnitude < ActivityLevel.moderate.gyroscopeThreshold) {
-      level = ActivityLevel.moderate;
-    } else if (avgAccelDeviation <
-            ActivityLevel.vigorous.accelarationThreshold &&
-        avgGyroMagnitude < ActivityLevel.vigorous.gyroscopeThreshold) {
-      level = ActivityLevel.vigorous;
-    } else {
-      level = ActivityLevel.intense;
-    }
+    final level = classify(
+      accelerationDeviationG: avgAccelDeviation,
+      gyroscopeMagnitudeDegreesPerSecond: avgGyroMagnitude,
+    );
 
     _activityLevel.value = level;
     _activityHistory.add((now, level));
     _activityHistory.removeWhere(
       (entry) => now.difference(entry.$1) > _activityHistoryWindow,
     );
+  }
+
+  static bool _coversClassificationWindow(
+    List<PpgMotionSample> samples,
+    int timestampExponent,
+  ) {
+    if (samples.length < 2) return false;
+    final requiredTicks = classificationWindowTicksFor(timestampExponent);
+    return samples.last.timestamp - samples.first.timestamp >= requiredTicks;
+  }
+
+  static void _trimToClassificationWindow(
+    List<PpgMotionSample> samples,
+    int latestTimestamp,
+    int timestampExponent,
+  ) {
+    final cutoff =
+        latestTimestamp - classificationWindowTicksFor(timestampExponent);
+    var retainedPredecessor = 0;
+    while (retainedPredecessor + 1 < samples.length &&
+        samples[retainedPredecessor + 1].timestamp <= cutoff) {
+      retainedPredecessor++;
+    }
+    if (retainedPredecessor > 0) {
+      samples.removeRange(0, retainedPredecessor);
+    }
+  }
+
+  static double classificationWindowTicksFor(int timestampExponent) {
+    final ticksPerSecond = pow(10, -timestampExponent).toDouble();
+    return _classificationWindow.inMicroseconds / 1000000.0 * ticksPerSecond;
+  }
+
+  /// Classifies a three-second window. A window advances to the next level if
+  /// either motion measure reaches that level, which is equivalent to both
+  /// measures having to remain below a level's upper bounds.
+  static ActivityLevel classify({
+    required double accelerationDeviationG,
+    required double gyroscopeMagnitudeDegreesPerSecond,
+  }) {
+    if (accelerationDeviationG < ActivityLevel.resting.accelarationThreshold &&
+        gyroscopeMagnitudeDegreesPerSecond <
+            ActivityLevel.resting.gyroscopeThreshold) {
+      return ActivityLevel.resting;
+    } else if (accelerationDeviationG <
+            ActivityLevel.light.accelarationThreshold &&
+        gyroscopeMagnitudeDegreesPerSecond <
+            ActivityLevel.light.gyroscopeThreshold) {
+      return ActivityLevel.light;
+    } else if (accelerationDeviationG <
+            ActivityLevel.moderate.accelarationThreshold &&
+        gyroscopeMagnitudeDegreesPerSecond <
+            ActivityLevel.moderate.gyroscopeThreshold) {
+      return ActivityLevel.moderate;
+    } else if (accelerationDeviationG <
+            ActivityLevel.vigorous.accelarationThreshold &&
+        gyroscopeMagnitudeDegreesPerSecond <
+            ActivityLevel.vigorous.gyroscopeThreshold) {
+      return ActivityLevel.vigorous;
+    } else {
+      return ActivityLevel.intense;
+    }
   }
 }

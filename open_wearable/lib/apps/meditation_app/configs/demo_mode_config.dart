@@ -15,6 +15,9 @@ abstract final class DemoModeConfig {
   static const Duration meditationSegmentDuration = Duration(seconds: 30);
   static const bool useBestEffortEstimates = true;
   static const bool allowStressSimulation = false;
+  // Activity is still classified and displayed in the demo, but it must never
+  // prevent the condensed intervention from starting.
+  static const bool suppressStressDetectionDuringActivity = false;
 
   // Personalized meditation-only demo.
   static const int meditationOnlySegmentCount = 3;

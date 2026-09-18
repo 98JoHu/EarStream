@@ -189,6 +189,7 @@ class SensorBiometricSource implements BiometricSource {
 
     // Subscribe to the streams and start processing
     _subscribe();
+    _activityTracker.start();
     _started = true;
   }
 

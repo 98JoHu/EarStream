@@ -66,6 +66,15 @@ void main() {
         BioAdaptiveModeConfig.meditationSegmentCount,
         OverallMeditationConfig.defaultSegmentCount,
       );
+      expect(
+        BioAdaptiveSessionConfig.standard.suppressStressDetectionDuringActivity,
+        isTrue,
+      );
+      expect(
+        BioAdaptiveSessionConfig
+            .conferenceDemo.suppressStressDetectionDuringActivity,
+        isFalse,
+      );
     });
 
     test('documents exact Mainland China demo environment changes', () {
@@ -84,6 +93,118 @@ void main() {
       expect(
         DemoModeConfig.chinaDeepseekApiBaseUrl,
         'https://api.deepseek.com',
+      );
+    });
+  });
+
+  group('activity classification and stress gating', () {
+    test('converts the three-second window to sensor timestamp ticks', () {
+      expect(ActivityTracker.classificationWindowTicksFor(-3), 3000);
+      expect(ActivityTracker.classificationWindowTicksFor(-6), 3000000);
+    });
+
+    test('uses the documented activity threshold boundaries', () {
+      ActivityLevel classify(double acceleration, double gyroscope) {
+        return ActivityTracker.classify(
+          accelerationDeviationG: acceleration,
+          gyroscopeMagnitudeDegreesPerSecond: gyroscope,
+        );
+      }
+
+      expect(classify(0.199, 299), ActivityLevel.resting);
+      expect(classify(0.2, 0), ActivityLevel.light);
+      expect(classify(0, 300), ActivityLevel.light);
+      expect(classify(0.4, 0), ActivityLevel.moderate);
+      expect(classify(0, 600), ActivityLevel.moderate);
+      expect(classify(0.8, 0), ActivityLevel.vigorous);
+      expect(classify(0, 1200), ActivityLevel.vigorous);
+      expect(classify(2.0, 0), ActivityLevel.intense);
+      expect(classify(0, 3000), ActivityLevel.intense);
+    });
+
+    test('uses the documented recent-activity suppression percentages', () {
+      List<ActivityLevel> history(
+        int count,
+        ActivityLevel level, {
+        int total = 100,
+      }) {
+        return [
+          ...List.filled(count, level),
+          ...List.filled(total - count, ActivityLevel.resting),
+        ];
+      }
+
+      expect(
+        ActivityTracker.shouldSuppressForLevels(
+          history(39, ActivityLevel.light),
+        ),
+        isFalse,
+      );
+      expect(
+        ActivityTracker.shouldSuppressForLevels(
+          history(40, ActivityLevel.light),
+        ),
+        isTrue,
+      );
+      expect(
+        ActivityTracker.shouldSuppressForLevels(
+          history(20, ActivityLevel.moderate),
+        ),
+        isTrue,
+      );
+      expect(
+        ActivityTracker.shouldSuppressForLevels(
+          history(5, ActivityLevel.vigorous),
+        ),
+        isTrue,
+      );
+      expect(
+        ActivityTracker.shouldSuppressForLevels(
+          history(2, ActivityLevel.intense),
+        ),
+        isTrue,
+      );
+    });
+
+    test('regular mode suppresses stress while demo mode ignores activity',
+        () async {
+      Future<StressLevel> detect({required bool applyActivityGate}) async {
+        final source = _TestBiometricSource(suppressStressDetection: true);
+        final detector = StressDetector(
+          thresholds: () => (80, 40),
+          baselineHeartRate: () => 70,
+        );
+        final subscription = StressMonitoringPhase().activate(
+          PhaseContext(
+            source: source,
+            detector: detector,
+            suppressStressDetectionDuringActivity: applyActivityGate,
+          ),
+          () => Duration.zero,
+        );
+
+        source.add(const HeartRateSample(heartRate: 90, rmssd: 20));
+        final result = detector.currentStressLevel;
+
+        await subscription.cancel();
+        detector.dispose();
+        source.dispose();
+        return result;
+      }
+
+      expect(
+        await detect(
+          applyActivityGate: BioAdaptiveSessionConfig
+              .standard.suppressStressDetectionDuringActivity,
+        ),
+        StressLevel.relaxed,
+      );
+      expect(
+        await detect(
+          applyActivityGate: BioAdaptiveSessionConfig
+              .conferenceDemo.suppressStressDetectionDuringActivity,
+        ),
+        StressLevel.stressed,
       );
     });
   });
@@ -1275,6 +1396,10 @@ class _TestBiometricSource implements BiometricSource {
   int calibrationStarts = 0;
   int measurementStarts = 0;
   HeartRateSample? bestEstimate;
+  @override
+  final bool suppressStressDetection;
+
+  _TestBiometricSource({this.suppressStressDetection = false});
 
   void add(HeartRateSample sample) {
     if (sample.rmssd != null) bestEstimate = sample;
@@ -1286,9 +1411,6 @@ class _TestBiometricSource implements BiometricSource {
 
   @override
   ValueListenable<ActivityLevel> get activityLevel => _activity;
-
-  @override
-  bool get suppressStressDetection => false;
 
   @override
   HeartRateSample? get bestEffortEstimate => bestEstimate;
