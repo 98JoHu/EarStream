@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../configs/overall_config.dart';
 import '../widgets/emojis.dart';
 
 enum Gender {
@@ -32,25 +33,25 @@ enum SpeakingSpeed {
     label: "Very Slow",
     isRecommended: false,
     emoji: AppEmojis.snail,
-    speed: 0.2,
+    speed: OverallMeditationConfig.verySlowSpeechRate,
   ),
   slow(
     label: "Slow",
     isRecommended: true,
     emoji: AppEmojis.turtle,
-    speed: 0.3,
+    speed: OverallMeditationConfig.slowSpeechRate,
   ),
   medium(
     label: "Medium",
     isRecommended: false,
     emoji: AppEmojis.walkingPerson,
-    speed: 0.5,
+    speed: OverallMeditationConfig.mediumSpeechRate,
   ),
   fast(
     label: "Fast",
     isRecommended: false,
     emoji: AppEmojis.runningPerson,
-    speed: 0.7,
+    speed: OverallMeditationConfig.fastSpeechRate,
   );
 
   final String label;
@@ -78,7 +79,7 @@ enum TtsProviderOption {
 
   static TtsProviderOption fromConfig(String? value) {
     return switch (value?.trim().toLowerCase()) {
-      'tencent' ||
+      OverallMeditationConfig.tencentProviderEnvironmentValue ||
       'tencentcloud' ||
       'tencent_cloud' =>
         TtsProviderOption.tencent,
@@ -90,13 +91,13 @@ enum TtsProviderOption {
 enum TencentTtsRegion {
   internationalSingapore(
     label: 'International (Singapore)',
-    region: 'ap-singapore',
-    host: 'tts.intl.tencentcloudapi.com',
+    region: OverallMeditationConfig.tencentInternationalRegion,
+    host: OverallMeditationConfig.tencentInternationalHost,
   ),
   chinaGuangzhou(
     label: 'Mainland China (Guangzhou)',
-    region: 'ap-guangzhou',
-    host: 'tts.tencentcloudapi.com',
+    region: OverallMeditationConfig.tencentChinaRegion,
+    host: OverallMeditationConfig.tencentChinaHost,
   );
 
   final String label;
@@ -112,7 +113,7 @@ enum TencentTtsRegion {
   static TencentTtsRegion fromConfig(String? value) {
     final normalized = value?.trim().toLowerCase();
     return switch (normalized) {
-      'ap-guangzhou' ||
+      OverallMeditationConfig.tencentChinaRegion ||
       'china' ||
       'mainland-china' =>
         TencentTtsRegion.chinaGuangzhou,
@@ -120,7 +121,7 @@ enum TencentTtsRegion {
       // created before Tencent's product-specific TTS regions were verified.
       // International TextToVoice uses the global endpoint and Singapore
       // processing; eu-frankfurt is not supported by that API.
-      'ap-singapore' ||
+      OverallMeditationConfig.tencentInternationalRegion ||
       'international' ||
       'global' ||
       'eu-frankfurt' =>
@@ -267,11 +268,21 @@ class UserAccount {
       return value == null || value.isEmpty ? null : value;
     }
 
-    final deepseekApiKey = configured('DEEPSEEK_API_KEY');
-    final elevenLabsApiKey = configured('ELEVENLABS_API_KEY');
-    final tencentSecretId = configured('TENCENT_SECRET_ID');
-    final tencentSecretKey =
-        configured('TENCENT_SECRET_KEY') ?? configured('TENCENT_TTS_API_KEY');
+    final deepseekApiKey = configured(
+      OverallMeditationConfig.deepseekApiKeyEnvironmentKey,
+    );
+    final elevenLabsApiKey = configured(
+      OverallMeditationConfig.elevenLabsApiKeyEnvironmentKey,
+    );
+    final tencentSecretId = configured(
+      OverallMeditationConfig.tencentSecretIdEnvironmentKey,
+    );
+    final tencentSecretKey = configured(
+          OverallMeditationConfig.tencentSecretKeyEnvironmentKey,
+        ) ??
+        configured(
+          OverallMeditationConfig.tencentLegacySecretKeyEnvironmentKey,
+        );
 
     final account = UserAccount(
       username: username,
@@ -282,11 +293,14 @@ class UserAccount {
       fitnessLevel: fitnessLevel,
       deepseekApiKey: deepseekApiKey,
       elevenLabsApiKey: elevenLabsApiKey,
-      ttsProvider: TtsProviderOption.fromConfig(environment['TTS_PROVIDER']),
+      ttsProvider: TtsProviderOption.fromConfig(
+        environment[OverallMeditationConfig.ttsProviderEnvironmentKey],
+      ),
       tencentSecretId: tencentSecretId,
       tencentSecretKey: tencentSecretKey,
-      tencentTtsRegion:
-          TencentTtsRegion.fromConfig(environment['TENCENT_TTS_REGION']),
+      tencentTtsRegion: TencentTtsRegion.fromConfig(
+        environment[OverallMeditationConfig.tencentRegionEnvironmentKey],
+      ),
     );
 
     // Bundled demo credentials are immediately usable. The API Keys page can
@@ -400,7 +414,10 @@ class UserAccount {
     // threshold of 0, and "rmssd < 0" is never true, so stress could never be
     // detected for that profile at all. Floor it at a physiologically sane
     // value instead.
-    defaultRMSSD = max(defaultRMSSD, _minimumBaselineRMSSD);
+    defaultRMSSD = max(
+      defaultRMSSD,
+      OverallMeditationConfig.minimumProfileBaselineRmssd,
+    );
 
     baselineHeartRate = defaultHeartRate;
     baselineRMSSD = defaultRMSSD;
@@ -411,8 +428,6 @@ class UserAccount {
   /// Lowest baseline RMSSD the profile defaults may produce. Roughly the
   /// bottom of the adult resting range; below this the stress thresholds stop
   /// being meaningful.
-  static const double _minimumBaselineRMSSD = 12.0;
-
   /// Thresholds derived from the baseline biometrics and a sensitivity
   /// fraction. Pass [stressThreshold] to override the account's saved
   /// sensitivity for a single call (e.g. a demo session) without persisting
@@ -421,10 +436,12 @@ class UserAccount {
     final (baselineHeartRate, baselineRMSSD) = baselineBiometrics;
 
     // if a treshold is provided, use it; otherwise, use the user's stored threshold or default to 10%
-    final threshold = stressThreshold ?? this.stressThreshold ?? 0.1;
+    final threshold = stressThreshold ??
+        this.stressThreshold ??
+        OverallMeditationConfig.defaultStressSensitivity;
 
     // If the user's stored threshold is null, set it to 10% for future reference
-    this.stressThreshold ??= 0.1;
+    this.stressThreshold ??= OverallMeditationConfig.defaultStressSensitivity;
 
     final heartRateThreshold = (baselineHeartRate * (1 + threshold)).round();
     final rmssdThreshold = baselineRMSSD * (1 - threshold);

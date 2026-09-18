@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
+import '../configs/bio_adaptive_mode_config.dart';
 import 'user_account.dart';
 import 'bio_adaptive_session_config.dart';
 import 'meditation_analytics.dart';
@@ -109,7 +110,10 @@ class Measurement {
         restingActivityLevel: restingActivityLevel,
       ),
       phases: [StressMonitoringPhase()],
-      stressThresholdProvider: () => (90, 40.0),
+      stressThresholdProvider: () => (
+        BioAdaptiveModeConfig.recordedStressDetectionHeartRate,
+        BioAdaptiveModeConfig.recordedStressDetectionRmssd,
+      ),
       baselineHeartRateProvider: () =>
           RecordedStressBiometricSource.baselineHeartRate.round(),
       sessionConfig: sessionConfig,

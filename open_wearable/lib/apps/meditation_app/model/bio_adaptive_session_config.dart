@@ -1,9 +1,8 @@
+import '../configs/bio_adaptive_mode_config.dart';
+import '../configs/demo_mode_config.dart';
 import 'meditation_prompt_policy.dart';
 
-enum BaselineComputationMode {
-  profileBlended,
-  physiologicalOnly,
-}
+export '../configs/bio_adaptive_mode_config.dart' show BaselineComputationMode;
 
 class BioAdaptiveSessionConfig {
   final bool includeCalibration;
@@ -42,33 +41,34 @@ class BioAdaptiveSessionConfig {
   /// path as the demo, but retains the longer production timing and stricter
   /// signal-quality requirements.
   static const standard = BioAdaptiveSessionConfig(
-    includeCalibration: true,
-    calibrationDuration: Duration(seconds: 30),
-    baselineDuration: Duration(minutes: 5),
-    baselineComputationMode: BaselineComputationMode.physiologicalOnly,
-    stressThresholdOverride: null,
-    meditationSegmentDuration: null,
-    hrvMinimumWindow: null,
-    metricWindowDuration: null,
-    guaranteedMeditationDelay: null,
-    useBestEffortEstimates: false,
+    includeCalibration: BioAdaptiveModeConfig.includeCalibration,
+    calibrationDuration: BioAdaptiveModeConfig.calibrationDuration,
+    baselineDuration: BioAdaptiveModeConfig.baselineDuration,
+    baselineComputationMode: BioAdaptiveModeConfig.baselineComputationMode,
+    stressThresholdOverride: BioAdaptiveModeConfig.stressThresholdOverride,
+    meditationSegmentDuration:
+        BioAdaptiveModeConfig.meditationSegmentDurationOverride,
+    hrvMinimumWindow: BioAdaptiveModeConfig.hrvMinimumWindowOverride,
+    metricWindowDuration: BioAdaptiveModeConfig.metricWindowDurationOverride,
+    guaranteedMeditationDelay: BioAdaptiveModeConfig.guaranteedMeditationDelay,
+    useBestEffortEstimates: BioAdaptiveModeConfig.useBestEffortEstimates,
     promptPolicy: MeditationPromptPolicy.standard,
-    allowStressSimulation: true,
+    allowStressSimulation: BioAdaptiveModeConfig.allowStressSimulation,
   );
 
   /// Time-condensed conference cycle described in the demo paper.
   static const conferenceDemo = BioAdaptiveSessionConfig(
-    includeCalibration: true,
-    calibrationDuration: Duration(seconds: 30),
-    baselineDuration: Duration(seconds: 30),
+    includeCalibration: DemoModeConfig.includeCalibration,
+    calibrationDuration: DemoModeConfig.calibrationDuration,
+    baselineDuration: DemoModeConfig.baselineDuration,
     baselineComputationMode: BaselineComputationMode.physiologicalOnly,
-    stressThresholdOverride: 0.03,
-    meditationSegmentDuration: Duration(seconds: 30),
-    hrvMinimumWindow: Duration(seconds: 30),
-    metricWindowDuration: Duration(seconds: 30),
-    guaranteedMeditationDelay: Duration(minutes: 2),
-    useBestEffortEstimates: true,
+    stressThresholdOverride: DemoModeConfig.stressThreshold,
+    meditationSegmentDuration: DemoModeConfig.meditationSegmentDuration,
+    hrvMinimumWindow: DemoModeConfig.hrvMinimumWindow,
+    metricWindowDuration: DemoModeConfig.metricWindowDuration,
+    guaranteedMeditationDelay: DemoModeConfig.guaranteedMeditationDelay,
+    useBestEffortEstimates: DemoModeConfig.useBestEffortEstimates,
     promptPolicy: MeditationPromptPolicy.conferenceDemo,
-    allowStressSimulation: false,
+    allowStressSimulation: DemoModeConfig.allowStressSimulation,
   );
 }

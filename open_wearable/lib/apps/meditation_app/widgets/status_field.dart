@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../configs/overall_config.dart';
 import '../model/user_account.dart';
 import '../model/tencent_tts_client.dart';
 import '../model/elevenlabs_api.dart';
@@ -170,11 +171,14 @@ class DeepseekManager extends ConnectionManager {
     }
 
     final response = await http.get(
-      Uri.parse('https://api.deepseek.com/user/balance'),
+      Uri.parse(
+        '${OverallMeditationConfig.deepseekApiBaseUrl}'
+        '${OverallMeditationConfig.deepseekBalancePath}',
+      ),
       headers: {
         'Authorization': 'Bearer ${userAccount.deepseekApiKey}',
       },
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(OverallMeditationConfig.credentialCheckTimeout);
 
     if (response.statusCode != 200) {
       userAccount.hasValidDeepseekKey = false; // Mark the key as invalid
@@ -204,11 +208,11 @@ class ElevenLabsManager extends ConnectionManager {
     }
 
     final response = await http.get(
-      Uri.parse('https://api.elevenlabs.io/v1/voices'),
+      Uri.parse('${OverallMeditationConfig.elevenLabsApiBaseUrl}/v1/voices'),
       headers: {
         'xi-api-key': '${userAccount.elevenLabsApiKey}',
       },
-    ).timeout(const Duration(seconds: 20));
+    ).timeout(OverallMeditationConfig.credentialCheckTimeout);
     if (response.statusCode != 200) {
       userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
       throw ElevenLabsApiException.fromResponse(response);
@@ -251,9 +255,9 @@ class TencentTtsManager extends ConnectionManager {
         secretKey: userAccount.tencentSecretKey!,
         region: userAccount.tencentTtsRegion,
         voiceType: userAccount.voiceGender == Gender.male
-            ? tencentPremiumMaleVoiceType
-            : tencentPremiumFemaleVoiceType,
-        speed: 0,
+            ? OverallMeditationConfig.tencentPremiumMaleVoiceType
+            : OverallMeditationConfig.tencentPremiumFemaleVoiceType,
+        speed: OverallMeditationConfig.tencentCredentialCheckSpeechRate,
       );
     } finally {
       client.dispose();

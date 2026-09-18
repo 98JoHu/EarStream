@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import '../configs/bio_adaptive_mode_config.dart';
+
 class HeartRateSample {
   final int heartRate;
   final double? rmssd;
@@ -87,8 +89,10 @@ class HrHrvProcessor {
 
   DateTime? _firstSampleTime;
   DateTime? _lastEmitTime;
-  static const Duration _warmupDuration = Duration(seconds: 10);
-  static const Duration _emitInterval = Duration(seconds: 3);
+  static const Duration _warmupDuration =
+      BioAdaptiveModeConfig.processorWarmupDuration;
+  static const Duration _emitInterval =
+      BioAdaptiveModeConfig.metricEmitInterval;
 
   final StreamController<HeartRateSample> _metricStreamController =
       StreamController<HeartRateSample>.broadcast();
@@ -184,13 +188,16 @@ class HrHrvProcessor {
     final configuredMetricWindowSeconds = metricWindowDuration == null
         ? null
         : metricWindowDuration.inMicroseconds / 1000000.0;
-    _windowDurationTicks =
-        (configuredMetricWindowSeconds ?? 10.0) * _ticksPerSecond;
-    _minimumWindowTicks =
-        (configuredMetricWindowSeconds ?? 4.0) * _ticksPerSecond;
+    _windowDurationTicks = (configuredMetricWindowSeconds ??
+            BioAdaptiveModeConfig.defaultHeartRateWindowSeconds) *
+        _ticksPerSecond;
+    _minimumWindowTicks = (configuredMetricWindowSeconds ??
+            BioAdaptiveModeConfig.defaultMetricEligibilityWindowSeconds) *
+        _ticksPerSecond;
     _evaluationPeriodTicks = max(1.0, _ticksPerSecond);
-    _hrvWindowTicks =
-        (configuredMetricWindowSeconds ?? 300.0) * _ticksPerSecond;
+    _hrvWindowTicks = (configuredMetricWindowSeconds ??
+            BioAdaptiveModeConfig.defaultHrvHistoryWindowSeconds) *
+        _ticksPerSecond;
     this.hrvMinimumWindow = hrvMinimumWindow ?? _defaultHrvMinimumWindow;
   }
 
@@ -203,7 +210,8 @@ class HrHrvProcessor {
   /// so the RMSSD baseline never adapts. Demo flows shorten this; the 5-minute
   /// *upper* window ([_hrvWindowTicks]) is deliberately not adjustable, since
   /// shortening it costs real accuracy rather than just latency.
-  static const Duration _defaultHrvMinimumWindow = Duration(seconds: 60);
+  static const Duration _defaultHrvMinimumWindow =
+      BioAdaptiveModeConfig.defaultHrvMinimumWindow;
 
   set hrvMinimumWindow(Duration window) {
     _hrvMinimumWindowTicks =

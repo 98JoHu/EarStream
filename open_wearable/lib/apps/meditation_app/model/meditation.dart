@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:async';
+import '../configs/bio_adaptive_mode_config.dart';
+import '../configs/overall_config.dart';
+import '../configs/timed_mode_config.dart';
 import 'user_account.dart';
 import 'measurement.dart';
 import 'meditation_session_generator.dart';
@@ -60,7 +63,7 @@ class Meditation {
 
   Meditation({
     required this.userAccount,
-    this.maxSegments = 10,
+    this.maxSegments = OverallMeditationConfig.defaultSegmentCount,
     this.meditationSegmentDuration,
     this.promptPolicy = MeditationPromptPolicy.standard,
     this.analyticsStore,
@@ -81,7 +84,7 @@ class Meditation {
   void initializeAudioPlayers() async {
     // Initialize the music player
     await musicPlayer.setReleaseMode(ReleaseMode.loop);
-    await musicPlayer.setVolume(0.3);
+    await musicPlayer.setVolume(OverallMeditationConfig.backgroundMusicVolume);
   }
 
   Future<void> start() async {
@@ -211,10 +214,11 @@ class Meditation {
   }
 
   Future<void> _startBackgroundMusic() async {
-    musicPlayer.audioCache =
-        AudioCache(prefix: "lib/apps/meditation_app/assets/audio/");
+    musicPlayer.audioCache = AudioCache(
+      prefix: OverallMeditationConfig.audioAssetPrefix,
+    );
     await musicPlayer.setReleaseMode(ReleaseMode.loop);
-    await musicPlayer.setVolume(0.3);
+    await musicPlayer.setVolume(OverallMeditationConfig.backgroundMusicVolume);
     await musicPlayer.play(
       AssetSource(
         userAccount.meditationEnvironment?.assetPath ??
@@ -265,7 +269,9 @@ class Meditation {
           segmentElapsed: elapsed,
         );
 
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(
+          OverallMeditationConfig.progressUpdateInterval,
+        );
       }
 
       await speakFuture; // ensure the instruction has finished speaking
@@ -330,8 +336,8 @@ class TencentTtsProvider implements TtsProvider {
         _isAvailable = account.hasValidTencentKey,
         _region = account.tencentTtsRegion,
         _voiceType = account.voiceGender == Gender.male
-            ? tencentPremiumMaleVoiceType
-            : tencentPremiumFemaleVoiceType,
+            ? OverallMeditationConfig.tencentPremiumMaleVoiceType
+            : OverallMeditationConfig.tencentPremiumFemaleVoiceType,
         _speed = _tencentSpeed(account.speakingSpeed),
         _client = client ?? TencentTtsClient();
 
@@ -361,10 +367,11 @@ class TencentTtsProvider implements TtsProvider {
 
   static double _tencentSpeed(SpeakingSpeed? speed) {
     return switch (speed ?? SpeakingSpeed.slow) {
-      SpeakingSpeed.verySlow => -2,
-      SpeakingSpeed.slow => -1,
-      SpeakingSpeed.medium => 0,
-      SpeakingSpeed.fast => 1,
+      SpeakingSpeed.verySlow =>
+        OverallMeditationConfig.tencentVerySlowSpeechRate,
+      SpeakingSpeed.slow => OverallMeditationConfig.tencentSlowSpeechRate,
+      SpeakingSpeed.medium => OverallMeditationConfig.tencentMediumSpeechRate,
+      SpeakingSpeed.fast => OverallMeditationConfig.tencentFastSpeechRate,
     };
   }
 
@@ -373,8 +380,8 @@ class TencentTtsProvider implements TtsProvider {
 }
 
 class ElevenLabsTtsProvider implements TtsProvider {
-  static const maleVoiceId = 'CwhRBWXzGAHq8TQ4Fs17';
-  static const femaleVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
+  static const maleVoiceId = OverallMeditationConfig.elevenLabsMaleVoiceId;
+  static const femaleVoiceId = OverallMeditationConfig.elevenLabsFemaleVoiceId;
 
   final String? _apiKey;
   final bool _isAvailable;
@@ -397,7 +404,8 @@ class ElevenLabsTtsProvider implements TtsProvider {
   @override
   Future<List<Source>> synthesize(String text) async {
     final endpoint = Uri.parse(
-      'https://api.elevenlabs.io/v1/text-to-speech/$voiceId',
+      '${OverallMeditationConfig.elevenLabsApiBaseUrl}'
+      '/v1/text-to-speech/$voiceId',
     );
     final res = await http
         .post(
@@ -409,10 +417,10 @@ class ElevenLabsTtsProvider implements TtsProvider {
           },
           body: jsonEncode({
             'text': text,
-            'model_id': 'eleven_flash_v2_5', // fast + cheap
+            'model_id': OverallMeditationConfig.elevenLabsModel,
           }),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(OverallMeditationConfig.elevenLabsRequestTimeout);
     if (res.statusCode != 200) {
       throw ElevenLabsApiException.fromResponse(res);
     }
@@ -459,14 +467,17 @@ class TtsService {
   // Picked from this device's `getVoices()` output (Android's Google TTS
   // engine doesn't expose a gender field, unlike iOS/macOS/Windows) — swap
   // these if either doesn't actually sound right.
-  static const _femaleVoice = {'name': 'en-us-x-sfg-local', 'locale': 'en-US'};
-  static const _maleVoice = {'name': 'en-us-x-iob-local', 'locale': 'en-US'};
+  static const _femaleVoice = OverallMeditationConfig.fallbackFemaleVoice;
+  static const _maleVoice = OverallMeditationConfig.fallbackMaleVoice;
 
   void _initializeFallbackTts(UserAccount userAccount) async {
     await _fallbackTts.awaitSpeakCompletion(true);
-    await _fallbackTts.setLanguage("en-US");
-    await _fallbackTts.setSpeechRate(userAccount.speakingSpeed?.speed ?? 0.3);
-    await _fallbackTts.setVolume(0.8);
+    await _fallbackTts.setLanguage(OverallMeditationConfig.fallbackLanguage);
+    await _fallbackTts.setSpeechRate(
+      userAccount.speakingSpeed?.speed ??
+          OverallMeditationConfig.fallbackSpeechRate,
+    );
+    await _fallbackTts.setVolume(OverallMeditationConfig.fallbackVolume);
 
     if (userAccount.voiceGender == Gender.male) {
       await _fallbackTts.setVoice(_maleVoice);
@@ -493,11 +504,7 @@ class TtsService {
     }
 
     Object? lastError;
-    const retryDelays = [
-      Duration.zero,
-      Duration(seconds: 1),
-      Duration(seconds: 2),
-    ];
+    const retryDelays = OverallMeditationConfig.cloudTtsRetryDelays;
     for (var attempt = 0; attempt < retryDelays.length; attempt++) {
       if (playbackGeneration != _playbackGeneration) return;
       final delay = retryDelays[attempt];
@@ -566,7 +573,7 @@ class BiometricMeditation extends Meditation {
 
   BiometricMeditation({
     required super.userAccount,
-    super.maxSegments = 10,
+    super.maxSegments = BioAdaptiveModeConfig.meditationSegmentCount,
     super.meditationSegmentDuration,
     super.promptPolicy,
     super.analyticsStore,
@@ -586,6 +593,8 @@ class BiometricMeditation extends Meditation {
 }
 
 class ScheduledMeditation extends Meditation {
+  static const segmentCount = TimedModeConfig.segmentCount;
+
   final DateTime scheduledTime;
 
   ScheduledMeditation({
@@ -593,7 +602,8 @@ class ScheduledMeditation extends Meditation {
     required this.scheduledTime,
     required MeditationAnalyticsStore analyticsStore,
   }) : super(
-          maxSegments: 3,
+          maxSegments: segmentCount,
+          meditationSegmentDuration: TimedModeConfig.segmentDurationOverride,
           analyticsStore: analyticsStore,
           analyticsMode: MeditationAnalyticsMode.timed,
         );

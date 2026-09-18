@@ -1,11 +1,14 @@
+import '../configs/demo_mode_config.dart';
+
 enum MeditationPromptPolicy {
   standard(
     includeProfileInformation: true,
     includePhysiologicalInformation: true,
   ),
   conferenceDemo(
-    includeProfileInformation: false,
-    includePhysiologicalInformation: false,
+    includeProfileInformation: DemoModeConfig.includePermanentProfileInPrompt,
+    includePhysiologicalInformation:
+        DemoModeConfig.includePhysiologicalDataInPrompt,
   );
 
   final bool includeProfileInformation;

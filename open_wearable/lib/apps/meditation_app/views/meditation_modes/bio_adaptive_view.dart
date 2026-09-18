@@ -5,6 +5,7 @@ import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
+import '../../configs/bio_adaptive_mode_config.dart';
 import '../../model/measurement.dart';
 import '../../model/bio_adaptive_session_config.dart';
 import '../../model/meditation_analytics.dart';
@@ -319,7 +320,8 @@ class BioAdaptiveContent extends StatelessWidget {
                         ),
                         child: HeartRateChart(
                           heartRateStream: measurement.heartRate,
-                          visibleWindow: const Duration(minutes: 1),
+                          visibleWindow:
+                              BioAdaptiveModeConfig.chartVisibleWindow,
                         ),
                       ),
                       const SizedBox(height: 12),

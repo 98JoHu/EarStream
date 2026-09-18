@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../configs/overall_config.dart';
 import 'user_account.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'meditation_prompt_policy.dart';
@@ -18,11 +19,17 @@ class MeditationSegment {
     required this.durationSeconds,
   });
 
-  factory MeditationSegment.fromJson(Map<String, dynamic> json) {
+  factory MeditationSegment.fromJson(
+    Map<String, dynamic> json, {
+    required Duration minimumDuration,
+  }) {
     return MeditationSegment(
       segmentId: json['segmentId'] as int,
       instruction: json['instruction'] as String,
-      durationSeconds: json['durationSeconds'] as int,
+      // Segment timing is app-controlled. This prevents an LLM response from
+      // accidentally reintroducing the demo's 30-second timing into a regular
+      // narration-driven session.
+      durationSeconds: minimumDuration.inSeconds,
     );
   }
 }
@@ -144,10 +151,16 @@ class AdaptiveMeditationScript implements MeditationScript {
         _client = client ?? http.Client(),
         _ownsClient = client == null;
 
-  static final _endpoint =
-      Uri.parse('https://api.deepseek.com/chat/completions');
+  static final _endpoint = Uri.parse(
+    '${OverallMeditationConfig.deepseekApiBaseUrl}'
+    '${OverallMeditationConfig.deepseekChatPath}',
+  );
 
-  int get _durationSeconds => _segmentDuration?.inSeconds ?? 30;
+  Duration get _minimumDuration =>
+      _segmentDuration ??
+      OverallMeditationConfig.standardNarrationMinimumDuration;
+
+  int get _durationSeconds => _minimumDuration.inSeconds;
 
   @override
   Future<MeditationFrame> begin() async {
@@ -162,6 +175,7 @@ class AdaptiveMeditationScript implements MeditationScript {
       completionMessage: json['completionMessage'] as String,
       firstSegment: MeditationSegment.fromJson(
         json['segment'] as Map<String, dynamic>,
+        minimumDuration: _minimumDuration,
       ),
     );
   }
@@ -183,7 +197,10 @@ class AdaptiveMeditationScript implements MeditationScript {
       _history.add({'role': 'assistant', 'content': content});
       final json = jsonDecode(content) as Map<String, dynamic>;
       _emitted++;
-      return MeditationSegment.fromJson(json);
+      return MeditationSegment.fromJson(
+        json,
+        minimumDuration: _minimumDuration,
+      );
     } catch (e) {
       // Resilience: a single failed call must not end the meditation. Drop the
       // dangling user turn, emit a generic segment, and let the session go on.
@@ -212,17 +229,17 @@ class AdaptiveMeditationScript implements MeditationScript {
               'Content-Type': 'application/json',
             },
             body: jsonEncode({
-              'model': 'deepseek-v4-pro',
+              'model': OverallMeditationConfig.deepseekModel,
               'response_format': {'type': 'json_object'},
               'messages': [
                 {'role': 'system', 'content': _systemPrompt()},
                 ..._history,
               ],
-              'max_tokens': 2000,
-              'temperature': 0.7,
+              'max_tokens': OverallMeditationConfig.deepseekMaxTokens,
+              'temperature': OverallMeditationConfig.deepseekTemperature,
             }),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(OverallMeditationConfig.deepseekRequestTimeout);
     } catch (e) {
       throw Exception('Network error. $e');
     }
@@ -270,7 +287,7 @@ GUIDELINES:
 2. Make it PERSONAL: use their name occasionally, reference their environment imagery, adapt to their profile.
 3. Create natural transitions that build on what you said before. DO NOT signal an ending in a segment.
 4. Speak slowly; use soothing language and natural pauses marked with ellipses (...).
-5. Approximately 280 words per segment.
+5. Approximately ${OverallMeditationConfig.standardPromptApproximateWordsPerSegment} words per segment.
 
 OUTPUT FORMAT — valid JSON only, no markdown, no commentary.
 
@@ -280,16 +297,14 @@ On the FIRST turn, output:
   "completionMessage": "string",
   "segment": {
     "segmentId": 1,
-    "instruction": "string",
-    "durationSeconds": $_durationSeconds,
+    "instruction": "string"
   }
 }
 
 On EVERY LATER turn, output a single segment object:
 {
   "segmentId": <int>,
-  "instruction": "string",
-  "durationSeconds": $_durationSeconds,
+  "instruction": "string"
 }
 
 Remember: you're creating a calming, safe space for someone who may be stressed. Be warm, patient, and genuinely caring.''';
@@ -394,7 +409,8 @@ class _Fallback {
     return MeditationSegment(
       segmentId: id,
       instruction: _segmentText,
-      durationSeconds: duration?.inSeconds ?? 30,
+      durationSeconds: duration?.inSeconds ??
+          OverallMeditationConfig.standardNarrationMinimumDuration.inSeconds,
     );
   }
 }

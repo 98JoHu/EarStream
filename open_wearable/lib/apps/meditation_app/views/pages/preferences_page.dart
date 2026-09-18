@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../configs/overall_config.dart';
 import 'drawer_page.dart';
 import '../../model/user_account.dart';
 import '../../widgets/custom_dropdown.dart';
@@ -46,7 +47,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
         MeditationEnvironment.nature;
     _ttsProvider = widget.userAccount.ttsProvider;
     _tencentTtsRegion = widget.userAccount.tencentTtsRegion;
-    _stressThreshold = widget.userAccount.stressThreshold ?? 0.10;
+    _stressThreshold = widget.userAccount.stressThreshold ??
+        OverallMeditationConfig.defaultStressSensitivity;
     _elevenLabsVoiceId = widget.userAccount.elevenLabsVoiceId;
   }
 

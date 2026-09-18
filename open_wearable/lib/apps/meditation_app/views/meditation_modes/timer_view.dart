@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../configs/timed_mode_config.dart';
 import '../../model/meditation.dart' show Meditation, ScheduledMeditation;
 import '../../model/meditation_analytics.dart';
 import '../../widgets/meditation_tile.dart';
@@ -29,7 +30,7 @@ class _TimerViewState extends State<TimerView> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(TimedModeConfig.schedulePollingInterval, (timer) {
       _checkMeditations();
     });
   }
@@ -156,7 +157,9 @@ class _TimerViewState extends State<TimerView> {
                               onPressed: () => {
                                 _scheduleMeditation(
                                   userAccount,
-                                  DateTime.now().add(Duration(minutes: 5)),
+                                  DateTime.now().add(
+                                    TimedModeConfig.scheduleAfterFiveMinutes,
+                                  ),
                                 ),
                               },
                               child: const Text('After 5 min'),
@@ -165,7 +168,9 @@ class _TimerViewState extends State<TimerView> {
                               onPressed: () => {
                                 _scheduleMeditation(
                                   userAccount,
-                                  DateTime.now().add(Duration(minutes: 10)),
+                                  DateTime.now().add(
+                                    TimedModeConfig.scheduleAfterTenMinutes,
+                                  ),
                                 ),
                               },
                               child: const Text('After 10 min'),
@@ -174,7 +179,9 @@ class _TimerViewState extends State<TimerView> {
                               onPressed: () => {
                                 _scheduleMeditation(
                                   userAccount,
-                                  DateTime.now().add(Duration(minutes: 30)),
+                                  DateTime.now().add(
+                                    TimedModeConfig.scheduleAfterThirtyMinutes,
+                                  ),
                                 ),
                               },
                               child: const Text('After 30 min'),

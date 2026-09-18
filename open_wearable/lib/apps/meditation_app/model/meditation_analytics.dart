@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../configs/overall_config.dart';
+
 enum MeditationAnalyticsMode {
   bioAdaptive(label: 'Biosignal-Adaptive'),
   timed(label: 'Timed');
@@ -55,8 +57,8 @@ class MeditationSessionRecord {
 }
 
 class MeditationAnalyticsStore extends ChangeNotifier {
-  static const _storageKey = 'meditation_session_analytics_v1';
-  static const _retention = Duration(days: 366);
+  static const _storageKey = OverallMeditationConfig.analyticsStorageKey;
+  static const _retention = OverallMeditationConfig.analyticsRetention;
 
   final Future<SharedPreferences> Function() _preferencesProvider;
   final List<MeditationSessionRecord> _records = [];
@@ -114,7 +116,7 @@ class MeditationAnalyticsStore extends ChangeNotifier {
 
   List<MeditationSessionRecord> recordsForWeek(DateTime dateInWeek) {
     final start = startOfWeek(dateInWeek);
-    final end = start.add(const Duration(days: 7));
+    final end = start.add(OverallMeditationConfig.analyticsWeekLength);
     return _records
         .where(
           (record) =>

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
+import '../../configs/demo_mode_config.dart';
 import '../../model/user_account.dart';
 import '../../model/meditation.dart';
 import '../../model/bio_adaptive_session_config.dart';
@@ -154,8 +155,8 @@ class _DemoViewState extends State<DemoView> {
 
     final meditation = Meditation(
       userAccount: _demoAccount,
-      maxSegments: 3,
-      meditationSegmentDuration: const Duration(seconds: 30),
+      maxSegments: DemoModeConfig.meditationOnlySegmentCount,
+      meditationSegmentDuration: DemoModeConfig.meditationOnlySegmentDuration,
       promptPolicy: MeditationPromptPolicy.conferenceDemo,
     );
     _personalizedMeditation.value = meditation;

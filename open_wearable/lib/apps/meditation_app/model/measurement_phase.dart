@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../configs/bio_adaptive_mode_config.dart';
 import 'biometric_source.dart';
-import 'bio_adaptive_session_config.dart';
 import 'stress_detector.dart';
 import 'user_account.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
@@ -42,7 +42,9 @@ class CalibrationPhase extends MonitoringPhase {
   @override
   final Duration duration;
 
-  CalibrationPhase({this.duration = const Duration(seconds: 30)});
+  CalibrationPhase({
+    this.duration = BioAdaptiveModeConfig.calibrationDuration,
+  });
 
   @override
   String get label => "Calibration (${duration.inSeconds}s)";
@@ -79,7 +81,7 @@ class BaselinePhase extends MonitoringPhase {
     Duration? duration,
     this.computationMode = BaselineComputationMode.profileBlended,
     this.useBestEffortAtDeadline = false,
-  }) : duration = duration ?? const Duration(minutes: 5);
+  }) : duration = duration ?? BioAdaptiveModeConfig.baselineDuration;
 
   @override
   bool get canAdvance {
@@ -249,7 +251,10 @@ class MonitoringPhaseController {
 
   void _startTicker() {
     _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) => _tick());
+    _ticker = Timer.periodic(
+      BioAdaptiveModeConfig.phaseProgressUpdateInterval,
+      (_) => _tick(),
+    );
   }
 
   void _tick() {

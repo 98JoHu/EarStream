@@ -7,6 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:open_wearable/apps/meditation_app/configs/bio_adaptive_mode_config.dart';
+import 'package:open_wearable/apps/meditation_app/configs/demo_mode_config.dart';
+import 'package:open_wearable/apps/meditation_app/configs/overall_config.dart';
+import 'package:open_wearable/apps/meditation_app/configs/timed_mode_config.dart';
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_processor.dart';
 import 'package:open_wearable/apps/meditation_app/model/activity_tracker.dart';
 import 'package:open_wearable/apps/meditation_app/model/bio_adaptive_session_config.dart';
@@ -27,6 +31,59 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('centralized meditation configuration', () {
+    test('keeps shared and mode-specific session parameters aligned', () {
+      expect(
+        OverallMeditationConfig.standardNarrationMinimumDuration,
+        Duration.zero,
+      );
+      expect(TimedModeConfig.segmentCount, 3);
+      expect(TimedModeConfig.segmentDurationOverride, isNull);
+      expect(ScheduledMeditation.segmentCount, TimedModeConfig.segmentCount);
+      expect(
+        TimedModeConfig.promptApproximateWordsPerSegment,
+        280,
+      );
+      expect(
+        BioAdaptiveModeConfig.meditationSegmentDurationOverride,
+        isNull,
+      );
+      expect(BioAdaptiveModeConfig.promptApproximateWordsPerSegment, 280);
+      expect(DemoModeConfig.meditationOnlySegmentCount, 3);
+      expect(
+        DemoModeConfig.meditationOnlySegmentDuration,
+        const Duration(seconds: 30),
+      );
+      expect(
+        DemoModeConfig.meditationSegmentDuration,
+        const Duration(seconds: 30),
+      );
+      expect(
+        BioAdaptiveModeConfig.meditationSegmentCount,
+        OverallMeditationConfig.defaultSegmentCount,
+      );
+    });
+
+    test('documents exact Mainland China demo environment changes', () {
+      expect(
+        DemoModeConfig.chinaEnvironmentOverrides,
+        {
+          'TTS_PROVIDER': 'tencent',
+          'TENCENT_TTS_REGION': 'ap-guangzhou',
+        },
+      );
+      expect(
+        DemoModeConfig.chinaTencentApiHost,
+        'tts.tencentcloudapi.com',
+      );
+      expect(DemoModeConfig.chinaRequiresDeepseekEndpointOverride, isFalse);
+      expect(
+        DemoModeConfig.chinaDeepseekApiBaseUrl,
+        'https://api.deepseek.com',
+      );
+    });
+  });
 
   group('HrHrvProcessor.hrvMinimumWindow', () {
     // The setter converts a Duration into sensor ticks via timestampExponent,
@@ -407,8 +464,8 @@ void main() {
         ),
       );
 
-      expect(find.text('Play Stress'), findsOneWidget);
-      expect(find.text('Simulate Stress'), findsNothing);
+      expect(find.text('Simulate Stress'), findsOneWidget);
+      expect(find.text('Play Stress'), findsNothing);
     });
   });
 
@@ -673,14 +730,7 @@ void main() {
 
   group('meditation session presentation', () {
     test('timed meditations use three segments', () {
-      final meditation = ScheduledMeditation(
-        userAccount: UserAccount(),
-        scheduledTime: DateTime(2026),
-        analyticsStore: MeditationAnalyticsStore(),
-      );
-      addTearDown(meditation.dispose);
-
-      expect(meditation.maxSegments, 3);
+      expect(ScheduledMeditation.segmentCount, 3);
     });
 
     testWidgets('active sessions show controls without a segment status box',
@@ -748,6 +798,51 @@ void main() {
     });
   });
 
+  group('mode-specific segment generation targets', () {
+    test('regular sessions request 280 words without a 30-second target',
+        () async {
+      String? requestBody;
+      final client = MockClient((request) async {
+        requestBody = request.body;
+        final content = jsonEncode({
+          'welcomeMessage': 'Welcome.',
+          'completionMessage': 'Well done.',
+          'segment': {
+            'segmentId': 1,
+            'instruction': 'A regular 280-word meditation segment.',
+          },
+        });
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': content},
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final account = UserAccount(
+        firstName: 'Regular User',
+        deepseekApiKey: 'service-key',
+      );
+      final script = AdaptiveMeditationScript(
+        account: account,
+        maxSegments: 1,
+        promptPolicy: MeditationPromptPolicy.standard,
+        client: client,
+      );
+      addTearDown(script.dispose);
+
+      final opening = await script.begin();
+
+      expect(requestBody, contains('Approximately 280 words per segment.'));
+      expect(requestBody, isNot(contains('approximately 30 seconds')));
+      expect(opening.firstSegment.durationSeconds, 0);
+    });
+  });
+
   group('conference prompt privacy', () {
     test('sends only attendee session preferences to DeepSeek', () async {
       final requestBodies = <String>[];
@@ -803,7 +898,7 @@ void main() {
       );
       addTearDown(script.dispose);
 
-      await script.begin();
+      final opening = await script.begin();
       await script.nextSegment(
         const HeartRateSample(heartRate: 197, rmssd: 3.14159),
       );
@@ -818,6 +913,8 @@ void main() {
       expect(cloudPayload, isNot(contains('111 BPM')));
       expect(cloudPayload, isNot(contains('197 bpm')));
       expect(cloudPayload, isNot(contains('3 ms')));
+      expect(cloudPayload, contains('approximately 30 seconds'));
+      expect(opening.firstSegment.durationSeconds, 30);
     });
   });
 

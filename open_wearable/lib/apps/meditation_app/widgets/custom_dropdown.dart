@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../configs/overall_config.dart';
 import '../model/user_account.dart'
     show
         Gender,
@@ -52,19 +53,19 @@ final tencentTtsRegionOptions = TencentTtsRegion.values.map((region) {
 }).toList();
 final stressThresholdOptions = [
   DropdownMenuEntry(
-    value: 0.05,
+    value: OverallMeditationConfig.verySensitiveStressSensitivity,
     label: '${AppEmojis.chart} 5% - Very Sensitive',
   ),
   DropdownMenuEntry(
-    value: 0.10,
+    value: OverallMeditationConfig.defaultStressSensitivity,
     label: '${AppEmojis.chart} 10% - Recommended',
   ),
   DropdownMenuEntry(
-    value: 0.15,
+    value: OverallMeditationConfig.moderateStressSensitivity,
     label: '${AppEmojis.chart} 15% - Moderate',
   ),
   DropdownMenuEntry(
-    value: 0.20,
+    value: OverallMeditationConfig.lessSensitiveStressSensitivity,
     label: '${AppEmojis.chart} 20% - Less Sensitive',
   ),
 ];

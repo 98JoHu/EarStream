@@ -22,6 +22,7 @@ import 'package:open_wearable/widgets/app_toast.dart';
 import 'package:open_wearable/widgets/fota/fota_verification_banner.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:open_wearable/apps/meditation_app/configs/overall_config.dart';
 
 import 'models/bluetooth_auto_connector.dart';
 import 'models/logger.dart';
@@ -31,7 +32,7 @@ import 'view_models/wearables_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(
-    fileName: 'lib/apps/meditation_app/assets/.env',
+    fileName: OverallMeditationConfig.environmentAssetPath,
     isOptional: true,
   );
   LogFileManager logFileManager = await LogFileManager.create();

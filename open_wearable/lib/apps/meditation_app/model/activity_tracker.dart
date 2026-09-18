@@ -2,30 +2,32 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'dart:async';
 
+import '../configs/bio_adaptive_mode_config.dart';
+
 enum ActivityLevel {
   resting(
     label: "Resting",
     icon: Icons.airline_seat_individual_suite,
-    accelarationThreshold: 0.2,
-    gyroscopeThreshold: 300,
+    accelarationThreshold: BioAdaptiveModeConfig.restingAccelerationThreshold,
+    gyroscopeThreshold: BioAdaptiveModeConfig.restingGyroscopeThreshold,
   ),
   light(
     label: "Light",
     icon: Icons.directions_walk,
-    accelarationThreshold: 0.4,
-    gyroscopeThreshold: 600,
+    accelarationThreshold: BioAdaptiveModeConfig.lightAccelerationThreshold,
+    gyroscopeThreshold: BioAdaptiveModeConfig.lightGyroscopeThreshold,
   ),
   moderate(
     label: "Moderate",
     icon: Icons.directions_run,
-    accelarationThreshold: 0.8,
-    gyroscopeThreshold: 1200,
+    accelarationThreshold: BioAdaptiveModeConfig.moderateAccelerationThreshold,
+    gyroscopeThreshold: BioAdaptiveModeConfig.moderateGyroscopeThreshold,
   ),
   vigorous(
     label: "Vigorous",
     icon: Icons.fitness_center,
-    accelarationThreshold: 2.0,
-    gyroscopeThreshold: 3000,
+    accelarationThreshold: BioAdaptiveModeConfig.vigorousAccelerationThreshold,
+    gyroscopeThreshold: BioAdaptiveModeConfig.vigorousGyroscopeThreshold,
   ),
   intense(
     label: "Intense",
@@ -65,7 +67,8 @@ class PpgMotionSample {
 }
 
 class ActivityTracker {
-  static const gravity = 9.81; // m/s^2
+  static const gravity =
+      BioAdaptiveModeConfig.gravityMetersPerSecondSquared; // m/s^2
 
   final ValueNotifier<ActivityLevel> _activityLevel =
       ValueNotifier<ActivityLevel>(ActivityLevel.resting);
@@ -82,17 +85,23 @@ class ActivityTracker {
   StreamSubscription<PpgMotionSample>? _gyroscopeSubscription;
 
   DateTime? _lastEmitTime;
-  static const Duration _emitInterval = Duration(seconds: 3);
+  static const Duration _emitInterval =
+      BioAdaptiveModeConfig.activityClassificationInterval;
 
   // Rolling history of classified activity levels, used to suppress stress
   // detection during/after sustained physical activity (see
   // shouldSupressStressDetection).
   final List<(DateTime, ActivityLevel)> _activityHistory = [];
-  static const Duration _activityHistoryWindow = Duration(minutes: 5);
-  static const double _lightOrMoreSuppressionRatio = 0.4;
-  static const double _moderateOrMoreSuppressionRatio = 0.2;
-  static const double _vigorousOrMoreSuppressionRatio = 0.05;
-  static const double _intenseSuppressionRatio = 0.02;
+  static const Duration _activityHistoryWindow =
+      BioAdaptiveModeConfig.activityHistoryWindow;
+  static const double _lightOrMoreSuppressionRatio =
+      BioAdaptiveModeConfig.lightActivitySuppressionRatio;
+  static const double _moderateOrMoreSuppressionRatio =
+      BioAdaptiveModeConfig.moderateActivitySuppressionRatio;
+  static const double _vigorousOrMoreSuppressionRatio =
+      BioAdaptiveModeConfig.vigorousActivitySuppressionRatio;
+  static const double _intenseSuppressionRatio =
+      BioAdaptiveModeConfig.intenseActivitySuppressionRatio;
 
   ActivityTracker({
     required this.accelerometerStream,

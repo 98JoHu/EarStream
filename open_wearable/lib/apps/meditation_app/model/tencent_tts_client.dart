@@ -4,10 +4,13 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
+import '../configs/overall_config.dart';
 import 'user_account.dart';
 
-const int tencentPremiumMaleVoiceType = 101050;
-const int tencentPremiumFemaleVoiceType = 101051;
+const int tencentPremiumMaleVoiceType =
+    OverallMeditationConfig.tencentPremiumMaleVoiceType;
+const int tencentPremiumFemaleVoiceType =
+    OverallMeditationConfig.tencentPremiumFemaleVoiceType;
 
 class TencentTtsException implements Exception {
   final String message;
@@ -97,7 +100,7 @@ class TencentTtsClient {
 
   TencentTtsClient({
     http.Client? httpClient,
-    this.timeout = const Duration(seconds: 25),
+    this.timeout = OverallMeditationConfig.tencentRequestTimeout,
   })  : _httpClient = httpClient ?? http.Client(),
         _ownsClient = httpClient == null;
 
@@ -124,15 +127,15 @@ class TencentTtsClient {
     final payload = jsonEncode({
       'Text': text,
       'SessionId': sessionId,
-      'Volume': 0,
+      'Volume': OverallMeditationConfig.tencentVolume,
       'Speed': speed,
-      'ProjectId': 0,
-      'ModelType': 1,
+      'ProjectId': OverallMeditationConfig.tencentProjectId,
+      'ModelType': OverallMeditationConfig.tencentModelType,
       'VoiceType': voiceType,
-      'PrimaryLanguage': 2,
-      'SampleRate': 16000,
-      'Codec': 'mp3',
-      'EnableSubtitle': false,
+      'PrimaryLanguage': OverallMeditationConfig.tencentPrimaryLanguageEnglish,
+      'SampleRate': OverallMeditationConfig.tencentSampleRate,
+      'Codec': OverallMeditationConfig.tencentCodec,
+      'EnableSubtitle': OverallMeditationConfig.tencentEnableSubtitle,
     });
     final endpoint = Uri.https(region.host, '/');
     final headers = TencentTc3Signer.headers(
@@ -204,7 +207,10 @@ class TencentTtsClient {
 
 /// Tencent TextToVoice accepts at most 500 Latin letters or 150 Chinese
 /// characters. This conservative weighted splitter stays below both limits.
-List<String> splitTencentTtsText(String text, {int maxUnits = 460}) {
+List<String> splitTencentTtsText(
+  String text, {
+  int maxUnits = OverallMeditationConfig.tencentTextChunkMaxUnits,
+}) {
   final normalized = text.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (normalized.isEmpty) return const [];
 

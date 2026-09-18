@@ -5,6 +5,7 @@ import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import 'package:flutter/foundation.dart';
 
+import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_processor.dart';
 import 'activity_tracker.dart';
 
@@ -106,20 +107,20 @@ class SensorBiometricSource implements BiometricSource {
     final double ppgFreq = _configureSensorForStreaming(
       ppgSensor,
       sensorConfigProvider,
-      fallbackFrequency: 100.0,
-      targetFrequencyHz: 200,
+      fallbackFrequency: BioAdaptiveModeConfig.ppgFallbackFrequencyHz,
+      targetFrequencyHz: BioAdaptiveModeConfig.ppgTargetFrequencyHz,
     );
     final double accelerometerFreq = _configureSensorForStreaming(
       accelerometerSensor,
       sensorConfigProvider,
-      fallbackFrequency: 100.0,
-      targetFrequencyHz: 100,
+      fallbackFrequency: BioAdaptiveModeConfig.accelerometerFallbackFrequencyHz,
+      targetFrequencyHz: BioAdaptiveModeConfig.accelerometerTargetFrequencyHz,
     );
     _configureSensorForStreaming(
       gyroscopeSensor,
       sensorConfigProvider,
-      fallbackFrequency: 100.0,
-      targetFrequencyHz: 100,
+      fallbackFrequency: BioAdaptiveModeConfig.gyroscopeFallbackFrequencyHz,
+      targetFrequencyHz: BioAdaptiveModeConfig.gyroscopeTargetFrequencyHz,
     );
 
     // Create the streams for PPG, accelerometer and gyroscope data
@@ -463,12 +464,17 @@ class SensorBiometricSource implements BiometricSource {
 class RecordedStressBiometricSource implements BiometricSource {
   final ValueNotifier<ActivityLevel> _activityLevel;
 
-  static const double baselineHeartRate = 71;
-  static const double baselineRmssd = 80;
-  static const double buildUpHeartRate = 80;
-  static const double buildUpRmssd = 50;
-  static const double peakHeartRate = 97;
-  static const double peakRmssd = 12;
+  static const double baselineHeartRate =
+      BioAdaptiveModeConfig.recordedStressBaselineHeartRate;
+  static const double baselineRmssd =
+      BioAdaptiveModeConfig.recordedStressBaselineRmssd;
+  static const double buildUpHeartRate =
+      BioAdaptiveModeConfig.recordedStressBuildUpHeartRate;
+  static const double buildUpRmssd =
+      BioAdaptiveModeConfig.recordedStressBuildUpRmssd;
+  static const double peakHeartRate =
+      BioAdaptiveModeConfig.recordedStressPeakHeartRate;
+  static const double peakRmssd = BioAdaptiveModeConfig.recordedStressPeakRmssd;
 
   RecordedStressBiometricSource({
     required ActivityLevel restingActivityLevel,
@@ -516,17 +522,23 @@ class RecordedStressBiometricSource implements BiometricSource {
   double _gaussianSpare = 0;
   bool _hasGaussianSpare = false;
   final Random _random = Random();
-  static const double _ouAlpha = 0.9672;
+  static const double _ouAlpha = BioAdaptiveModeConfig.recordedStressOuAlpha;
 
-  static const double _hrOuSigmaStep = 0.763;
-  static const double _buildUpEndSec = 90;
-  static const double _spikeEndSec = 120;
+  static const double _hrOuSigmaStep =
+      BioAdaptiveModeConfig.recordedStressHrOuSigmaStep;
+  static const double _buildUpEndSec =
+      BioAdaptiveModeConfig.recordedStressBuildUpEndSeconds;
+  static const double _spikeEndSec =
+      BioAdaptiveModeConfig.recordedStressSpikeEndSeconds;
 
   // The original app started this six-minute recovery when the meditation
   // began, allowing its normal HR-based early-exit behavior to remain intact.
-  static const double _relaxationTargetHr = 62;
-  static const double _relaxationTargetHrv = 90;
-  static const double _relaxationDurationSec = 360;
+  static const double _relaxationTargetHr =
+      BioAdaptiveModeConfig.relaxationTargetHeartRate;
+  static const double _relaxationTargetHrv =
+      BioAdaptiveModeConfig.relaxationTargetRmssd;
+  static const double _relaxationDurationSec =
+      BioAdaptiveModeConfig.relaxationDurationSeconds;
 
   @override
   void start() {
@@ -576,9 +588,12 @@ class RecordedStressBiometricSource implements BiometricSource {
 
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _emitNextSample();
-    });
+    _timer = Timer.periodic(
+      BioAdaptiveModeConfig.recordedStressSampleInterval,
+      (_) {
+        _emitNextSample();
+      },
+    );
   }
 
   void _emitNextSample() {
