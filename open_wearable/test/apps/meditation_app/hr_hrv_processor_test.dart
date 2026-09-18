@@ -672,6 +672,17 @@ void main() {
   });
 
   group('meditation session presentation', () {
+    test('timed meditations use three segments', () {
+      final meditation = ScheduledMeditation(
+        userAccount: UserAccount(),
+        scheduledTime: DateTime(2026),
+        analyticsStore: MeditationAnalyticsStore(),
+      );
+      addTearDown(meditation.dispose);
+
+      expect(meditation.maxSegments, 3);
+    });
+
     testWidgets('active sessions show controls without a segment status box',
         (tester) async {
       final meditation = Meditation(userAccount: UserAccount());

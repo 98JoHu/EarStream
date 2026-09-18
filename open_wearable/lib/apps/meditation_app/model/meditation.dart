@@ -593,6 +593,7 @@ class ScheduledMeditation extends Meditation {
     required this.scheduledTime,
     required MeditationAnalyticsStore analyticsStore,
   }) : super(
+          maxSegments: 3,
           analyticsStore: analyticsStore,
           analyticsMode: MeditationAnalyticsMode.timed,
         );
