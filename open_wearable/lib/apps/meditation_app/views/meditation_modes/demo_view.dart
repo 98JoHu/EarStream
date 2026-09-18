@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../../model/user_account.dart';
 import '../../model/meditation.dart';
+import '../../model/bio_adaptive_session_config.dart';
+import '../../model/meditation_prompt_policy.dart';
 import '../../widgets/custom_dropdown.dart';
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/seal_check.dart';
@@ -62,12 +65,32 @@ class DemoView extends StatefulWidget {
 class _DemoViewState extends State<DemoView> {
   DemoMode? _selectedMode;
   int _currentStepIndex = 0;
-  Meditation? _personalizedMeditation;
+  late UserAccount _demoAccount;
+  bool _hasDemoAccount = false;
+  final ValueNotifier<Meditation?> _personalizedMeditation =
+      ValueNotifier(null);
 
   List<Step> get _steps => _selectedMode!.steps;
   Step get _currentStep => _steps[_currentStepIndex];
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasDemoAccount) {
+      _createFreshDemoAccount();
+      _hasDemoAccount = true;
+    }
+  }
+
+  void _createFreshDemoAccount() {
+    _demoAccount = UserAccount.forConferenceDemo(
+      serviceConfiguration: context.read<UserAccount>(),
+    );
+  }
+
   void _selectMode(DemoMode mode) {
+    _discardPersonalizedMeditation();
+    _createFreshDemoAccount();
     setState(() {
       _selectedMode = mode;
       _currentStepIndex = 0;
@@ -79,6 +102,7 @@ class _DemoViewState extends State<DemoView> {
       setState(() {
         _currentStepIndex++;
       });
+      _startPersonalizedMeditationIfNeeded();
     }
   }
 
@@ -91,6 +115,9 @@ class _DemoViewState extends State<DemoView> {
   }
 
   void _back() {
+    if (_currentStep == Step.meditation) {
+      _discardPersonalizedMeditation();
+    }
     if (_currentStepIndex > 0) {
       setState(() {
         _currentStepIndex--;
@@ -103,6 +130,8 @@ class _DemoViewState extends State<DemoView> {
   }
 
   void _finish() {
+    _discardPersonalizedMeditation();
+    _createFreshDemoAccount();
     setState(() {
       _selectedMode = null;
       _currentStepIndex = 0;
@@ -111,70 +140,102 @@ class _DemoViewState extends State<DemoView> {
 
   @override
   void dispose() {
-    _personalizedMeditation?.stop();
+    _discardPersonalizedMeditation();
+    _personalizedMeditation.dispose();
     super.dispose();
+  }
+
+  void _startPersonalizedMeditationIfNeeded() {
+    if (_selectedMode != DemoMode.personalizedOnly ||
+        _currentStep != Step.meditation ||
+        _personalizedMeditation.value != null) {
+      return;
+    }
+
+    final meditation = Meditation(
+      userAccount: _demoAccount,
+      maxSegments: 3,
+      meditationSegmentDuration: const Duration(seconds: 30),
+      promptPolicy: MeditationPromptPolicy.conferenceDemo,
+    );
+    _personalizedMeditation.value = meditation;
+    unawaited(
+      meditation.start().catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Error starting personalized demo meditation: $error');
+        debugPrint('$stackTrace');
+      }),
+    );
+  }
+
+  void _discardPersonalizedMeditation() {
+    final meditation = _personalizedMeditation.value;
+    if (meditation == null) return;
+    _personalizedMeditation.value = null;
+    unawaited(meditation.stop().whenComplete(meditation.dispose));
   }
 
   @override
   Widget build(BuildContext context) {
-    final userAccount = context.read<UserAccount>();
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: _selectedMode == null
             ? DemoSelection(onSelectMode: _selectMode)
-            : _stepContent(userAccount),
+            : _stepContent(),
       ),
     );
   }
 
-  Widget _stepContent(UserAccount userAccount) {
+  Widget _stepContent() {
     switch (_currentStep) {
       case Step.settings:
         return SettingsView(
-          userAccount: userAccount,
+          userAccount: _demoAccount,
           onBack: _back,
           onContinue: _continue,
           onSkip: _skip,
         );
       case Step.sealCheck:
         return SealCheckView(
-          userAccount: userAccount,
+          userAccount: _demoAccount,
           onBack: _back,
           onContinue: _continue,
           onSkip: _skip,
         );
       case Step.meditation:
         if (_selectedMode == DemoMode.biosignalAdaptive) {
-          // TODO: Add parameters so that the demo specifications are met
-          return BioAdaptiveView(
-            ppgSensor: widget.ppgSensor,
-            accelerometerSensor: widget.accelerometerSensor,
-            gyroscopeSensor: widget.gyroscopeSensor,
-            sensorConfigProvider: widget.sensorConfigProvider,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              BioAdaptiveView(
+                ppgSensor: widget.ppgSensor,
+                accelerometerSensor: widget.accelerometerSensor,
+                gyroscopeSensor: widget.gyroscopeSensor,
+                sensorConfigProvider: widget.sensorConfigProvider,
+                userAccount: _demoAccount,
+                sessionConfig: BioAdaptiveSessionConfig.conferenceDemo,
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: _finish,
+                child: const Text('End Demo'),
+              ),
+            ],
           );
         } else {
-          final meditation = _personalizedMeditation ??
-              Meditation(
-                userAccount: userAccount,
-                maxSegments: 3,
-                meditationSegmentDuration: const Duration(seconds: 30),
-              )
-            ..start();
           return Column(
             children: [
               MeditationTile(
-                meditationNotifier: ValueNotifier<Meditation?>(meditation),
+                meditationNotifier: _personalizedMeditation,
                 onMeditationComplete: _finish,
               ),
-              if (!context.read<UserAccount>().hasValidDeepseekKey) ...[
+              if (!_demoAccount.hasValidDeepseekKey) ...[
                 const SizedBox(height: 16),
                 APIWarning(serviceName: "Deepseek"),
               ],
-              if (!userAccount.hasValidSelectedTtsProvider) ...[
+              if (!_demoAccount.hasValidSelectedTtsProvider) ...[
                 const SizedBox(height: 16),
-                APIWarning(serviceName: userAccount.ttsProvider.label),
+                APIWarning(serviceName: _demoAccount.ttsProvider.label),
               ],
             ],
           );

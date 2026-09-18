@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
 import 'user_account.dart';
+import 'bio_adaptive_session_config.dart';
 import 'biometric_source.dart';
 import 'stress_detector.dart';
 import 'measurement_phase.dart';
@@ -12,11 +15,13 @@ import 'hr_hrv_processor.dart' show HeartRateSample;
 
 class Measurement {
   final UserAccount userAccount;
-  final Duration? meditationSegmentDuration;
+  final BioAdaptiveSessionConfig sessionConfig;
 
   final BiometricSource _source;
   late final StressDetector _detector;
   late final MonitoringPhaseController _phaseController;
+  StreamSubscription<HeartRateSample>? _latestBiometricsSubscription;
+  HeartRateSample? _latestBiometrics;
 
   final ValueNotifier<BiometricMeditation?> meditation = ValueNotifier(null);
 
@@ -26,7 +31,7 @@ class Measurement {
     required List<MonitoringPhase> phases,
     required StressThresholdProvider stressThresholdProvider,
     required BaselineHeartRateProvider baselineHeartRateProvider,
-    this.meditationSegmentDuration,
+    required this.sessionConfig,
   }) : _source = source {
     _detector = StressDetector(
       thresholds: stressThresholdProvider,
@@ -48,10 +53,7 @@ class Measurement {
     required Sensor gyroscopeSensor,
     required SensorConfigurationProvider sensorConfigProvider,
     required UserAccount userAccount,
-    double? demoThreshold,
-    Duration? baselineAdjustmentDuration,
-    Duration? meditationSegmentDuration,
-    Duration? hrvMinimumWindow,
+    BioAdaptiveSessionConfig sessionConfig = BioAdaptiveSessionConfig.standard,
   }) {
     return Measurement._(
       userAccount: userAccount,
@@ -60,26 +62,30 @@ class Measurement {
         accelerometerSensor: accelerometerSensor,
         gyroscopeSensor: gyroscopeSensor,
         sensorConfigProvider: sensorConfigProvider,
-        hrvMinimumWindow: hrvMinimumWindow,
+        hrvMinimumWindow: sessionConfig.hrvMinimumWindow,
       ),
       phases: [
-        CalibrationPhase(),
-        BaselinePhase(userAccount: userAccount),
+        if (sessionConfig.includeCalibration)
+          CalibrationPhase(duration: sessionConfig.calibrationDuration),
+        BaselinePhase(
+          userAccount: userAccount,
+          duration: sessionConfig.baselineDuration,
+          computationMode: sessionConfig.baselineComputationMode,
+        ),
         StressMonitoringPhase(),
       ],
-      stressThresholdProvider: () =>
-          userAccount.stressThresholds(stressThreshold: demoThreshold),
+      stressThresholdProvider: () => userAccount.stressThresholds(
+        stressThreshold: sessionConfig.stressThresholdOverride,
+      ),
       baselineHeartRateProvider: () => userAccount.baselineBiometrics.$1,
-      meditationSegmentDuration: meditationSegmentDuration,
+      sessionConfig: sessionConfig,
     );
   }
 
   factory Measurement.simulated({
     required UserAccount userAccount,
     required ActivityLevel restingActivityLevel,
-    double? demoThreshold,
-    Duration? baselineAdjustmentDuration,
-    Duration? meditationSegmentDuration,
+    BioAdaptiveSessionConfig sessionConfig = BioAdaptiveSessionConfig.standard,
   }) {
     return Measurement._(
       userAccount: userAccount,
@@ -93,7 +99,7 @@ class Measurement {
       phases: [StressMonitoringPhase()],
       stressThresholdProvider: () => (90, 40.0),
       baselineHeartRateProvider: () => 60,
-      meditationSegmentDuration: meditationSegmentDuration,
+      sessionConfig: sessionConfig,
     );
   }
 
@@ -101,12 +107,9 @@ class Measurement {
   Stream<int> get heartRate => _source.biometrics.map((b) => b.heartRate);
   Stream<double?> get rmssd => _source.biometrics.map((b) => b.rmssd);
 
-  // Return the latest heart rate and RMSSD values
-  // TODO: This is a temporary solution until we have a proper way to get the latest biometrics from the source.
-  HeartRateSample? get latestBiometrics => HeartRateSample(
-        heartRate: 50,
-        rmssd: 20.0,
-      );
+  // The latest values stay local and are only included in a cloud prompt when
+  // the session's explicit prompt policy permits it.
+  HeartRateSample? get latestBiometrics => _latestBiometrics;
 
   // Publish the stress level
   ValueListenable<StressLevel> get stressLevel => _detector.stressLevel;
@@ -122,6 +125,9 @@ class Measurement {
 
   void start() {
     _source.start();
+    _latestBiometricsSubscription = _source.biometrics.listen((sample) {
+      _latestBiometrics = sample;
+    });
     _detector.reset();
     _phaseController.start();
   }
@@ -138,6 +144,7 @@ class Measurement {
   }
 
   void dispose() {
+    _latestBiometricsSubscription?.cancel();
     _source.dispose();
     _detector.stressLevel.removeListener(_onStressLevelChanged);
     _detector.dispose();
@@ -157,7 +164,8 @@ class Measurement {
     final session = BiometricMeditation(
       userAccount: userAccount,
       measurement: this,
-      meditationSegmentDuration: meditationSegmentDuration,
+      meditationSegmentDuration: sessionConfig.meditationSegmentDuration,
+      promptPolicy: sessionConfig.promptPolicy,
     );
     meditation.value = session;
 

@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
+import '../../model/bio_adaptive_session_config.dart';
 import '../../model/measurement_phase.dart' show MonitoringPhase;
 import '../../model/stress_detector.dart' show StressLevel;
 import '../../model/user_account.dart';
@@ -20,12 +21,16 @@ class BioAdaptiveView extends StatefulWidget {
   final Sensor accelerometerSensor;
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
+  final UserAccount? userAccount;
+  final BioAdaptiveSessionConfig sessionConfig;
   const BioAdaptiveView({
     super.key,
     required this.ppgSensor,
     required this.accelerometerSensor,
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
+    this.userAccount,
+    this.sessionConfig = BioAdaptiveSessionConfig.standard,
   });
 
   @override
@@ -34,56 +39,57 @@ class BioAdaptiveView extends StatefulWidget {
 
 class _BioAdaptiveViewState extends State<BioAdaptiveView> {
   EarstreamState _earstreamState = EarstreamState.idle;
-  late Measurement _measurement;
+  Measurement? _measurement;
 
   void _startEarstream(UserAccount account) {
+    _measurement?.dispose();
+    final measurement = Measurement.live(
+      ppgSensor: widget.ppgSensor,
+      accelerometerSensor: widget.accelerometerSensor,
+      gyroscopeSensor: widget.gyroscopeSensor,
+      sensorConfigProvider: widget.sensorConfigProvider,
+      userAccount: account,
+      sessionConfig: widget.sessionConfig,
+    );
     setState(() {
-      _measurement = Measurement.live(
-        ppgSensor: widget.ppgSensor,
-        accelerometerSensor: widget.accelerometerSensor,
-        gyroscopeSensor: widget.gyroscopeSensor,
-        sensorConfigProvider: widget.sensorConfigProvider,
-        userAccount: account,
-      );
+      _measurement = measurement;
       _earstreamState = EarstreamState.running;
     });
-    _measurement.start();
+    measurement.start();
   }
 
   void _pauseEarstream() {
-    _measurement.pause();
+    _measurement?.pause();
     setState(() {
       _earstreamState = EarstreamState.paused;
     });
   }
 
-  void _resetEarstream(UserAccount account) {
-    _measurement.dispose();
+  void _resetEarstream() {
+    _measurement?.dispose();
     setState(() {
-      _measurement = Measurement.live(
-        ppgSensor: widget.ppgSensor,
-        accelerometerSensor: widget.accelerometerSensor,
-        gyroscopeSensor: widget.gyroscopeSensor,
-        sensorConfigProvider: widget.sensorConfigProvider,
-        userAccount: account,
-      );
+      _measurement = null;
       _earstreamState = EarstreamState.idle;
     });
   }
 
   void _simulateStress(UserAccount account) {
-    _measurement.dispose();
+    if (!widget.sessionConfig.allowStressSimulation) return;
+    _measurement?.dispose();
+    final measurement = Measurement.simulated(
+      userAccount: account,
+      restingActivityLevel: ActivityLevel.resting,
+      sessionConfig: widget.sessionConfig,
+    );
     setState(() {
-      _measurement = Measurement.simulated(
-        userAccount: account,
-        restingActivityLevel: ActivityLevel.resting,
-      );
+      _measurement = measurement;
       _earstreamState = EarstreamState.running;
     });
+    measurement.start();
   }
 
   void _resumeEarstream() {
-    _measurement.resume();
+    _measurement?.resume();
     setState(() {
       _earstreamState = EarstreamState.running;
     });
@@ -91,23 +97,25 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
 
   @override
   void dispose() {
-    _measurement.dispose();
+    _measurement?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final UserAccount userAccount = context.read<UserAccount>();
+    final UserAccount userAccount =
+        widget.userAccount ?? context.read<UserAccount>();
+    final measurement = _measurement;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // TODO: write this more clean
-        if (_earstreamState == EarstreamState.running)
+        if (_earstreamState == EarstreamState.running && measurement != null)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: BioAdaptiveContent(measurement: _measurement),
+              child: BioAdaptiveContent(measurement: measurement),
             ),
           ),
         if (_earstreamState == EarstreamState.running &&
@@ -121,8 +129,8 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           APIWarning(serviceName: userAccount.ttsProvider.label),
           const SizedBox(height: 16),
         ],
-        if (_earstreamState == EarstreamState.running)
-          MeditationTile(meditationNotifier: _measurement.meditation),
+        if (_earstreamState == EarstreamState.running && measurement != null)
+          MeditationTile(meditationNotifier: measurement.meditation),
         // Control Buttons
         BioAdaptiveControls(
           earstreamState: _earstreamState,
@@ -130,7 +138,8 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           onResume: _resumeEarstream,
           onPause: _pauseEarstream,
           onSimulateStress: () => _simulateStress(userAccount),
-          onReset: () => _resetEarstream(userAccount),
+          onReset: _resetEarstream,
+          showStressSimulation: widget.sessionConfig.allowStressSimulation,
         ),
       ],
     );
@@ -144,6 +153,7 @@ class BioAdaptiveControls extends StatelessWidget {
   final VoidCallback onPause;
   final VoidCallback onSimulateStress;
   final VoidCallback onReset;
+  final bool showStressSimulation;
 
   const BioAdaptiveControls({
     super.key,
@@ -153,6 +163,7 @@ class BioAdaptiveControls extends StatelessWidget {
     required this.onPause,
     required this.onSimulateStress,
     required this.onReset,
+    this.showStressSimulation = true,
   });
 
   @override
@@ -189,28 +200,35 @@ class BioAdaptiveControls extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: isRunning ? onSimulateStress : null,
-                  icon: const Icon(Icons.psychology),
-                  label: const Text("Simulate Stress"),
+        if (showStressSimulation)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: isRunning ? onSimulateStress : null,
+                    icon: const Icon(Icons.psychology),
+                    label: const Text("Simulate Stress"),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 24),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: !isIdle ? onReset : null,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text("Reset"),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: !isIdle ? onReset : null,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text("Reset"),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: !isIdle ? onReset : null,
+            icon: const Icon(Icons.refresh),
+            label: const Text("Reset"),
           ),
-        ),
       ],
     );
   }

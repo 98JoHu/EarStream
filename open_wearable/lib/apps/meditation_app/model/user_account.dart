@@ -288,6 +288,32 @@ class UserAccount {
     return account;
   }
 
+  /// Creates an attendee-scoped account containing only cloud-service
+  /// configuration. No permanent profile, meditation preference, stress
+  /// threshold, or stored baseline is read into the demo session.
+  factory UserAccount.forConferenceDemo({
+    required UserAccount serviceConfiguration,
+  }) {
+    final account = UserAccount(
+      deepseekApiKey: serviceConfiguration.deepseekApiKey,
+      elevenLabsApiKey: serviceConfiguration.elevenLabsApiKey,
+      ttsProvider: serviceConfiguration.ttsProvider,
+      tencentSecretId: serviceConfiguration.tencentSecretId,
+      tencentSecretKey: serviceConfiguration.tencentSecretKey,
+      tencentTtsRegion: serviceConfiguration.tencentTtsRegion,
+    );
+
+    account.hasValidDeepseekKey = serviceConfiguration.hasValidDeepseekKey;
+    account.elevenLabsVoiceId = serviceConfiguration.elevenLabsVoiceId;
+    account.hasValidElevenLabsKey = serviceConfiguration.hasValidElevenLabsKey;
+    account.hasValidTencentKey = serviceConfiguration.hasValidTencentKey;
+    account.availableElevenLabsVoices =
+        serviceConfiguration.availableElevenLabsVoices == null
+            ? null
+            : List.of(serviceConfiguration.availableElevenLabsVoices!);
+    return account;
+  }
+
   (int heartRate, double rmssd) get baselineBiometrics {
     // if values have been determined return them
     if (baselineHeartRate != null && baselineRMSSD != null) {

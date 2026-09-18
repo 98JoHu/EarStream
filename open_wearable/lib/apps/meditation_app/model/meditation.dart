@@ -7,6 +7,7 @@ import 'dart:async';
 import 'user_account.dart';
 import 'measurement.dart';
 import 'meditation_session_generator.dart';
+import 'meditation_prompt_policy.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'stress_detector.dart' show StressLevel;
 import 'tencent_tts_client.dart';
@@ -37,6 +38,7 @@ class Meditation {
   late final TtsService ttsService;
   final int maxSegments;
   Duration? meditationSegmentDuration;
+  final MeditationPromptPolicy promptPolicy;
 
   final ValueNotifier<SessionProgress?> progress =
       ValueNotifier<SessionProgress?>(null);
@@ -52,6 +54,7 @@ class Meditation {
     required this.userAccount,
     this.maxSegments = 10,
     this.meditationSegmentDuration,
+    this.promptPolicy = MeditationPromptPolicy.standard,
   }) {
     phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
     ttsService = TtsService(userAccount: userAccount);
@@ -78,6 +81,7 @@ class Meditation {
       account: userAccount,
       maxSegments: maxSegments,
       segmentDuration: meditationSegmentDuration,
+      promptPolicy: promptPolicy,
     );
 
     MeditationFrame opening;
@@ -453,6 +457,7 @@ class BiometricMeditation extends Meditation {
     required super.userAccount,
     super.maxSegments = 10,
     super.meditationSegmentDuration,
+    super.promptPolicy,
     required this.measurement,
   });
 
@@ -461,7 +466,10 @@ class BiometricMeditation extends Meditation {
       measurement.currentStressLevel == StressLevel.relaxed;
 
   @override
-  HeartRateSample? readCurrentBiometrics() => measurement.latestBiometrics;
+  HeartRateSample? readCurrentBiometrics() =>
+      promptPolicy.includePhysiologicalInformation
+          ? measurement.latestBiometrics
+          : null;
 }
 
 class ScheduledMeditation extends Meditation {

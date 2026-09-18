@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'biometric_source.dart';
+import 'bio_adaptive_session_config.dart';
 import 'stress_detector.dart';
 import 'user_account.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
@@ -26,6 +27,9 @@ sealed class MonitoringPhase {
 
   Duration? get duration;
 
+  /// Timed phases may hold at 100% until the required sensor data is valid.
+  bool get canAdvance => true;
+
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
     PhaseElapsed elapsed,
@@ -34,14 +38,16 @@ sealed class MonitoringPhase {
 
 class CalibrationPhase extends MonitoringPhase {
   @override
-  String get label => "Calibration (30s)";
+  final Duration duration;
+
+  CalibrationPhase({this.duration = const Duration(seconds: 30)});
+
+  @override
+  String get label => "Calibration (${duration.inSeconds}s)";
   @override
   IconData get icon => Icons.settings_outlined;
   @override
   Color get color => Colors.orange;
-  @override
-  Duration get duration => const Duration(seconds: 30);
-
   @override
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
@@ -52,11 +58,25 @@ class CalibrationPhase extends MonitoringPhase {
 
 class BaselinePhase extends MonitoringPhase {
   final UserAccount userAccount;
+  final BaselineComputationMode computationMode;
   @override
   final Duration duration;
 
-  BaselinePhase({required this.userAccount, Duration? duration})
-      : duration = duration ?? const Duration(minutes: 5);
+  int _heartRateCount = 0;
+  double _heartRateTotal = 0;
+  int _rmssdCount = 0;
+  double _rmssdTotal = 0;
+
+  BaselinePhase({
+    required this.userAccount,
+    Duration? duration,
+    this.computationMode = BaselineComputationMode.profileBlended,
+  }) : duration = duration ?? const Duration(minutes: 5);
+
+  @override
+  bool get canAdvance =>
+      computationMode == BaselineComputationMode.profileBlended ||
+      (_heartRateCount > 0 && _rmssdCount > 0);
 
   @override
   String get label => "Monitoring \u00b7 Baseline Adjustment";
@@ -70,6 +90,21 @@ class BaselinePhase extends MonitoringPhase {
     PhaseContext ctx,
     PhaseElapsed elapsed,
   ) {
+    if (computationMode == BaselineComputationMode.physiologicalOnly) {
+      return ctx.source.biometrics.listen((data) {
+        _heartRateTotal += data.heartRate;
+        _heartRateCount++;
+        userAccount.baselineHeartRate =
+            (_heartRateTotal / _heartRateCount).round();
+
+        if (data.rmssd != null) {
+          _rmssdTotal += data.rmssd!;
+          _rmssdCount++;
+          userAccount.baselineRMSSD = _rmssdTotal / _rmssdCount;
+        }
+      });
+    }
+
     final (baselineHeartRate, baselineRmssd) = userAccount.baselineBiometrics;
 
     return ctx.source.biometrics.listen((data) {
@@ -190,8 +225,9 @@ class MonitoringPhaseController {
       return; // indefinite phase — nothing to time or advance
     }
     progress.value =
-        _stopwatch.elapsed.inMilliseconds / duration.inMilliseconds;
-    if (_stopwatch.elapsed >= duration) {
+        (_stopwatch.elapsed.inMilliseconds / duration.inMilliseconds)
+            .clamp(0.0, 1.0);
+    if (_stopwatch.elapsed >= duration && current.canAdvance) {
       _advance();
     }
   }

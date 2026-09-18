@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'user_account.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
+import 'meditation_prompt_policy.dart';
 
 class MeditationSegment {
   final int segmentId;
@@ -55,12 +56,14 @@ MeditationScript createMeditationScript({
   required UserAccount account,
   required int maxSegments,
   Duration? segmentDuration,
+  MeditationPromptPolicy promptPolicy = MeditationPromptPolicy.standard,
 }) {
   if (account.hasValidDeepseekKey) {
     return AdaptiveMeditationScript(
       account: account,
       maxSegments: maxSegments,
       segmentDuration: segmentDuration,
+      promptPolicy: promptPolicy,
     );
   }
   return StaticMeditationScript.fallback(
@@ -123,6 +126,7 @@ class AdaptiveMeditationScript implements MeditationScript {
   final Duration? _segmentDuration;
   final http.Client _client;
   final bool _ownsClient;
+  final MeditationPromptPolicy _promptPolicy;
 
   final List<Map<String, String>> _history = [];
   int _emitted = 0;
@@ -131,10 +135,12 @@ class AdaptiveMeditationScript implements MeditationScript {
     required UserAccount account,
     required int maxSegments,
     Duration? segmentDuration,
+    MeditationPromptPolicy promptPolicy = MeditationPromptPolicy.standard,
     http.Client? client,
   })  : _account = account,
         _maxSegments = maxSegments,
         _segmentDuration = segmentDuration,
+        _promptPolicy = promptPolicy,
         _client = client ?? http.Client(),
         _ownsClient = client == null;
 
@@ -238,6 +244,10 @@ class AdaptiveMeditationScript implements MeditationScript {
   // --- prompt building -----------------------------------------------------
 
   String _systemPrompt() {
+    if (!_promptPolicy.includeProfileInformation) {
+      return _conferenceDemoSystemPrompt();
+    }
+
     final meditationType = _account.meditationType ?? 'mindfulness';
     final userContext = _account.getContextSummary();
 
@@ -285,7 +295,60 @@ On EVERY LATER turn, output a single segment object:
 Remember: you're creating a calming, safe space for someone who may be stressed. Be warm, patient, and genuinely caring.''';
   }
 
+  String _conferenceDemoSystemPrompt() {
+    final meditationType =
+        _account.meditationType?.label ?? MeditationType.mindfulness.label;
+    final environment = _account.meditationEnvironment?.label ??
+        MeditationEnvironment.nature.label;
+
+    return '''
+You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.
+You lead a meditation that unfolds one segment at a time for a short conference demonstration.
+
+SESSION-ONLY PREFERENCES:
+- Meditation type: $meditationType
+- Imagery environment: $environment
+
+PRIVACY REQUIREMENTS:
+- Do not request, infer, mention, or invent a name, age, gender, fitness level, health status, permanent profile, or physiological measurement.
+- Use only the two session preferences above to shape the meditation.
+
+GUIDELINES:
+1. ALWAYS include specific breathing instructions in every segment (for example, "breathe in for 4 counts... out for 6").
+2. Use the selected imagery environment naturally, without claiming personal knowledge about the participant.
+3. Create natural transitions that build on what you said before. DO NOT signal an ending in a segment.
+4. Speak slowly; use soothing language and natural pauses marked with ellipses (...).
+5. Fit the spoken guidance naturally into approximately $_durationSeconds seconds.
+
+OUTPUT FORMAT - valid JSON only, no markdown, no commentary.
+
+On the FIRST turn, output:
+{
+  "welcomeMessage": "string",
+  "completionMessage": "string",
+  "segment": {
+    "segmentId": 1,
+    "instruction": "string",
+    "durationSeconds": $_durationSeconds
+  }
+}
+
+On EVERY LATER turn, output a single segment object:
+{
+  "segmentId": <int>,
+  "instruction": "string",
+  "durationSeconds": $_durationSeconds
+}
+
+Create a calming and safe experience while respecting the privacy requirements.''';
+  }
+
   String _openingPrompt() {
+    if (!_promptPolicy.includePhysiologicalInformation) {
+      return 'Begin the session. Generate the welcomeMessage, the '
+          'completionMessage, and the first segment in the first-turn JSON '
+          'format using only the session preferences.';
+    }
     return 'Begin the session. Generate the welcomeMessage, the '
         'completionMessage, and the first segment, in the first-turn JSON '
         'format. There are no biosignals yet.';
@@ -293,6 +356,11 @@ Remember: you're creating a calming, safe space for someone who may be stressed.
 
   String _segmentPrompt(HeartRateSample? b) {
     final next = _emitted + 1;
+    if (!_promptPolicy.includePhysiologicalInformation) {
+      return 'The participant has finished segment $_emitted. Generate '
+          'segment $next as a single segment JSON object, continuing the '
+          'calming progression using only the session preferences.';
+    }
     if (b == null) {
       return 'The user has finished segment $_emitted. No biosignals are '
           'available. Generate segment $next as a single segment JSON object, '

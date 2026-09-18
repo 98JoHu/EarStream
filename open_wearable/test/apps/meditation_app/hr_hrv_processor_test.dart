@@ -1,11 +1,22 @@
 import 'dart:convert';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_processor.dart';
+import 'package:open_wearable/apps/meditation_app/model/activity_tracker.dart';
+import 'package:open_wearable/apps/meditation_app/model/bio_adaptive_session_config.dart';
+import 'package:open_wearable/apps/meditation_app/model/biometric_source.dart';
+import 'package:open_wearable/apps/meditation_app/model/measurement_phase.dart';
+import 'package:open_wearable/apps/meditation_app/model/meditation_prompt_policy.dart';
+import 'package:open_wearable/apps/meditation_app/model/meditation_session_generator.dart';
+import 'package:open_wearable/apps/meditation_app/model/stress_detector.dart';
 import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
+import 'package:open_wearable/apps/meditation_app/views/meditation_modes/bio_adaptive_view.dart';
 
 void main() {
   group('HrHrvProcessor.hrvMinimumWindow', () {
@@ -56,6 +67,230 @@ void main() {
       expect(account.tencentSecretKey, 'legacy-secret-key');
       expect(account.tencentTtsRegion, TencentTtsRegion.euFrankfurt);
       expect(account.hasValidTencentKey, isTrue);
+    });
+  });
+
+  group('conference demo configuration', () {
+    test('applies the paper parameters without changing standard defaults', () {
+      const demo = BioAdaptiveSessionConfig.conferenceDemo;
+      const standard = BioAdaptiveSessionConfig.standard;
+
+      expect(demo.includeCalibration, isFalse);
+      expect(demo.baselineDuration, const Duration(seconds: 30));
+      expect(
+        demo.baselineComputationMode,
+        BaselineComputationMode.physiologicalOnly,
+      );
+      expect(demo.stressThresholdOverride, 0.03);
+      expect(demo.hrvMinimumWindow, const Duration(seconds: 15));
+      expect(demo.meditationSegmentDuration, const Duration(seconds: 30));
+      expect(demo.promptPolicy, MeditationPromptPolicy.conferenceDemo);
+      expect(demo.allowStressSimulation, isFalse);
+
+      expect(standard.includeCalibration, isTrue);
+      expect(standard.calibrationDuration, const Duration(seconds: 30));
+      expect(standard.baselineDuration, const Duration(minutes: 5));
+      expect(
+        standard.baselineComputationMode,
+        BaselineComputationMode.profileBlended,
+      );
+      expect(standard.stressThresholdOverride, isNull);
+      expect(standard.hrvMinimumWindow, isNull);
+      expect(standard.meditationSegmentDuration, isNull);
+      expect(standard.promptPolicy, MeditationPromptPolicy.standard);
+      expect(standard.allowStressSimulation, isTrue);
+    });
+
+    testWidgets('does not render a stress simulation control', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BioAdaptiveControls(
+              earstreamState: EarstreamState.running,
+              onStart: () {},
+              onResume: () {},
+              onPause: () {},
+              onSimulateStress: () {},
+              onReset: () {},
+              showStressSimulation: false,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Simulate Stress'), findsNothing);
+      expect(find.text('Reset'), findsOneWidget);
+    });
+  });
+
+  group('demo profile isolation', () {
+    test('copies service configuration but no permanent profile data', () {
+      final permanent = UserAccount(
+        username: 'permanent-user',
+        firstName: 'ProfileSecretName',
+        lastName: 'ProfileSecretSurname',
+        gender: Gender.female,
+        age: 93,
+        fitnessLevel: FitnessLevel.athlete,
+        voiceGender: Gender.male,
+        speakingSpeed: SpeakingSpeed.fast,
+        meditationType: MeditationType.bodyScan,
+        meditationEnvironment: MeditationEnvironment.garden,
+        additionalPreferences: 'ProfileSecretPreference',
+        stressThreshold: 0.27,
+        baselineHeartRate: 111,
+        baselineRMSSD: 7,
+        deepseekApiKey: 'deepseek-service-key',
+        elevenLabsApiKey: 'eleven-service-key',
+        ttsProvider: TtsProviderOption.tencent,
+        tencentSecretId: 'tencent-service-id',
+        tencentSecretKey: 'tencent-service-key',
+        tencentTtsRegion: TencentTtsRegion.chinaGuangzhou,
+      );
+      permanent.hasValidDeepseekKey = true;
+      permanent.hasValidElevenLabsKey = true;
+      permanent.hasValidTencentKey = true;
+      permanent.elevenLabsVoiceId = 'service-voice';
+
+      final demo = UserAccount.forConferenceDemo(
+        serviceConfiguration: permanent,
+      );
+
+      expect(demo.deepseekApiKey, 'deepseek-service-key');
+      expect(demo.tencentSecretId, 'tencent-service-id');
+      expect(demo.ttsProvider, TtsProviderOption.tencent);
+      expect(demo.hasValidDeepseekKey, isTrue);
+      expect(demo.hasValidTencentKey, isTrue);
+      expect(demo.username, isNull);
+      expect(demo.firstName, isNull);
+      expect(demo.lastName, isNull);
+      expect(demo.gender, isNull);
+      expect(demo.age, isNull);
+      expect(demo.fitnessLevel, isNull);
+      expect(demo.voiceGender, isNull);
+      expect(demo.speakingSpeed, isNull);
+      expect(demo.meditationType, isNull);
+      expect(demo.meditationEnvironment, isNull);
+      expect(demo.additionalPreferences, isNull);
+      expect(demo.stressThreshold, isNull);
+      expect(demo.baselineHeartRate, isNull);
+      expect(demo.baselineRMSSD, isNull);
+
+      demo.meditationType = MeditationType.breathing;
+      demo.baselineHeartRate = 70;
+      expect(permanent.meditationType, MeditationType.bodyScan);
+      expect(permanent.baselineHeartRate, 111);
+    });
+  });
+
+  group('physiological-only baseline', () {
+    test('uses only the mean of locally observed samples', () async {
+      final account = UserAccount(
+        firstName: 'ProfileSecretName',
+        age: 93,
+        baselineHeartRate: 111,
+        baselineRMSSD: 7,
+      );
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        duration: const Duration(seconds: 30),
+        computationMode: BaselineComputationMode.physiologicalOnly,
+      );
+      final subscription = phase.activate(
+        PhaseContext(source: source, detector: detector),
+        () => const Duration(seconds: 10),
+      );
+
+      source.add(const HeartRateSample(heartRate: 60, rmssd: 20));
+      source.add(const HeartRateSample(heartRate: 80, rmssd: null));
+      source.add(const HeartRateSample(heartRate: 100, rmssd: 40));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(account.baselineHeartRate, 80);
+      expect(account.baselineRMSSD, 30);
+      expect(phase.canAdvance, isTrue);
+
+      await subscription.cancel();
+      detector.dispose();
+      source.dispose();
+    });
+  });
+
+  group('conference prompt privacy', () {
+    test('sends only attendee session preferences to DeepSeek', () async {
+      final requestBodies = <String>[];
+      var call = 0;
+      final client = MockClient((request) async {
+        requestBodies.add(request.body);
+        call++;
+        final content = call == 1
+            ? jsonEncode({
+                'welcomeMessage': 'Welcome.',
+                'completionMessage': 'Well done.',
+                'segment': {
+                  'segmentId': 1,
+                  'instruction': 'Breathe slowly.',
+                  'durationSeconds': 30,
+                },
+              })
+            : jsonEncode({
+                'segmentId': 2,
+                'instruction': 'Continue breathing.',
+                'durationSeconds': 30,
+              });
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': content},
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final account = UserAccount(
+        firstName: 'ProfileSecretName',
+        lastName: 'ProfileSecretSurname',
+        age: 93,
+        gender: Gender.female,
+        fitnessLevel: FitnessLevel.athlete,
+        additionalPreferences: 'ProfileSecretPreference',
+        baselineHeartRate: 111,
+        baselineRMSSD: 7,
+        meditationType: MeditationType.bodyScan,
+        meditationEnvironment: MeditationEnvironment.garden,
+        deepseekApiKey: 'service-key',
+      );
+      final script = AdaptiveMeditationScript(
+        account: account,
+        maxSegments: 2,
+        segmentDuration: const Duration(seconds: 30),
+        promptPolicy: MeditationPromptPolicy.conferenceDemo,
+        client: client,
+      );
+      addTearDown(script.dispose);
+
+      await script.begin();
+      await script.nextSegment(
+        const HeartRateSample(heartRate: 197, rmssd: 3.14159),
+      );
+
+      final cloudPayload = requestBodies.join('\n');
+      expect(cloudPayload, contains('Body Scan'));
+      expect(cloudPayload, contains('Garden'));
+      expect(cloudPayload, isNot(contains('ProfileSecretName')));
+      expect(cloudPayload, isNot(contains('ProfileSecretSurname')));
+      expect(cloudPayload, isNot(contains('ProfileSecretPreference')));
+      expect(cloudPayload, isNot(contains('93 years')));
+      expect(cloudPayload, isNot(contains('111 BPM')));
+      expect(cloudPayload, isNot(contains('197 bpm')));
+      expect(cloudPayload, isNot(contains('3 ms')));
     });
   });
 
@@ -123,4 +358,40 @@ void main() {
       expect(chineseChunks.join(), chinese);
     });
   });
+}
+
+class _TestBiometricSource implements BiometricSource {
+  final StreamController<HeartRateSample> _controller =
+      StreamController.broadcast(sync: true);
+  final ValueNotifier<ActivityLevel> _activity =
+      ValueNotifier(ActivityLevel.resting);
+
+  void add(HeartRateSample sample) => _controller.add(sample);
+
+  @override
+  Stream<HeartRateSample> get biometrics => _controller.stream;
+
+  @override
+  ValueListenable<ActivityLevel> get activityLevel => _activity;
+
+  @override
+  bool get suppressStressDetection => false;
+
+  @override
+  void start() {}
+
+  @override
+  void pause() {}
+
+  @override
+  void resume() {}
+
+  @override
+  void reset() {}
+
+  @override
+  void dispose() {
+    _controller.close();
+    _activity.dispose();
+  }
 }
