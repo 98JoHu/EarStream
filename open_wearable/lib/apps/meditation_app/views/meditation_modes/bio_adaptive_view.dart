@@ -218,7 +218,7 @@ class BioAdaptiveControls extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: isRunning ? onSimulateStress : null,
                     icon: const Icon(Icons.psychology),
-                    label: const Text("Play Stress"),
+                    label: const Text("Simulate Stress"),
                   ),
                 ),
                 const SizedBox(width: 8),
