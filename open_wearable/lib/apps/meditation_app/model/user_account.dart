@@ -68,6 +68,56 @@ enum SpeakingSpeed {
 
 enum FitnessLevel { sedentary, moderate, active, athlete }
 
+enum TtsProviderOption {
+  elevenLabs(label: 'ElevenLabs'),
+  tencent(label: 'Tencent Cloud');
+
+  final String label;
+
+  const TtsProviderOption({required this.label});
+
+  static TtsProviderOption fromConfig(String? value) {
+    return switch (value?.trim().toLowerCase()) {
+      'tencent' ||
+      'tencentcloud' ||
+      'tencent_cloud' =>
+        TtsProviderOption.tencent,
+      _ => TtsProviderOption.elevenLabs,
+    };
+  }
+}
+
+enum TencentTtsRegion {
+  euFrankfurt(
+    label: 'Europe (Frankfurt)',
+    region: 'eu-frankfurt',
+    host: 'tts.eu-frankfurt.tencentcloudapi.com',
+  ),
+  chinaGuangzhou(
+    label: 'China (Guangzhou)',
+    region: 'ap-guangzhou',
+    host: 'tts.ap-guangzhou.tencentcloudapi.com',
+  );
+
+  final String label;
+  final String region;
+  final String host;
+
+  const TencentTtsRegion({
+    required this.label,
+    required this.region,
+    required this.host,
+  });
+
+  static TencentTtsRegion fromConfig(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    return TencentTtsRegion.values.firstWhere(
+      (option) => option.region == normalized,
+      orElse: () => TencentTtsRegion.euFrankfurt,
+    );
+  }
+}
+
 enum MeditationEnvironment {
   nature(
     label: "Peaceful Nature",
@@ -154,8 +204,11 @@ class UserAccount {
   // Populated by ElevenLabsManager.updateUser() once the key is verified.
   String? elevenLabsVoiceId;
   List<({String voice, String id})>? availableElevenLabsVoices;
-  String? dashscopeApiKey;
-  bool hasValidDashscopeKey = false;
+  TtsProviderOption ttsProvider;
+  String? tencentSecretId;
+  String? tencentSecretKey;
+  bool hasValidTencentKey = false;
+  TencentTtsRegion tencentTtsRegion;
 
   // Bio-adaptive meditation settings
   int? baselineHeartRate;
@@ -177,10 +230,63 @@ class UserAccount {
     this.outlookSuppressionToken,
     this.deepseekApiKey,
     this.elevenLabsApiKey,
-    this.dashscopeApiKey,
+    this.ttsProvider = TtsProviderOption.elevenLabs,
+    this.tencentSecretId,
+    this.tencentSecretKey,
+    this.tencentTtsRegion = TencentTtsRegion.euFrankfurt,
     this.baselineHeartRate,
     this.baselineRMSSD,
   });
+
+  bool get hasValidSelectedTtsProvider => switch (ttsProvider) {
+        TtsProviderOption.elevenLabs => hasValidElevenLabsKey,
+        TtsProviderOption.tencent => hasValidTencentKey,
+      };
+
+  factory UserAccount.fromEnvironment(
+    Map<String, String> environment, {
+    String username = 'johndoe',
+    String firstName = 'John',
+    String lastName = 'Doe',
+    Gender gender = Gender.unspecified,
+    int age = 30,
+    FitnessLevel fitnessLevel = FitnessLevel.moderate,
+  }) {
+    String? configured(String key) {
+      final value = environment[key]?.trim();
+      return value == null || value.isEmpty ? null : value;
+    }
+
+    final deepseekApiKey = configured('DEEPSEEK_API_KEY');
+    final elevenLabsApiKey = configured('ELEVENLABS_API_KEY');
+    final tencentSecretId = configured('TENCENT_SECRET_ID');
+    final tencentSecretKey =
+        configured('TENCENT_SECRET_KEY') ?? configured('TENCENT_TTS_API_KEY');
+
+    final account = UserAccount(
+      username: username,
+      firstName: firstName,
+      lastName: lastName,
+      gender: gender,
+      age: age,
+      fitnessLevel: fitnessLevel,
+      deepseekApiKey: deepseekApiKey,
+      elevenLabsApiKey: elevenLabsApiKey,
+      ttsProvider: TtsProviderOption.fromConfig(environment['TTS_PROVIDER']),
+      tencentSecretId: tencentSecretId,
+      tencentSecretKey: tencentSecretKey,
+      tencentTtsRegion:
+          TencentTtsRegion.fromConfig(environment['TENCENT_TTS_REGION']),
+    );
+
+    // Bundled demo credentials are immediately usable. The API Keys page can
+    // perform a live check and clears the corresponding flag after edits.
+    account.hasValidDeepseekKey = deepseekApiKey != null;
+    account.hasValidElevenLabsKey = elevenLabsApiKey != null;
+    account.hasValidTencentKey =
+        tencentSecretId != null && tencentSecretKey != null;
+    return account;
+  }
 
   (int heartRate, double rmssd) get baselineBiometrics {
     // if values have been determined return them

@@ -121,6 +121,8 @@ class AdaptiveMeditationScript implements MeditationScript {
   final UserAccount _account;
   final int _maxSegments;
   final Duration? _segmentDuration;
+  final http.Client _client;
+  final bool _ownsClient;
 
   final List<Map<String, String>> _history = [];
   int _emitted = 0;
@@ -132,7 +134,9 @@ class AdaptiveMeditationScript implements MeditationScript {
     http.Client? client,
   })  : _account = account,
         _maxSegments = maxSegments,
-        _segmentDuration = segmentDuration;
+        _segmentDuration = segmentDuration,
+        _client = client ?? http.Client(),
+        _ownsClient = client == null;
 
   static final _endpoint =
       Uri.parse('https://api.deepseek.com/chat/completions');
@@ -143,7 +147,6 @@ class AdaptiveMeditationScript implements MeditationScript {
   Future<MeditationFrame> begin() async {
     _history.add({'role': 'user', 'content': _openingPrompt()});
     final content = await _send(); // throws on failure — caller falls back
-    print('DeepSeek response: $content');
     _history.add({'role': 'assistant', 'content': content});
 
     final json = jsonDecode(content) as Map<String, dynamic>;
@@ -158,7 +161,11 @@ class AdaptiveMeditationScript implements MeditationScript {
   }
 
   @override
-  void dispose() {}
+  void dispose() {
+    if (_ownsClient) {
+      _client.close();
+    }
+  }
 
   @override
   Future<MeditationSegment?> nextSegment(HeartRateSample? current) async {
@@ -167,7 +174,6 @@ class AdaptiveMeditationScript implements MeditationScript {
     _history.add({'role': 'user', 'content': _segmentPrompt(current)});
     try {
       final content = await _send();
-      print('DeepSeek response: $content');
       _history.add({'role': 'assistant', 'content': content});
       final json = jsonDecode(content) as Map<String, dynamic>;
       _emitted++;
@@ -192,30 +198,32 @@ class AdaptiveMeditationScript implements MeditationScript {
 
     final http.Response response;
     try {
-      response = await http.post(
-        _endpoint,
-        headers: {
-          'Authorization': 'Bearer $key',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'model': 'deepseek-v4-pro',
-          'response_format': {'type': 'json_object'},
-          'messages': [
-            {'role': 'system', 'content': _systemPrompt()},
-            ..._history,
-          ],
-          'max_tokens': 2000,
-          'temperature': 0.7,
-        }),
-      );
+      response = await _client
+          .post(
+            _endpoint,
+            headers: {
+              'Authorization': 'Bearer $key',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': 'deepseek-v4-pro',
+              'response_format': {'type': 'json_object'},
+              'messages': [
+                {'role': 'system', 'content': _systemPrompt()},
+                ..._history,
+              ],
+              'max_tokens': 2000,
+              'temperature': 0.7,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
     } catch (e) {
       throw Exception('Network error. $e');
     }
 
     if (response.statusCode != 200) {
       throw Exception(
-        'DeepSeek returned ${response.statusCode}: ${response.body}',
+        'DeepSeek returned HTTP ${response.statusCode}.',
       );
     }
 

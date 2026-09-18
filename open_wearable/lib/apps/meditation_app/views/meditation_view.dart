@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
@@ -34,14 +35,13 @@ class MeditationView extends StatefulWidget {
 class _MeditationViewState extends State<MeditationView> {
   int _selectedIndex = 0;
   MeditationMode? _selectedMode;
-  final UserAccount _mockUserAccount = UserAccount(
-    username: 'johndoe',
-    firstName: 'John',
-    lastName: 'Doe',
-    gender: Gender.unspecified,
-    age: 30,
-    fitnessLevel: FitnessLevel.moderate,
-  );
+  late final UserAccount _userAccount;
+
+  @override
+  void initState() {
+    super.initState();
+    _userAccount = UserAccount.fromEnvironment(dotenv.env);
+  }
 
   List<DrawerPage> get _pages => [
         MeditationPage(
@@ -49,17 +49,17 @@ class _MeditationViewState extends State<MeditationView> {
           accelerometerSensor: widget.accelerometerSensor,
           gyroscopeSensor: widget.gyroscopeSensor,
           sensorConfigProvider: widget.sensorConfigProvider,
-          userAccount: _mockUserAccount,
+          userAccount: _userAccount,
           wearable: widget.wearable,
           selectedMode: _selectedMode,
           onModeSelected: (mode) => setState(() => _selectedMode = mode),
         ),
-        ProfilePage(userAccount: _mockUserAccount),
-        PreferencesPage(userAccount: _mockUserAccount),
+        ProfilePage(userAccount: _userAccount),
+        PreferencesPage(userAccount: _userAccount),
         const WeeklyAnalyticsPage(),
-        CalendarIntegrationPage(userAccount: _mockUserAccount),
+        CalendarIntegrationPage(userAccount: _userAccount),
         SealCheckPage(wearable: widget.wearable),
-        ApiKeysPage(userAccount: _mockUserAccount),
+        ApiKeysPage(userAccount: _userAccount),
       ];
 
   @override

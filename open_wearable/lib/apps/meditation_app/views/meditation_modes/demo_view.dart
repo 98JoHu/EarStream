@@ -172,6 +172,10 @@ class _DemoViewState extends State<DemoView> {
                 const SizedBox(height: 16),
                 APIWarning(serviceName: "Deepseek"),
               ],
+              if (!userAccount.hasValidSelectedTtsProvider) ...[
+                const SizedBox(height: 16),
+                APIWarning(serviceName: userAccount.ttsProvider.label),
+              ],
             ],
           );
         }
@@ -311,6 +315,8 @@ class _SettingsViewState extends State<SettingsView> {
   late SpeakingSpeed _speakingSpeed;
   late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
+  late TtsProviderOption _ttsProvider;
+  late TencentTtsRegion _tencentTtsRegion;
 
   @override
   void initState() {
@@ -321,6 +327,8 @@ class _SettingsViewState extends State<SettingsView> {
         widget.userAccount.meditationType ?? MeditationType.mindfulness;
     _meditationEnvironment = widget.userAccount.meditationEnvironment ??
         MeditationEnvironment.nature;
+    _ttsProvider = widget.userAccount.ttsProvider;
+    _tencentTtsRegion = widget.userAccount.tencentTtsRegion;
   }
 
   T _randomEntry<T>(List<DropdownMenuEntry<T>> entries) =>
@@ -340,6 +348,8 @@ class _SettingsViewState extends State<SettingsView> {
     widget.userAccount.speakingSpeed = _speakingSpeed;
     widget.userAccount.meditationType = _meditationType;
     widget.userAccount.meditationEnvironment = _meditationEnvironment;
+    widget.userAccount.ttsProvider = _ttsProvider;
+    widget.userAccount.tencentTtsRegion = _tencentTtsRegion;
   }
 
   @override
@@ -389,6 +399,36 @@ class _SettingsViewState extends State<SettingsView> {
               label: const Text('Surprise me'),
             ),
           ),
+          const SizedBox(height: 24),
+          const Text(
+            'Text-to-Speech Provider',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          TtsProviderDropdown(
+            key: ValueKey(_ttsProvider),
+            initialSelection: _ttsProvider,
+            onSelected: (value) {
+              if (value != null) setState(() => _ttsProvider = value);
+            },
+          ),
+          if (_ttsProvider == TtsProviderOption.tencent) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'Tencent Processing Region',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TencentTtsRegionDropdown(
+              key: ValueKey(_tencentTtsRegion),
+              initialSelection: _tencentTtsRegion,
+              onSelected: (value) {
+                if (value != null) {
+                  setState(() => _tencentTtsRegion = value);
+                }
+              },
+            ),
+          ],
           const SizedBox(height: 24),
           const Text(
             'Voice Gender',

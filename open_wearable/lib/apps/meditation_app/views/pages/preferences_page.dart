@@ -27,6 +27,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
   late SpeakingSpeed _speakingSpeed;
   late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
+  late TtsProviderOption _ttsProvider;
+  late TencentTtsRegion _tencentTtsRegion;
   late double _stressThreshold;
   late String? _elevenLabsVoiceId;
 
@@ -42,6 +44,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
         widget.userAccount.meditationType ?? MeditationType.mindfulness;
     _meditationEnvironment = widget.userAccount.meditationEnvironment ??
         MeditationEnvironment.nature;
+    _ttsProvider = widget.userAccount.ttsProvider;
+    _tencentTtsRegion = widget.userAccount.tencentTtsRegion;
     _stressThreshold = widget.userAccount.stressThreshold ?? 0.10;
     _elevenLabsVoiceId = widget.userAccount.elevenLabsVoiceId;
   }
@@ -59,6 +63,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
         widget.userAccount.speakingSpeed = _speakingSpeed;
         widget.userAccount.meditationType = _meditationType;
         widget.userAccount.meditationEnvironment = _meditationEnvironment;
+        widget.userAccount.ttsProvider = _ttsProvider;
+        widget.userAccount.tencentTtsRegion = _tencentTtsRegion;
         widget.userAccount.additionalPreferences =
             _additionalPreferencesController.text;
         widget.userAccount.stressThreshold = _stressThreshold;
@@ -106,6 +112,38 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     'These settings stay optional at startup, but they shape the generated script, ambience, and voice delivery once a session begins.',
                     style: TextStyle(color: Colors.grey[700], height: 1.4),
                   ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Text-to-Speech Provider',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  TtsProviderDropdown(
+                    key: ValueKey(_ttsProvider),
+                    initialSelection: _ttsProvider,
+                    onSelected: (value) {
+                      if (value != null) {
+                        setState(() => _ttsProvider = value);
+                      }
+                    },
+                  ),
+                  if (_ttsProvider == TtsProviderOption.tencent) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Tencent Processing Region',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    TencentTtsRegionDropdown(
+                      key: ValueKey(_tencentTtsRegion),
+                      initialSelection: _tencentTtsRegion,
+                      onSelected: (value) {
+                        if (value != null) {
+                          setState(() => _tencentTtsRegion = value);
+                        }
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   const Text(
                     'Voice Gender',

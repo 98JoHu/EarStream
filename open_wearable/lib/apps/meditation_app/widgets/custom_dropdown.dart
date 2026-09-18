@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import '../model/user_account.dart'
-    show Gender, SpeakingSpeed, MeditationType, MeditationEnvironment;
+    show
+        Gender,
+        SpeakingSpeed,
+        MeditationType,
+        MeditationEnvironment,
+        TtsProviderOption,
+        TencentTtsRegion;
 import '../widgets/emojis.dart';
 
 final voiceGenderOptions = [
@@ -30,6 +36,18 @@ final meditationEnvironmentOptions = MeditationEnvironment.values.map((env) {
   return DropdownMenuEntry(
     value: env,
     label: '${env.emoji} ${env.label}',
+  );
+}).toList();
+final ttsProviderOptions = TtsProviderOption.values.map((provider) {
+  return DropdownMenuEntry(
+    value: provider,
+    label: provider.label,
+  );
+}).toList();
+final tencentTtsRegionOptions = TencentTtsRegion.values.map((region) {
+  return DropdownMenuEntry(
+    value: region,
+    label: region.label,
   );
 }).toList();
 final stressThresholdOptions = [
@@ -167,6 +185,42 @@ class StressThresholdDropdown extends StatelessWidget {
   Widget build(BuildContext context) => FormDropdown<double>(
         initialSelection: initialSelection,
         entries: stressThresholdOptions,
+        onSelected: onSelected,
+      );
+}
+
+class TtsProviderDropdown extends StatelessWidget {
+  final TtsProviderOption initialSelection;
+  final ValueChanged<TtsProviderOption?> onSelected;
+
+  const TtsProviderDropdown({
+    super.key,
+    required this.initialSelection,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) => FormDropdown<TtsProviderOption>(
+        initialSelection: initialSelection,
+        entries: ttsProviderOptions,
+        onSelected: onSelected,
+      );
+}
+
+class TencentTtsRegionDropdown extends StatelessWidget {
+  final TencentTtsRegion initialSelection;
+  final ValueChanged<TencentTtsRegion?> onSelected;
+
+  const TencentTtsRegionDropdown({
+    super.key,
+    required this.initialSelection,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) => FormDropdown<TencentTtsRegion>(
+        initialSelection: initialSelection,
+        entries: tencentTtsRegionOptions,
         onSelected: onSelected,
       );
 }

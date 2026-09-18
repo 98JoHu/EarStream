@@ -31,7 +31,7 @@ class APIWarning extends StatelessWidget {
                         ),
                   ),
                   Text(
-                    'No valid Deepseek API key found. Please provide a valid key in the settings and check your connection to the Deepseek service.',
+                    'No valid $serviceName credentials were found. Add them on the API Keys page and check the connection. EarStreAM will use its local fallback until then.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

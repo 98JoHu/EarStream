@@ -116,6 +116,11 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           APIWarning(serviceName: "Deepseek"),
           SizedBox(height: 16),
         ],
+        if (_earstreamState == EarstreamState.running &&
+            !userAccount.hasValidSelectedTtsProvider) ...[
+          APIWarning(serviceName: userAccount.ttsProvider.label),
+          const SizedBox(height: 16),
+        ],
         if (_earstreamState == EarstreamState.running)
           MeditationTile(meditationNotifier: _measurement.meditation),
         // Control Buttons

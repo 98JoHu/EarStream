@@ -78,6 +78,10 @@ class _TimerViewState extends State<TimerView> {
                 APIWarning(serviceName: "Deepseek"),
                 const SizedBox(height: 16),
               ],
+              if (!userAccount.hasValidSelectedTtsProvider) ...[
+                APIWarning(serviceName: userAccount.ttsProvider.label),
+                const SizedBox(height: 16),
+              ],
               MeditationTile(
                 meditationNotifier: _currentMeditation,
                 onMeditationComplete: () {

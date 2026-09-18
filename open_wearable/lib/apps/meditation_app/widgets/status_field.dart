@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../model/user_account.dart';
+import '../model/tencent_tts_client.dart';
 
 enum Status { missing, checking, error, ok }
 
@@ -43,13 +44,13 @@ class StatusField extends StatelessWidget {
   String get description {
     switch (connectionManager.status) {
       case Status.missing:
-        return "No source selected. Please choose a source to enable stress detection.";
+        return "Credentials have not been verified for the current settings.";
       case Status.checking:
-        return "Checking the connection to the source. This may take a few seconds.";
+        return "Checking the service connection. This may take a few seconds.";
       case Status.error:
-        return "Failed to connect to the source. Please check your settings and try again.";
+        return "The service check failed. Please review the credentials and region, then try again.";
       case Status.ok:
-        return "Successfully connected to the source.";
+        return "The current credentials and settings were accepted.";
     }
   }
 
@@ -123,16 +124,20 @@ abstract class ConnectionManager extends ChangeNotifier {
   Status _status = Status.missing;
   Status get status => _status;
 
+  void markUnverified() {
+    _status = Status.missing;
+    notifyListeners();
+  }
+
   Future<void> checkConnection() async {
     _status = Status.checking;
     notifyListeners();
 
     try {
       final dynamic result = await verifyCredentials();
+      await updateUser(result);
       _status = Status.ok;
       notifyListeners();
-
-      await updateUser(result);
     } catch (e) {
       print("Connection check failed: $e");
       _status = Status.error;
@@ -196,6 +201,7 @@ class DeepseekManager extends ConnectionManager {
 
   @override
   Future<dynamic> verifyCredentials() async {
+    userAccount.hasValidDeepseekKey = false;
     if (userAccount.deepseekApiKey?.isEmpty ?? true) {
       throw Exception('Deepseek API key cannot be empty.');
     }
@@ -205,7 +211,7 @@ class DeepseekManager extends ConnectionManager {
       headers: {
         'Authorization': 'Bearer ${userAccount.deepseekApiKey}',
       },
-    );
+    ).timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200) {
       userAccount.hasValidDeepseekKey = false; // Mark the key as invalid
@@ -229,6 +235,7 @@ class ElevenLabsManager extends ConnectionManager {
 
   @override
   Future<dynamic> verifyCredentials() async {
+    userAccount.hasValidElevenLabsKey = false;
     if (userAccount.elevenLabsApiKey?.isEmpty ?? true) {
       throw Exception('ElevenLabs API key cannot be empty.');
     }
@@ -238,7 +245,7 @@ class ElevenLabsManager extends ConnectionManager {
       headers: {
         'xi-api-key': '${userAccount.elevenLabsApiKey}',
       },
-    );
+    ).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
       throw Exception(
@@ -262,38 +269,36 @@ class ElevenLabsManager extends ConnectionManager {
   }
 }
 
-class DashscopeManager extends ConnectionManager {
-  DashscopeManager({required super.userAccount});
+class TencentTtsManager extends ConnectionManager {
+  TencentTtsManager({required super.userAccount});
 
   @override
   Future<dynamic> verifyCredentials() async {
-    if (userAccount.dashscopeApiKey?.isEmpty ?? true) {
-      throw Exception('Dashscope API key cannot be empty.');
+    userAccount.hasValidTencentKey = false;
+    if (userAccount.tencentSecretId?.trim().isEmpty ?? true) {
+      throw Exception('Tencent SecretId cannot be empty.');
+    }
+    if (userAccount.tencentSecretKey?.trim().isEmpty ?? true) {
+      throw Exception('Tencent SecretKey cannot be empty.');
     }
 
-    final response = await http.get(
-      Uri.parse(
-        'https://dashscope.aliyuncs.com/compatible-mode/v1/models',
-      ),
-      headers: {
-        'Authorization': 'Bearer ${userAccount.dashscopeApiKey}',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      userAccount.hasValidDashscopeKey = false; // Mark the key as invalid
-      throw Exception(
-        'Dashscope API rejected key (Code: ${response.statusCode})',
+    final client = TencentTtsClient();
+    try {
+      return await client.synthesize(
+        text: 'Connection test.',
+        secretId: userAccount.tencentSecretId!,
+        secretKey: userAccount.tencentSecretKey!,
+        region: userAccount.tencentTtsRegion,
+        voiceType: userAccount.voiceGender == Gender.male ? 1050 : 1051,
+        speed: 0,
       );
+    } finally {
+      client.dispose();
     }
-
-    return json.decode(response.body);
   }
 
   @override
-  Future<void> updateUser(dynamic result) async {
-    // Extract relevant account info from the result and update your user model
-    print('Dashscope Synced. Account Info: $result');
-    userAccount.hasValidDashscopeKey = true; // Mark the key as valid
+  Future<void> updateUser(dynamic _) async {
+    userAccount.hasValidTencentKey = true;
   }
 }
