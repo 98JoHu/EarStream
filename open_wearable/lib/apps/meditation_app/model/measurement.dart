@@ -13,6 +13,7 @@ import 'measurement_phase.dart';
 import 'activity_tracker.dart' show ActivityLevel;
 import 'meditation.dart' show BiometricMeditation, Meditation;
 import 'hr_hrv_processor.dart' show HeartRateSample;
+import 'monitoring_meditation_deadline.dart';
 
 class Measurement {
   final UserAccount userAccount;
@@ -22,6 +23,7 @@ class Measurement {
   final BiometricSource _source;
   late final StressDetector _detector;
   late final MonitoringPhaseController _phaseController;
+  late final MonitoringMeditationDeadline _meditationDeadline;
   StreamSubscription<HeartRateSample>? _latestBiometricsSubscription;
   HeartRateSample? _latestBiometrics;
 
@@ -48,6 +50,11 @@ class Measurement {
       ),
       phases: phases,
     );
+    _meditationDeadline = MonitoringMeditationDeadline(
+      delay: sessionConfig.guaranteedMeditationDelay,
+      onElapsed: _onGuaranteedMeditationDeadline,
+    );
+    _phaseController.phase.addListener(_onMonitoringPhaseChanged);
   }
 
   factory Measurement.live({
@@ -135,15 +142,18 @@ class Measurement {
   ValueListenable<ActivityLevel> get activityLevel => _source.activityLevel;
 
   void start() {
+    _meditationDeadline.reset();
     _source.start();
     _latestBiometricsSubscription = _source.biometrics.listen((sample) {
       _latestBiometrics = sample;
     });
     _detector.reset();
     _phaseController.start();
+    _onMonitoringPhaseChanged();
   }
 
   void pause() {
+    _meditationDeadline.pause();
     _source.pause();
     _phaseController.pause();
     _stopMeditation();
@@ -152,12 +162,15 @@ class Measurement {
   void resume() {
     _source.resume();
     _phaseController.resume();
+    _meditationDeadline.resume();
   }
 
   void dispose() {
     _latestBiometricsSubscription?.cancel();
     _source.dispose();
     _detector.stressLevel.removeListener(_onStressLevelChanged);
+    _phaseController.phase.removeListener(_onMonitoringPhaseChanged);
+    _meditationDeadline.dispose();
     _detector.dispose();
     _phaseController.dispose();
     meditation.value?.dispose();
@@ -171,7 +184,22 @@ class Measurement {
     }
   }
 
+  void _onMonitoringPhaseChanged() {
+    if (_phaseController.current is StressMonitoringPhase) {
+      _meditationDeadline.enterMonitoring();
+    }
+  }
+
+  void _onGuaranteedMeditationDeadline() {
+    if (_phaseController.current is StressMonitoringPhase &&
+        meditation.value == null) {
+      _startMeditation();
+    }
+  }
+
   void _startMeditation() {
+    if (meditation.value != null) return;
+    _meditationDeadline.satisfy();
     final session = BiometricMeditation(
       userAccount: userAccount,
       measurement: this,

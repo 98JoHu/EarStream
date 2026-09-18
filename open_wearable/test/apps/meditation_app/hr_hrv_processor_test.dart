@@ -16,6 +16,7 @@ import 'package:open_wearable/apps/meditation_app/model/meditation_prompt_policy
 import 'package:open_wearable/apps/meditation_app/model/meditation_analytics.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_session_generator.dart';
+import 'package:open_wearable/apps/meditation_app/model/monitoring_meditation_deadline.dart';
 import 'package:open_wearable/apps/meditation_app/model/stress_detector.dart';
 import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
@@ -272,6 +273,7 @@ void main() {
       expect(demo.stressThresholdOverride, 0.03);
       expect(demo.hrvMinimumWindow, const Duration(seconds: 30));
       expect(demo.metricWindowDuration, const Duration(seconds: 30));
+      expect(demo.guaranteedMeditationDelay, const Duration(minutes: 2));
       expect(demo.useBestEffortEstimates, isTrue);
       expect(demo.meditationSegmentDuration, const Duration(seconds: 30));
       expect(demo.promptPolicy, MeditationPromptPolicy.conferenceDemo);
@@ -287,6 +289,7 @@ void main() {
       expect(standard.stressThresholdOverride, isNull);
       expect(standard.hrvMinimumWindow, isNull);
       expect(standard.metricWindowDuration, isNull);
+      expect(standard.guaranteedMeditationDelay, isNull);
       expect(standard.useBestEffortEstimates, isFalse);
       expect(standard.meditationSegmentDuration, isNull);
       expect(standard.promptPolicy, MeditationPromptPolicy.standard);
@@ -312,6 +315,44 @@ void main() {
 
       expect(find.text('Simulate Stress'), findsNothing);
       expect(find.text('Reset'), findsOneWidget);
+    });
+  });
+
+  group('conference monitoring deadline', () {
+    testWidgets('fires once after two minutes of monitoring', (tester) async {
+      var triggerCount = 0;
+      final deadline = MonitoringMeditationDeadline(
+        delay: const Duration(minutes: 2),
+        onElapsed: () => triggerCount++,
+      );
+      addTearDown(deadline.dispose);
+
+      deadline.enterMonitoring();
+      await tester.pump(const Duration(seconds: 119));
+      expect(triggerCount, 0);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(triggerCount, 1);
+
+      await tester.pump(const Duration(minutes: 2));
+      expect(triggerCount, 1);
+    });
+
+    testWidgets('an earlier meditation cancels the guaranteed trigger',
+        (tester) async {
+      var triggerCount = 0;
+      final deadline = MonitoringMeditationDeadline(
+        delay: const Duration(minutes: 2),
+        onElapsed: () => triggerCount++,
+      );
+      addTearDown(deadline.dispose);
+
+      deadline.enterMonitoring();
+      await tester.pump(const Duration(minutes: 1));
+      deadline.satisfy();
+      await tester.pump(const Duration(minutes: 2));
+
+      expect(triggerCount, 0);
     });
   });
 

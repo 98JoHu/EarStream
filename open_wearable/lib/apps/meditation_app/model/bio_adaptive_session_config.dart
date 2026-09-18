@@ -14,6 +14,7 @@ class BioAdaptiveSessionConfig {
   final Duration? meditationSegmentDuration;
   final Duration? hrvMinimumWindow;
   final Duration? metricWindowDuration;
+  final Duration? guaranteedMeditationDelay;
 
   /// Allows physiologically plausible, beat-derived estimates that fall below
   /// the production stream's confidence threshold. Used only by the
@@ -31,6 +32,7 @@ class BioAdaptiveSessionConfig {
     required this.meditationSegmentDuration,
     required this.hrvMinimumWindow,
     required this.metricWindowDuration,
+    required this.guaranteedMeditationDelay,
     required this.useBestEffortEstimates,
     required this.promptPolicy,
     required this.allowStressSimulation,
@@ -48,6 +50,7 @@ class BioAdaptiveSessionConfig {
     meditationSegmentDuration: null,
     hrvMinimumWindow: null,
     metricWindowDuration: null,
+    guaranteedMeditationDelay: null,
     useBestEffortEstimates: false,
     promptPolicy: MeditationPromptPolicy.standard,
     allowStressSimulation: true,
@@ -63,6 +66,7 @@ class BioAdaptiveSessionConfig {
     meditationSegmentDuration: Duration(seconds: 30),
     hrvMinimumWindow: Duration(seconds: 30),
     metricWindowDuration: Duration(seconds: 30),
+    guaranteedMeditationDelay: Duration(minutes: 2),
     useBestEffortEstimates: true,
     promptPolicy: MeditationPromptPolicy.conferenceDemo,
     allowStressSimulation: false,
