@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -45,6 +46,47 @@ void main() {
         expect(processor.hrvMinimumWindow, const Duration(seconds: 15));
       });
     }
+
+    test('applies only the demo-specific shortened window', () {
+      const demo = BioAdaptiveSessionConfig.conferenceDemo;
+      const standard = BioAdaptiveSessionConfig.standard;
+      final demoProcessor = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: 100,
+        timestampExponent: -3,
+        hrvMinimumWindow: demo.hrvMinimumWindow,
+        metricWindowDuration: demo.metricWindowDuration,
+      );
+      final standardProcessor = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: 100,
+        timestampExponent: -3,
+        hrvMinimumWindow: standard.hrvMinimumWindow,
+      );
+      addTearDown(demoProcessor.dispose);
+      addTearDown(standardProcessor.dispose);
+
+      expect(
+        demoProcessor.hrvMinimumWindow,
+        const Duration(seconds: 30),
+      );
+      expect(demoProcessor.heartRateWindow, const Duration(seconds: 30));
+      expect(
+        demoProcessor.metricEligibilityWindow,
+        const Duration(seconds: 30),
+      );
+      expect(demoProcessor.hrvHistoryWindow, const Duration(seconds: 30));
+      expect(
+        standardProcessor.hrvMinimumWindow,
+        const Duration(seconds: 60),
+      );
+      expect(standardProcessor.heartRateWindow, const Duration(seconds: 10));
+      expect(
+        standardProcessor.metricEligibilityWindow,
+        const Duration(seconds: 4),
+      );
+      expect(standardProcessor.hrvHistoryWindow, const Duration(minutes: 5));
+    });
   });
 
   test('calibration warms the pipeline without publishing biometrics',
@@ -71,6 +113,118 @@ void main() {
     expect(samples, hasLength(1));
     expect(samples.single.heartRate, 72);
     expect(samples.single.rmssd, 44);
+  });
+
+  test('demo metrics become eligible only at the 30-second deadline', () async {
+    final epoch = DateTime(2026);
+    var now = epoch;
+    final processor = HrHrvProcessor(
+      sampleFreq: 200,
+      accelerometerFreq: 100,
+      timestampExponent: -3,
+      hrvMinimumWindow:
+          BioAdaptiveSessionConfig.conferenceDemo.hrvMinimumWindow,
+      metricWindowDuration:
+          BioAdaptiveSessionConfig.conferenceDemo.metricWindowDuration,
+      publishBestEffortEstimates:
+          BioAdaptiveSessionConfig.conferenceDemo.useBestEffortEstimates,
+      now: () => now,
+    );
+    addTearDown(processor.dispose);
+    final samples = <HeartRateSample>[];
+    final subscription = processor.biometricStream.listen(samples.add);
+    addTearDown(subscription.cancel);
+
+    var phase = 0.0;
+    void feedWindow({required int startMs, required int durationSeconds}) {
+      const sampleRate = 200;
+      const stepMs = 1000 ~/ sampleRate;
+      for (var index = 0; index < durationSeconds * sampleRate; index++) {
+        final timestamp = startMs + (index * stepMs);
+        final timeSeconds = timestamp / 1000.0;
+        final pulseHz = 1.15 + (0.08 * sin(2 * pi * 0.1 * timeSeconds));
+        phase += 2 * pi * pulseHz / sampleRate;
+        final optical = 1000 + (120 * sin(phase));
+        now = epoch.add(Duration(milliseconds: timestamp));
+        processor.processPpgSample(
+          timestamp,
+          optical * 0.9,
+          optical * 0.8,
+          optical,
+          0,
+        );
+      }
+    }
+
+    processor.beginCalibration();
+    feedWindow(startMs: 0, durationSeconds: 30);
+    expect(samples, isEmpty);
+    expect(processor.bestEffortEstimate, isNull);
+
+    processor.beginMeasurement();
+    feedWindow(startMs: 30000, durationSeconds: 29);
+    await Future<void>.delayed(Duration.zero);
+    expect(samples, isEmpty);
+    expect(processor.bestEffortEstimate, isNull);
+
+    feedWindow(startMs: 59000, durationSeconds: 1);
+    final deadlineEstimate = processor.finalizeBaselineEstimate();
+
+    expect(deadlineEstimate, isNotNull);
+    expect(deadlineEstimate!.rmssd, isNotNull);
+    expect(processor.bestEffortEstimate, deadlineEstimate);
+  });
+
+  test('demo deadline can use retained stable calibration signal', () {
+    final epoch = DateTime(2026);
+    var now = epoch;
+    final processor = HrHrvProcessor(
+      sampleFreq: 200,
+      accelerometerFreq: 100,
+      timestampExponent: -3,
+      hrvMinimumWindow:
+          BioAdaptiveSessionConfig.conferenceDemo.hrvMinimumWindow,
+      metricWindowDuration:
+          BioAdaptiveSessionConfig.conferenceDemo.metricWindowDuration,
+      publishBestEffortEstimates: true,
+      now: () => now,
+    );
+    addTearDown(processor.dispose);
+
+    var phase = 0.0;
+    processor.beginCalibration();
+    for (var index = 0; index < 30 * 200; index++) {
+      final timestamp = index * 5;
+      final pulseHz = 1.1 + (0.06 * sin(2 * pi * 0.08 * index / 200));
+      phase += 2 * pi * pulseHz / 200;
+      final optical = 1000 + (110 * sin(phase));
+      now = epoch.add(Duration(milliseconds: timestamp));
+      processor.processPpgSample(
+        timestamp,
+        optical * 0.9,
+        optical * 0.8,
+        optical,
+        0,
+      );
+    }
+
+    // The calibration stays invisible to the live estimator.
+    expect(processor.bestEffortEstimate, isNull);
+
+    processor.beginMeasurement();
+    // Deliberately provide an unusable flat baseline window. The deadline
+    // estimator must still recover from the stable tail of calibration.
+    for (var index = 0; index < 30 * 200; index++) {
+      final timestamp = 30000 + (index * 5);
+      now = epoch.add(Duration(milliseconds: timestamp));
+      processor.processPpgSample(timestamp, 1000, 900, 800, 0);
+    }
+
+    final estimate = processor.finalizeBaselineEstimate();
+    expect(estimate, isNotNull);
+    expect(estimate!.heartRate, inInclusiveRange(30, 240));
+    expect(estimate.rmssd, isNotNull);
+    expect(estimate.rmssd, inInclusiveRange(0, 300));
   });
 
   group('meditation environment configuration', () {
@@ -116,7 +270,9 @@ void main() {
         BaselineComputationMode.physiologicalOnly,
       );
       expect(demo.stressThresholdOverride, 0.03);
-      expect(demo.hrvMinimumWindow, const Duration(seconds: 15));
+      expect(demo.hrvMinimumWindow, const Duration(seconds: 30));
+      expect(demo.metricWindowDuration, const Duration(seconds: 30));
+      expect(demo.useBestEffortEstimates, isTrue);
       expect(demo.meditationSegmentDuration, const Duration(seconds: 30));
       expect(demo.promptPolicy, MeditationPromptPolicy.conferenceDemo);
       expect(demo.allowStressSimulation, isFalse);
@@ -126,10 +282,12 @@ void main() {
       expect(standard.baselineDuration, const Duration(minutes: 5));
       expect(
         standard.baselineComputationMode,
-        BaselineComputationMode.profileBlended,
+        BaselineComputationMode.physiologicalOnly,
       );
       expect(standard.stressThresholdOverride, isNull);
       expect(standard.hrvMinimumWindow, isNull);
+      expect(standard.metricWindowDuration, isNull);
+      expect(standard.useBestEffortEstimates, isFalse);
       expect(standard.meditationSegmentDuration, isNull);
       expect(standard.promptPolicy, MeditationPromptPolicy.standard);
       expect(standard.allowStressSimulation, isTrue);
@@ -270,6 +428,107 @@ void main() {
       expect(account.baselineHeartRate, 80);
       expect(account.baselineRMSSD, 30);
       expect(phase.canAdvance, isTrue);
+
+      await subscription.cancel();
+      detector.dispose();
+      source.dispose();
+    });
+
+    test('physiological baseline never advances with missing values', () async {
+      final account = UserAccount();
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        duration: const Duration(seconds: 30),
+        computationMode: BaselineComputationMode.physiologicalOnly,
+      );
+      final context = PhaseContext(source: source, detector: detector);
+      final subscription = phase.activate(context, () => Duration.zero);
+
+      source.add(const HeartRateSample(heartRate: 64, rmssd: null));
+      await Future<void>.delayed(Duration.zero);
+      expect(phase.hasValidHeartRate, isTrue);
+      expect(phase.hasValidRmssd, isFalse);
+      expect(phase.canAdvance, isFalse);
+      expect(account.baselineHeartRate, 64);
+      expect(account.baselineRMSSD, isNull);
+
+      source.add(const HeartRateSample(heartRate: 66, rmssd: 36));
+      await Future<void>.delayed(Duration.zero);
+      expect(phase.hasValidRmssd, isTrue);
+      expect(phase.canAdvance, isTrue);
+      expect(account.baselineRMSSD, 36);
+
+      await subscription.cancel();
+      detector.dispose();
+      source.dispose();
+    });
+
+    test('demo deadline uses only a measured best-effort estimate', () {
+      final account = UserAccount();
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        duration: const Duration(seconds: 30),
+        computationMode: BaselineComputationMode.physiologicalOnly,
+        useBestEffortAtDeadline: true,
+      );
+      final context = PhaseContext(source: source, detector: detector);
+      phase.activate(context, () => Duration.zero);
+
+      expect(phase.canAdvance, isFalse);
+      phase.complete(context);
+      expect(account.baselineHeartRate, isNull);
+      expect(account.baselineRMSSD, isNull);
+
+      source.bestEstimate = const HeartRateSample(heartRate: 68, rmssd: 31);
+      expect(phase.canAdvance, isTrue);
+      phase.complete(context);
+      expect(account.baselineHeartRate, 68);
+      expect(account.baselineRMSSD, 31);
+
+      detector.dispose();
+      source.dispose();
+    });
+
+    test('standard baseline retains production timing without profile fallback',
+        () async {
+      final account = UserAccount();
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        duration: BioAdaptiveSessionConfig.standard.baselineDuration,
+        computationMode:
+            BioAdaptiveSessionConfig.standard.baselineComputationMode,
+      );
+      final subscription = phase.activate(
+        PhaseContext(source: source, detector: detector),
+        () => Duration.zero,
+      );
+
+      expect(phase.duration, const Duration(minutes: 5));
+      expect(phase.canAdvance, isFalse);
+      expect(account.baselineHeartRate, isNull);
+      expect(account.baselineRMSSD, isNull);
+
+      source.add(const HeartRateSample(heartRate: 65, rmssd: 34));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(phase.canAdvance, isTrue);
+      expect(account.baselineHeartRate, 65);
+      expect(account.baselineRMSSD, 34);
 
       await subscription.cancel();
       detector.dispose();
@@ -589,8 +848,12 @@ class _TestBiometricSource implements BiometricSource {
       ValueNotifier(ActivityLevel.resting);
   int calibrationStarts = 0;
   int measurementStarts = 0;
+  HeartRateSample? bestEstimate;
 
-  void add(HeartRateSample sample) => _controller.add(sample);
+  void add(HeartRateSample sample) {
+    if (sample.rmssd != null) bestEstimate = sample;
+    _controller.add(sample);
+  }
 
   @override
   Stream<HeartRateSample> get biometrics => _controller.stream;
@@ -600,6 +863,12 @@ class _TestBiometricSource implements BiometricSource {
 
   @override
   bool get suppressStressDetection => false;
+
+  @override
+  HeartRateSample? get bestEffortEstimate => bestEstimate;
+
+  @override
+  HeartRateSample? finalizeBaselineEstimate() => bestEstimate;
 
   @override
   void beginCalibration() => calibrationStarts++;

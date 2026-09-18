@@ -67,6 +67,8 @@ class Measurement {
         gyroscopeSensor: gyroscopeSensor,
         sensorConfigProvider: sensorConfigProvider,
         hrvMinimumWindow: sessionConfig.hrvMinimumWindow,
+        metricWindowDuration: sessionConfig.metricWindowDuration,
+        publishBestEffortEstimates: sessionConfig.useBestEffortEstimates,
         startInCalibration: sessionConfig.includeCalibration,
       ),
       phases: [
@@ -76,6 +78,7 @@ class Measurement {
           userAccount: userAccount,
           duration: sessionConfig.baselineDuration,
           computationMode: sessionConfig.baselineComputationMode,
+          useBestEffortAtDeadline: sessionConfig.useBestEffortEstimates,
         ),
         StressMonitoringPhase(),
       ],
@@ -116,6 +119,8 @@ class Measurement {
   // The latest values stay local and are only included in a cloud prompt when
   // the session's explicit prompt policy permits it.
   HeartRateSample? get latestBiometrics => _latestBiometrics;
+  int? get baselineHeartRate => userAccount.baselineHeartRate;
+  double? get baselineRmssd => userAccount.baselineRMSSD;
 
   // Publish the stress level
   ValueListenable<StressLevel> get stressLevel => _detector.stressLevel;

@@ -34,6 +34,8 @@ sealed class MonitoringPhase {
     PhaseContext ctx,
     PhaseElapsed elapsed,
   );
+
+  void complete(PhaseContext ctx) {}
 }
 
 class CalibrationPhase extends MonitoringPhase {
@@ -61,6 +63,7 @@ class CalibrationPhase extends MonitoringPhase {
 class BaselinePhase extends MonitoringPhase {
   final UserAccount userAccount;
   final BaselineComputationMode computationMode;
+  final bool useBestEffortAtDeadline;
   @override
   final Duration duration;
 
@@ -68,17 +71,28 @@ class BaselinePhase extends MonitoringPhase {
   double _heartRateTotal = 0;
   int _rmssdCount = 0;
   double _rmssdTotal = 0;
+  BiometricSource? _source;
+  HeartRateSample? _deadlineEstimate;
 
   BaselinePhase({
     required this.userAccount,
     Duration? duration,
     this.computationMode = BaselineComputationMode.profileBlended,
+    this.useBestEffortAtDeadline = false,
   }) : duration = duration ?? const Duration(minutes: 5);
 
   @override
-  bool get canAdvance =>
-      computationMode == BaselineComputationMode.profileBlended ||
-      (_heartRateCount > 0 && _rmssdCount > 0);
+  bool get canAdvance {
+    if (computationMode == BaselineComputationMode.profileBlended) return true;
+    if (useBestEffortAtDeadline) {
+      _deadlineEstimate ??= _source?.finalizeBaselineEstimate();
+      return _deadlineEstimate?.rmssd != null;
+    }
+    return _heartRateCount > 0 && _rmssdCount > 0;
+  }
+
+  bool get hasValidHeartRate => _heartRateCount > 0;
+  bool get hasValidRmssd => _rmssdCount > 0;
 
   @override
   String get label => "Monitoring \u00b7 Baseline Adjustment";
@@ -92,6 +106,7 @@ class BaselinePhase extends MonitoringPhase {
     PhaseContext ctx,
     PhaseElapsed elapsed,
   ) {
+    _source = ctx.source;
     ctx.source.beginMeasurement();
     if (computationMode == BaselineComputationMode.physiologicalOnly) {
       return ctx.source.biometrics.listen((data) {
@@ -127,6 +142,21 @@ class BaselinePhase extends MonitoringPhase {
             studyWeight * baselineRmssd + measuredWeight * data.rmssd!;
       }
     });
+  }
+
+  @override
+  void complete(PhaseContext ctx) {
+    if (computationMode != BaselineComputationMode.physiologicalOnly ||
+        !useBestEffortAtDeadline) {
+      return;
+    }
+    final estimate = _deadlineEstimate ?? ctx.source.finalizeBaselineEstimate();
+    final rmssd = estimate?.rmssd;
+    if (estimate == null || rmssd == null) return;
+    // The deadline estimate is based on the complete retained demo window and
+    // therefore supersedes partial rolling-window values emitted earlier.
+    userAccount.baselineHeartRate = estimate.heartRate;
+    userAccount.baselineRMSSD = rmssd;
   }
 }
 
@@ -238,6 +268,7 @@ class MonitoringPhaseController {
 
   void _advance() {
     if (_index >= _phases.length - 1) return; // last phase; stay put
+    current.complete(_ctx);
     _phaseSub?.cancel();
     _index++;
     phase.value = current;

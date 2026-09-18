@@ -39,6 +39,8 @@ class HrHrvProcessor {
   final double sampleFreq;
   final double accelerometerFreq;
   final int timestampExponent;
+  final bool publishBestEffortEstimates;
+  final DateTime Function() _now;
 
   static const double _minBeatIntervalSec = 0.25;
   static const double _maxBeatIntervalSec = 2.0;
@@ -54,6 +56,11 @@ class HrHrvProcessor {
   final _BoundedSignalNormalizer _normalizer = _BoundedSignalNormalizer();
 
   final List<_ConditionedSample> _buffer = [];
+  final List<_ConditionedSample> _deadlineEvidence = [];
+  bool _collectDeadlineEvidence = false;
+  int _baselineEvidenceStartIndex = 0;
+  int _lastDeadlineEvaluationCount = -1;
+  HeartRateSample? _deadlineEstimate;
   late final double _ticksPerSecond;
   late final double _ticksToMilliseconds;
   late final double _windowDurationTicks;
@@ -90,16 +97,55 @@ class HrHrvProcessor {
   Stream<HeartRateSample> get biometricStream => _metricStreamController.stream;
 
   HeartRateSample? _latestSample;
+  HeartRateSample? _bestEffortEstimate;
+  double _bestEffortQuality = double.negativeInfinity;
 
   /// Last emitted heart-rate/RMSSD sample, read synchronously — unlike
   /// [biometricStream], which only delivers *future* values to listeners.
   HeartRateSample? get latestSample => _latestSample;
+
+  /// Highest-quality physiologically plausible estimate observed since
+  /// measurement began. Unlike [latestSample], this may come from a window
+  /// below the stricter continuous-monitoring publication threshold.
+  HeartRateSample? get bestEffortEstimate => _bestEffortEstimate;
+
+  /// Produces the demo's final estimate from its complete 30-second baseline.
+  /// If that window is unusable, the separate 30-second calibration window is
+  /// available as a deadline rescue. This is deliberately separate from the
+  /// live production-quality stream and runs only when the baseline expires.
+  HeartRateSample? finalizeBaselineEstimate() {
+    if (!publishBestEffortEstimates) return _bestEffortEstimate;
+    if (_deadlineEstimate != null) return _deadlineEstimate;
+
+    // If the previous attempt failed, wait for roughly one additional second
+    // of PPG before repeating the comparatively expensive full-window pass.
+    if (_lastDeadlineEvaluationCount >= 0 &&
+        _deadlineEvidence.length - _lastDeadlineEvaluationCount < sampleFreq) {
+      return _bestEffortEstimate;
+    }
+    _lastDeadlineEvaluationCount = _deadlineEvidence.length;
+
+    final retainedEstimate = _estimateRetainedBaseline();
+    final resolved = retainedEstimate ?? _bestEffortEstimate ?? _latestSample;
+    if (resolved != null && resolved.rmssd != null) {
+      _deadlineEstimate = resolved;
+      _bestEffortEstimate = resolved;
+      _collectDeadlineEvidence = false;
+      _deadlineEvidence.clear();
+    }
+    return resolved;
+  }
 
   /// Warms the complete signal-conditioning chain without admitting samples
   /// to the HR/HRV estimator. Filter state is deliberately retained.
   void beginCalibration() {
     if (!_measurementEnabled) return;
     _measurementEnabled = false;
+    _deadlineEvidence.clear();
+    _deadlineEstimate = null;
+    _baselineEvidenceStartIndex = 0;
+    _lastDeadlineEvaluationCount = -1;
+    _collectDeadlineEvidence = publishBestEffortEstimates;
     _clearEstimatorState();
   }
 
@@ -107,6 +153,7 @@ class HrHrvProcessor {
   /// Calibration samples cannot enter peak detection or RR history.
   void beginMeasurement() {
     if (_measurementEnabled) return;
+    _baselineEvidenceStartIndex = _deadlineEvidence.length;
     _clearEstimatorState();
     _measurementEnabled = true;
   }
@@ -120,7 +167,11 @@ class HrHrvProcessor {
     required this.sampleFreq,
     required this.accelerometerFreq,
     required this.timestampExponent,
-  }) {
+    Duration? hrvMinimumWindow,
+    Duration? metricWindowDuration,
+    this.publishBestEffortEstimates = false,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now {
     _dcBlockFilter = _HighPassFilter(cutoffFreq: 0.12, sampleFreq: sampleFreq);
     _bandPassFilter = _BandPassFilter(
       sampleFreq: sampleFreq,
@@ -130,11 +181,17 @@ class HrHrvProcessor {
 
     _ticksPerSecond = pow(10, -timestampExponent).toDouble();
     _ticksToMilliseconds = pow(10, timestampExponent + 3).toDouble();
-    _windowDurationTicks = 10.0 * _ticksPerSecond;
-    _minimumWindowTicks = 4.0 * _ticksPerSecond;
+    final configuredMetricWindowSeconds = metricWindowDuration == null
+        ? null
+        : metricWindowDuration.inMicroseconds / 1000000.0;
+    _windowDurationTicks =
+        (configuredMetricWindowSeconds ?? 10.0) * _ticksPerSecond;
+    _minimumWindowTicks =
+        (configuredMetricWindowSeconds ?? 4.0) * _ticksPerSecond;
     _evaluationPeriodTicks = max(1.0, _ticksPerSecond);
-    _hrvWindowTicks = 300.0 * _ticksPerSecond;
-    hrvMinimumWindow = _defaultHrvMinimumWindow;
+    _hrvWindowTicks =
+        (configuredMetricWindowSeconds ?? 300.0) * _ticksPerSecond;
+    this.hrvMinimumWindow = hrvMinimumWindow ?? _defaultHrvMinimumWindow;
   }
 
   /// Minimum RR-history span required before RMSSD is reported at all.
@@ -156,6 +213,15 @@ class HrHrvProcessor {
   Duration get hrvMinimumWindow => Duration(
         microseconds:
             ((_hrvMinimumWindowTicks / _ticksPerSecond) * 1000000).round(),
+      );
+
+  Duration get heartRateWindow => _durationFromTicks(_windowDurationTicks);
+  Duration get metricEligibilityWindow =>
+      _durationFromTicks(_minimumWindowTicks);
+  Duration get hrvHistoryWindow => _durationFromTicks(_hrvWindowTicks);
+
+  Duration _durationFromTicks(double ticks) => Duration(
+        microseconds: ((ticks / _ticksPerSecond) * 1000000).round(),
       );
 
   /// Feeds a raw accelerometer sample (m/s^2). Used only for motion
@@ -187,19 +253,22 @@ class HrHrvProcessor {
     final bandPassed = _bandPassFilter.filter(dcBlocked);
     final bounded = _normalizer.filter(bandPassed, motionLevel: motionLevel);
 
+    final conditionedSample = _ConditionedSample(
+      timestamp: timestamp,
+      signal: bounded,
+      motionLevel: motionLevel,
+    );
+    if (_collectDeadlineEvidence) {
+      _deadlineEvidence.add(conditionedSample);
+    }
+
     if (!_measurementEnabled) {
       return;
     }
 
-    _firstSampleTime ??= DateTime.now();
+    _firstSampleTime ??= _now();
 
-    _buffer.add(
-      _ConditionedSample(
-        timestamp: timestamp,
-        signal: bounded,
-        motionLevel: motionLevel,
-      ),
-    );
+    _buffer.add(conditionedSample);
     _buffer.removeWhere(
       (sample) => sample.timestamp < timestamp - _windowDurationTicks,
     );
@@ -225,9 +294,12 @@ class HrHrvProcessor {
   }
 
   void _evaluateVitals(int latestTimestamp) {
+    final observedWindowTicks = _buffer.isEmpty
+        ? 0.0
+        : (_buffer.last.timestamp - _buffer.first.timestamp).toDouble();
+    final oneSampleToleranceTicks = _ticksPerSecond / max(1.0, sampleFreq);
     if (_buffer.length < 20 ||
-        (_buffer.last.timestamp - _buffer.first.timestamp) <
-            _minimumWindowTicks) {
+        observedWindowTicks + oneSampleToleranceTicks < _minimumWindowTicks) {
       return;
     }
 
@@ -236,7 +308,10 @@ class HrHrvProcessor {
     var qualityScore = recentQuality.score;
     final recentMotion = recentQuality.averageMotion;
 
-    if (recentMotion >= 1.45) {
+    // Production monitoring rejects heavy motion immediately. The conference
+    // demo still evaluates the pulse waveform so its fixed deadline can retain
+    // a low-confidence, beat-derived candidate instead of producing no value.
+    if (recentMotion >= 1.45 && !publishBestEffortEstimates) {
       return;
     }
 
@@ -274,9 +349,21 @@ class HrHrvProcessor {
       }
     }
 
+    final currentBestEffort = _considerBestEffortEstimate(
+      heartRate: peakHeartRate,
+      ibiTicks: ibiTicks,
+      qualityScore: qualityScore,
+    );
+
     final classifiedQuality = _classifyQuality(qualityScore);
     if (classifiedQuality == _SignalQuality.bad ||
         classifiedQuality == _SignalQuality.unavailable) {
+      if (publishBestEffortEstimates && currentBestEffort != null) {
+        _maybeEmit(
+          currentBestEffort.heartRate.toDouble(),
+          currentBestEffort.rmssd,
+        );
+      }
       return;
     }
     if (peakHeartRate == null) {
@@ -286,7 +373,8 @@ class HrHrvProcessor {
     final smoothedHeartRate = _kalmanUpdateHeartRate(peakHeartRate);
 
     _updateRrHistory(peaks, latestTimestamp);
-    final rmssdMs = _computeRollingRmssdMs();
+    final rmssdMs = _computeRollingRmssdMs() ??
+        (publishBestEffortEstimates ? currentBestEffort?.rmssd : null);
 
     _maybeEmit(smoothedHeartRate, rmssdMs);
   }
@@ -355,14 +443,130 @@ class HrHrvProcessor {
     return hrvMs;
   }
 
+  HeartRateSample? _estimateRetainedBaseline() {
+    if (_deadlineEvidence.length < 8) return null;
+
+    final splitIndex = _baselineEvidenceStartIndex.clamp(
+      0,
+      _deadlineEvidence.length,
+    );
+    final baselineSamples = _deadlineEvidence.sublist(splitIndex);
+    final baselineEstimate = _estimateRetainedSamples(baselineSamples);
+    if (baselineEstimate != null) return baselineEstimate;
+
+    // The complete 30-second baseline is always the primary source. Only if
+    // that separate window contains no usable beat sequence do we evaluate
+    // the preceding 30-second calibration window as the deadline rescue.
+    final calibrationSamples = _deadlineEvidence.sublist(0, splitIndex);
+    if (calibrationSamples.isEmpty) return null;
+    final calibrationEnd = calibrationSamples.last.timestamp;
+    final calibrationWindowStart = calibrationEnd - _windowDurationTicks;
+    final rescueSamples = calibrationSamples
+        .where((sample) => sample.timestamp >= calibrationWindowStart)
+        .toList(growable: false);
+    return _estimateRetainedSamples(rescueSamples);
+  }
+
+  HeartRateSample? _estimateRetainedSamples(
+    List<_ConditionedSample> samples,
+  ) {
+    if (samples.length < 8) return null;
+
+    final effectiveSampleFreq = _estimateEffectiveSampleFreqHz(samples);
+    final positive = _estimateHeartRateByPeak(
+      estimatedSampleFreqHz: effectiveSampleFreq,
+      source: samples,
+      amplitudeScale: 0.12,
+      minimumAmplitude: 0.002,
+      minimumSignalStd: 1e-8,
+      refractoryScale: 1.0,
+    );
+    final negative = _estimateHeartRateByPeak(
+      estimatedSampleFreqHz: effectiveSampleFreq,
+      source: samples,
+      amplitudeScale: 0.12,
+      minimumAmplitude: 0.002,
+      minimumSignalStd: 1e-8,
+      signalPolarity: -1.0,
+      refractoryScale: 1.0,
+    );
+    final peakEstimate =
+        negative.peakTimestamps.length > positive.peakTimestamps.length
+            ? negative
+            : positive;
+
+    final ibiTicks = <double>[];
+    final peaks = peakEstimate.peakTimestamps;
+    for (var i = 1; i < peaks.length; i++) {
+      final interval = (peaks[i] - peaks[i - 1]).toDouble();
+      final intervalSeconds = interval / _ticksPerSecond;
+      if (intervalSeconds >= _minBeatIntervalSec &&
+          intervalSeconds <= _maxBeatIntervalSec) {
+        ibiTicks.add(interval);
+      }
+    }
+    if (ibiTicks.length < 2) return null;
+
+    final robustIntervals = _removeIbiOutliers(ibiTicks);
+    if (robustIntervals.length < 2) return null;
+    final sortedIntervals = List<double>.of(robustIntervals)..sort();
+    final medianInterval = sortedIntervals[sortedIntervals.length ~/ 2];
+    if (!medianInterval.isFinite || medianInterval <= 0) return null;
+
+    final heartRate = 60.0 * _ticksPerSecond / medianInterval;
+    final rmssdTicks = _computeRmssd(robustIntervals);
+    if (!heartRate.isFinite ||
+        heartRate < 30 ||
+        heartRate > 240 ||
+        rmssdTicks == null ||
+        !rmssdTicks.isFinite) {
+      return null;
+    }
+    final rmssdMs = (rmssdTicks * _ticksToMilliseconds).clamp(0.0, 300.0);
+    return HeartRateSample(
+      heartRate: heartRate.round(),
+      rmssd: rmssdMs,
+    );
+  }
+
+  HeartRateSample? _considerBestEffortEstimate({
+    required double? heartRate,
+    required List<double> ibiTicks,
+    required double qualityScore,
+  }) {
+    if (heartRate == null || ibiTicks.length < 2 || !qualityScore.isFinite) {
+      return null;
+    }
+
+    final robustIntervals = _removeIbiOutliers(ibiTicks);
+    final rmssdTicks = _computeRmssd(robustIntervals);
+    if (rmssdTicks == null || !rmssdTicks.isFinite || rmssdTicks < 0) {
+      return null;
+    }
+
+    final rmssdMs = rmssdTicks * _ticksToMilliseconds;
+    if (!rmssdMs.isFinite || rmssdMs < 0 || rmssdMs > 300) return null;
+
+    final candidate = HeartRateSample(
+      heartRate: heartRate.round(),
+      rmssd: rmssdMs,
+    );
+
+    if (_bestEffortEstimate == null || qualityScore >= _bestEffortQuality) {
+      _bestEffortQuality = qualityScore;
+      _bestEffortEstimate = candidate;
+    }
+    return candidate;
+  }
+
   void _maybeEmit(double heartRate, double? rmssd) {
     final firstSampleTime = _firstSampleTime;
     if (firstSampleTime == null ||
-        DateTime.now().difference(firstSampleTime) < _warmupDuration) {
+        _now().difference(firstSampleTime) < _warmupDuration) {
       return;
     }
 
-    final now = DateTime.now();
+    final now = _now();
     if (_lastEmitTime != null &&
         now.difference(_lastEmitTime!) < _emitInterval) {
       return;
@@ -374,6 +578,11 @@ class HrHrvProcessor {
 
   void reset() {
     _measurementEnabled = true;
+    _deadlineEvidence.clear();
+    _deadlineEstimate = null;
+    _baselineEvidenceStartIndex = 0;
+    _lastDeadlineEvaluationCount = -1;
+    _collectDeadlineEvidence = publishBestEffortEstimates;
     _clearEstimatorState();
     _channelSelector.reset();
     _ambientCanceler.reset();
@@ -396,6 +605,8 @@ class HrHrvProcessor {
     _rrHistory.clear();
     _lastRecordedPeakTimestamp = null;
     _latestSample = null;
+    _bestEffortEstimate = null;
+    _bestEffortQuality = double.negativeInfinity;
     _hrEstimate = 75.0;
     _hrCovariance = 1.0;
   }
@@ -462,16 +673,19 @@ class HrHrvProcessor {
     return _SignalQuality.good;
   }
 
-  double _estimateEffectiveSampleFreqHz() {
-    if (_buffer.length < 2) {
+  double _estimateEffectiveSampleFreqHz([
+    List<_ConditionedSample>? source,
+  ]) {
+    final samples = source ?? _buffer;
+    if (samples.length < 2) {
       return sampleFreq;
     }
     final durationTicks =
-        (_buffer.last.timestamp - _buffer.first.timestamp).toDouble();
+        (samples.last.timestamp - samples.first.timestamp).toDouble();
     if (durationTicks <= 0) {
       return sampleFreq;
     }
-    final estimated = ((_buffer.length - 1) * _ticksPerSecond) / durationTicks;
+    final estimated = ((samples.length - 1) * _ticksPerSecond) / durationTicks;
     if (!estimated.isFinite || estimated < 5 || estimated > 200) {
       return sampleFreq;
     }
@@ -480,19 +694,27 @@ class HrHrvProcessor {
 
   ({double? heartRateBpm, List<int> peakTimestamps}) _estimateHeartRateByPeak({
     required double estimatedSampleFreqHz,
+    List<_ConditionedSample>? source,
+    double amplitudeScale = 0.35,
+    double minimumAmplitude = 0.04,
+    double minimumSignalStd = 1e-4,
+    double signalPolarity = 1.0,
+    double refractoryScale = 0.85,
   }) {
-    if (_buffer.length < 8) {
+    final samples = source ?? _buffer;
+    if (samples.length < 8) {
       return (heartRateBpm: null, peakTimestamps: const []);
     }
 
     final signal =
-        _buffer.map((sample) => sample.signal).toList(growable: false);
+        samples.map((sample) => sample.signal).toList(growable: false);
     final mean = signal.reduce((a, b) => a + b) / signal.length;
-    final centered =
-        signal.map((value) => value - mean).toList(growable: false);
+    final centered = signal
+        .map((value) => (value - mean) * signalPolarity)
+        .toList(growable: false);
 
     final signalStd = _standardDeviation(centered);
-    if (!signalStd.isFinite || signalStd < 1e-4) {
+    if (!signalStd.isFinite || signalStd < minimumSignalStd) {
       return (heartRateBpm: null, peakTimestamps: const []);
     }
 
@@ -500,9 +722,12 @@ class HrHrvProcessor {
         estimatedSampleFreqHz.isFinite && estimatedSampleFreqHz > 0
             ? estimatedSampleFreqHz
             : sampleFreq;
-    final minPeakDistanceSamples =
-        max(1, (safeSampleFreq * _minBeatIntervalSec * 0.85).round());
-    final amplitudeThreshold = max(0.04, signalStd * 0.35);
+    final minPeakDistanceSamples = max(
+      1,
+      (safeSampleFreq * _minBeatIntervalSec * refractoryScale).round(),
+    );
+    final amplitudeThreshold =
+        max(minimumAmplitude, signalStd * amplitudeScale);
 
     final peakIndices = <int>[];
     for (var i = 1; i < centered.length - 1; i++) {
@@ -527,7 +752,7 @@ class HrHrvProcessor {
     }
 
     final peaks = peakIndices
-        .map((index) => _buffer[index].timestamp)
+        .map((index) => samples[index].timestamp)
         .toList(growable: false);
 
     return _estimateHeartRateFromPeakTimestamps(peaks);

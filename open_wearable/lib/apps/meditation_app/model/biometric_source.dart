@@ -34,6 +34,13 @@ abstract interface class BiometricSource {
   // Whether stress detection should be suppressed (e.g. due to high activity)
   bool get suppressStressDetection;
 
+  HeartRateSample? get bestEffortEstimate;
+
+  /// Resolves the strongest baseline estimate available at the end of a
+  /// time-constrained measurement. Sensor implementations may use retained
+  /// conditioned signal that is intentionally not part of the live stream.
+  HeartRateSample? finalizeBaselineEstimate();
+
   void beginCalibration();
   void beginMeasurement();
   void start();
@@ -50,6 +57,8 @@ class SensorBiometricSource implements BiometricSource {
   final SensorConfigurationProvider sensorConfigProvider;
 
   final Duration? hrvMinimumWindow;
+  final Duration? metricWindowDuration;
+  final bool publishBestEffortEstimates;
   final bool startInCalibration;
 
   SensorBiometricSource({
@@ -58,6 +67,8 @@ class SensorBiometricSource implements BiometricSource {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     this.hrvMinimumWindow,
+    this.metricWindowDuration,
+    this.publishBestEffortEstimates = false,
     this.startInCalibration = false,
   });
 
@@ -81,6 +92,13 @@ class SensorBiometricSource implements BiometricSource {
   @override
   bool get suppressStressDetection =>
       _activityTracker.shouldSuppressStressDetection();
+
+  @override
+  HeartRateSample? get bestEffortEstimate => _processor.bestEffortEstimate;
+
+  @override
+  HeartRateSample? finalizeBaselineEstimate() =>
+      _processor.finalizeBaselineEstimate();
 
   @override
   void start() {
@@ -154,6 +172,9 @@ class SensorBiometricSource implements BiometricSource {
       sampleFreq: ppgFreq,
       accelerometerFreq: accelerometerFreq,
       timestampExponent: ppgSensor.timestampExponent,
+      hrvMinimumWindow: hrvMinimumWindow,
+      metricWindowDuration: metricWindowDuration,
+      publishBestEffortEstimates: publishBestEffortEstimates,
     );
     if (startInCalibration) {
       _processor.beginCalibration();
@@ -456,6 +477,7 @@ class SimulatedBiometricSource implements BiometricSource {
   final Stopwatch _clock = Stopwatch();
   Timer? _timer;
   bool _measurementEnabled = true;
+  HeartRateSample? _latestEstimate;
 
   @override
   Stream<HeartRateSample> get biometrics => _controller.stream;
@@ -467,8 +489,15 @@ class SimulatedBiometricSource implements BiometricSource {
   bool get suppressStressDetection => false;
 
   @override
+  HeartRateSample? get bestEffortEstimate => _latestEstimate;
+
+  @override
+  HeartRateSample? finalizeBaselineEstimate() => _latestEstimate;
+
+  @override
   void beginCalibration() {
     _measurementEnabled = false;
+    _latestEstimate = null;
   }
 
   @override
@@ -505,6 +534,7 @@ class SimulatedBiometricSource implements BiometricSource {
   @override
   void start() {
     _resetScenarioState();
+    _latestEstimate = null;
     _clock
       ..reset()
       ..start();
@@ -530,6 +560,7 @@ class SimulatedBiometricSource implements BiometricSource {
       ..stop()
       ..reset();
     _resetScenarioState();
+    _latestEstimate = null;
   }
 
   @override
@@ -571,6 +602,7 @@ class SimulatedBiometricSource implements BiometricSource {
       heartRate: noisyHr.round(),
       rmssd: noisyHrv,
     );
+    _latestEstimate = sample;
     _controller.add(sample);
   }
 

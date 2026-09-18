@@ -9,7 +9,11 @@ import '../../model/measurement.dart';
 import '../../model/bio_adaptive_session_config.dart';
 import '../../model/meditation_analytics.dart';
 import '../../model/measurement_phase.dart'
-    show CalibrationPhase, MonitoringPhase;
+    show
+        BaselinePhase,
+        CalibrationPhase,
+        MonitoringPhase,
+        StressMonitoringPhase;
 import '../../model/stress_detector.dart' show StressLevel;
 import '../../model/user_account.dart';
 import '../../model/activity_tracker.dart' show ActivityLevel;
@@ -272,6 +276,7 @@ class BioAdaptiveContent extends StatelessWidget {
                         children: [
                           Expanded(
                             child: _MeasurementTile(
+                              key: ValueKey('heart-rate-${phase.runtimeType}'),
                               label: "Heart Rate",
                               unit: "BPM",
                               icon: Icons.favorite,
@@ -279,11 +284,15 @@ class BioAdaptiveContent extends StatelessWidget {
                               backgroundColor:
                                   Colors.redAccent.withValues(alpha: 0.1),
                               listenable: measurement.heartRate,
+                              initialData: phase is StressMonitoringPhase
+                                  ? measurement.baselineHeartRate
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _MeasurementTile(
+                              key: ValueKey('rmssd-${phase.runtimeType}'),
                               label: "RMSSD",
                               unit: "ms",
                               icon: Icons.air,
@@ -293,6 +302,10 @@ class BioAdaptiveContent extends StatelessWidget {
                               listenable: measurement.rmssd
                                   .where((value) => value != null)
                                   .map((value) => value!.toStringAsFixed(1)),
+                              initialData: phase is StressMonitoringPhase
+                                  ? measurement.baselineRmssd
+                                      ?.toStringAsFixed(1)
+                                  : null,
                             ),
                           ),
                         ],
@@ -375,14 +388,17 @@ class _MeasurementTile extends StatelessWidget {
   final Color iconColor;
   final Color backgroundColor;
   final Stream<dynamic>? listenable;
+  final dynamic initialData;
 
   const _MeasurementTile({
+    super.key,
     required this.label,
     required this.unit,
     required this.icon,
     required this.iconColor,
     required this.backgroundColor,
     required this.listenable,
+    this.initialData,
   });
 
   @override
@@ -400,26 +416,36 @@ class _MeasurementTile extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Column(
-          children: [
-            Text(label),
-            const SizedBox(height: 4),
-            if (listenable != null)
-              SizedBox(
-                width: 80,
-                height: 24,
-                child: Center(
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              if (listenable != null)
+                SizedBox(
+                  height: 24,
                   child: StreamBuilder(
                     stream: listenable,
+                    initialData: initialData,
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
                         return Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              "Loading...",
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: iconColor,
+                            Flexible(
+                              child: Text(
+                                "Loading...",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: iconColor,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -434,21 +460,25 @@ class _MeasurementTile extends StatelessWidget {
                             ),
                           ],
                         );
-                      } else {
-                        final value = snapshot.data;
-                        return Text(
+                      }
+                      final value = snapshot.data;
+                      return FittedBox(
+                        alignment: Alignment.centerLeft,
+                        fit: BoxFit.scaleDown,
+                        child: Text(
                           "$value $unit",
+                          maxLines: 1,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
-                        );
-                      }
+                        ),
+                      );
                     },
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -546,43 +576,68 @@ class _MonitoringPhaseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: phase.color.withValues(alpha: 0.1),
-        border: Border.all(color: phase.color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(phase.icon, color: phase.color, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              phase.label,
-              style: TextStyle(
-                color: phase.color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ValueListenableBuilder<double?>(
-            valueListenable: progress,
-            builder: (context, progressValue, child) {
-              if (progressValue == null) return const SizedBox.shrink();
-              return SizedBox(
-                width: 96,
-                child: LinearProgressIndicator(
-                  value: progressValue,
-                  color: phase.color,
-                  backgroundColor: phase.color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              );
+    return ValueListenableBuilder<double?>(
+      valueListenable: progress,
+      builder: (context, progressValue, child) {
+        final isWaitingForSignal = progressValue == 1.0 && !phase.canAdvance;
+        final waitingMessage = switch (phase) {
+          BaselinePhase(:final hasValidHeartRate, :final hasValidRmssd) =>
+            switch ((hasValidHeartRate, hasValidRmssd)) {
+              (false, false) => 'Waiting for valid heart-rate and RMSSD data.',
+              (false, true) => 'Waiting for valid heart-rate data.',
+              (true, false) => 'Waiting for valid RMSSD data.',
+              (true, true) => '',
             },
+          _ => 'Waiting for valid physiological data.',
+        };
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: phase.color.withValues(alpha: 0.1),
+            border: Border.all(color: phase.color.withValues(alpha: 0.3)),
           ),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(phase.icon, color: phase.color, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      phase.label,
+                      style: TextStyle(
+                        color: phase.color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (progressValue != null)
+                    SizedBox(
+                      width: 96,
+                      child: LinearProgressIndicator(
+                        value: progressValue,
+                        color: phase.color,
+                        backgroundColor: phase.color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                ],
+              ),
+              if (isWaitingForSignal) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '$waitingMessage Check the earbud fit and remain still; only measured values will be used.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: phase.color,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
