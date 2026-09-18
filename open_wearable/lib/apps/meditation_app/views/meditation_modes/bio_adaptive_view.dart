@@ -8,7 +8,8 @@ import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
 import '../../model/bio_adaptive_session_config.dart';
 import '../../model/meditation_analytics.dart';
-import '../../model/measurement_phase.dart' show MonitoringPhase;
+import '../../model/measurement_phase.dart'
+    show CalibrationPhase, MonitoringPhase;
 import '../../model/stress_detector.dart' show StressLevel;
 import '../../model/user_account.dart';
 import '../../model/activity_tracker.dart' show ActivityLevel;
@@ -116,12 +117,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
       children: [
         // TODO: write this more clean
         if (_earstreamState == EarstreamState.running && measurement != null)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: BioAdaptiveContent(measurement: measurement),
-            ),
-          ),
+          BioAdaptiveContent(measurement: measurement),
         if (_earstreamState == EarstreamState.running &&
             !userAccount.hasValidDeepseekKey) ...[
           SizedBox(height: 16),
@@ -134,7 +130,12 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           const SizedBox(height: 16),
         ],
         if (_earstreamState == EarstreamState.running && measurement != null)
-          MeditationTile(meditationNotifier: measurement.meditation),
+          MeditationTile(
+            meditationNotifier: measurement.meditation,
+            onMeditationComplete: measurement.dismissMeditation,
+          ),
+        if (_earstreamState == EarstreamState.running)
+          const SizedBox(height: 8),
         // Control Buttons
         BioAdaptiveControls(
           earstreamState: _earstreamState,
@@ -203,7 +204,7 @@ class BioAdaptiveControls extends StatelessWidget {
                     : "Resume EarStreAM",
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         if (showStressSimulation)
           IntrinsicHeight(
             child: Row(
@@ -216,7 +217,7 @@ class BioAdaptiveControls extends StatelessWidget {
                     label: const Text("Simulate Stress"),
                   ),
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: !isIdle ? onReset : null,
@@ -247,59 +248,122 @@ class BioAdaptiveContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
+    return ValueListenableBuilder<MonitoringPhase>(
+      valueListenable: measurement.monitoringPhase,
+      builder: (context, phase, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: _MeasurementTile(
-                label: "Heart Rate",
-                unit: "BPM",
-                icon: Icons.favorite,
-                iconColor: Colors.redAccent,
-                backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                listenable: measurement.heartRate,
-              ),
+            _MonitoringPhaseTile(
+              phase: phase,
+              progress: measurement.progress,
             ),
-            const SizedBox(width: 16),
+            const SizedBox(height: 8),
+            if (phase is CalibrationPhase)
+              const _CalibrationPanel()
+            else
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MeasurementTile(
+                              label: "Heart Rate",
+                              unit: "BPM",
+                              icon: Icons.favorite,
+                              iconColor: Colors.redAccent,
+                              backgroundColor:
+                                  Colors.redAccent.withValues(alpha: 0.1),
+                              listenable: measurement.heartRate,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _MeasurementTile(
+                              label: "RMSSD",
+                              unit: "ms",
+                              icon: Icons.air,
+                              iconColor: Colors.blueAccent,
+                              backgroundColor:
+                                  Colors.blueAccent.withValues(alpha: 0.1),
+                              listenable: measurement.rmssd
+                                  .where((value) => value != null)
+                                  .map((value) => value!.toStringAsFixed(1)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: HeartRateChart(
+                          heartRateStream: measurement.heartRate,
+                          visibleWindow: const Duration(minutes: 1),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _StressLevelTile(listenable: measurement.stressLevel),
+                      const SizedBox(height: 8),
+                      _ActivityLevelTile(listenable: measurement.activityLevel),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CalibrationPanel extends StatelessWidget {
+  const _CalibrationPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.tune, color: colors.primary),
+            const SizedBox(width: 12),
             Expanded(
-              child: _MeasurementTile(
-                label: "RMSSD",
-                unit: "ms",
-                icon: Icons.air,
-                iconColor: Colors.blueAccent,
-                backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
-                listenable: measurement.rmssd
-                    .where((value) => value != null)
-                    .map((value) => value!.toStringAsFixed(1)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Preparing the signal',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Warming the signal filters. Heart rate and RMSSD measurement begin after calibration.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        _MonitoringPhaseTile(
-          monitoringPhase: measurement.monitoringPhase,
-          progress: measurement.progress,
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: HeartRateChart(
-            heartRateStream:
-                measurement.heartRate, // Pass the heart rate stream here
-            visibleWindow:
-                const Duration(minutes: 1), // Show 1min rolling chart
-          ),
-        ),
-        const SizedBox(height: 16),
-        _StressLevelTile(listenable: measurement.stressLevel),
-        const SizedBox(height: 16),
-        _ActivityLevelTile(listenable: measurement.activityLevel),
-      ],
+      ),
     );
   }
 }
@@ -473,62 +537,52 @@ class _StressLevelTile extends StatelessWidget {
 }
 
 class _MonitoringPhaseTile extends StatelessWidget {
-  final ValueListenable<MonitoringPhase> monitoringPhase;
+  final MonitoringPhase phase;
   final ValueListenable<double?> progress;
   const _MonitoringPhaseTile({
-    required this.monitoringPhase,
+    required this.phase,
     required this.progress,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: monitoringPhase,
-      builder: (_, value, child) {
-        return Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(
-            vertical: 8,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: value.color.withValues(alpha: 0.1),
-            border: Border.all(color: value.color.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(value.icon, color: value.color),
-                  const SizedBox(width: 8),
-                  Text(
-                    value.label,
-                    style: TextStyle(
-                      color: value.color,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: phase.color.withValues(alpha: 0.1),
+        border: Border.all(color: phase.color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(phase.icon, color: phase.color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              phase.label,
+              style: TextStyle(
+                color: phase.color,
+                fontWeight: FontWeight.w600,
               ),
-              ValueListenableBuilder<double?>(
-                valueListenable: progress,
-                builder: (context, progressValue, child) {
-                  if (progressValue == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: LinearProgressIndicator(
-                      value: progressValue,
-                      color: value.color,
-                      backgroundColor: value.color.withValues(alpha: 0.1),
-                    ),
-                  );
-                },
-              ),
-            ],
+            ),
           ),
-        );
-      },
+          ValueListenableBuilder<double?>(
+            valueListenable: progress,
+            builder: (context, progressValue, child) {
+              if (progressValue == null) return const SizedBox.shrink();
+              return SizedBox(
+                width: 96,
+                child: LinearProgressIndicator(
+                  value: progressValue,
+                  color: phase.color,
+                  backgroundColor: phase.color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

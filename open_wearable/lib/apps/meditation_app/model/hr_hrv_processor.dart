@@ -85,6 +85,7 @@ class HrHrvProcessor {
 
   final StreamController<HeartRateSample> _metricStreamController =
       StreamController<HeartRateSample>.broadcast();
+  bool _measurementEnabled = true;
 
   Stream<HeartRateSample> get biometricStream => _metricStreamController.stream;
 
@@ -93,6 +94,22 @@ class HrHrvProcessor {
   /// Last emitted heart-rate/RMSSD sample, read synchronously — unlike
   /// [biometricStream], which only delivers *future* values to listeners.
   HeartRateSample? get latestSample => _latestSample;
+
+  /// Warms the complete signal-conditioning chain without admitting samples
+  /// to the HR/HRV estimator. Filter state is deliberately retained.
+  void beginCalibration() {
+    if (!_measurementEnabled) return;
+    _measurementEnabled = false;
+    _clearEstimatorState();
+  }
+
+  /// Starts a fresh physiological measurement window after filter warm-up.
+  /// Calibration samples cannot enter peak detection or RR history.
+  void beginMeasurement() {
+    if (_measurementEnabled) return;
+    _clearEstimatorState();
+    _measurementEnabled = true;
+  }
 
   void _emit(HeartRateSample sample) {
     _latestSample = sample;
@@ -156,8 +173,6 @@ class HrHrvProcessor {
     double green,
     double ambient,
   ) {
-    _firstSampleTime ??= DateTime.now();
-
     final selectedOpticalSignal =
         _channelSelector.select(green: green, red: red, ir: ir);
     final ambientCanceled = _ambientCanceler.filter(
@@ -171,6 +186,12 @@ class HrHrvProcessor {
     final dcBlocked = _dcBlockFilter.filter(motionSuppressed);
     final bandPassed = _bandPassFilter.filter(dcBlocked);
     final bounded = _normalizer.filter(bandPassed, motionLevel: motionLevel);
+
+    if (!_measurementEnabled) {
+      return;
+    }
+
+    _firstSampleTime ??= DateTime.now();
 
     _buffer.add(
       _ConditionedSample(
@@ -195,6 +216,7 @@ class HrHrvProcessor {
   /// PPG pipeline entirely. Used for demo scenarios (see
   /// Measurement.simulateStress), never by the real sensor path.
   void emitSimulatedSample(int heartRate, double? rmssd) {
+    if (!_measurementEnabled) return;
     _emit(HeartRateSample(heartRate: heartRate, rmssd: rmssd));
   }
 
@@ -351,8 +373,21 @@ class HrHrvProcessor {
   }
 
   void reset() {
+    _measurementEnabled = true;
+    _clearEstimatorState();
+    _channelSelector.reset();
+    _ambientCanceler.reset();
+    _motionSuppressor.reset();
+    _imuCanceler.reset();
+    _dcBlockFilter.reset();
+    _bandPassFilter.reset();
+    _normalizer.reset();
+  }
+
+  void _clearEstimatorState() {
     _firstSampleTime = null;
     _lastEmitTime = null;
+    _lastEvaluationTick = double.negativeInfinity;
     _buffer.clear();
     // RR history outlives `_buffer` (5-minute window vs 10s), so it must be
     // cleared explicitly — otherwise a reset session inherits the previous
@@ -361,13 +396,6 @@ class HrHrvProcessor {
     _rrHistory.clear();
     _lastRecordedPeakTimestamp = null;
     _latestSample = null;
-    _channelSelector.reset();
-    _ambientCanceler.reset();
-    _motionSuppressor.reset();
-    _imuCanceler.reset();
-    _dcBlockFilter.reset();
-    _bandPassFilter.reset();
-    _normalizer.reset();
     _hrEstimate = 75.0;
     _hrCovariance = 1.0;
   }

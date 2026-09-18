@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../model/meditation.dart' show ScheduledMeditation;
+import '../../model/meditation.dart' show Meditation, ScheduledMeditation;
 import '../../model/meditation_analytics.dart';
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/api_warning.dart';
@@ -72,6 +72,13 @@ class _TimerViewState extends State<TimerView> {
     });
   }
 
+  void _completeMeditation(Meditation meditation) {
+    if (_currentMeditation.value != meditation) return;
+    _currentMeditation.value = null;
+    unawaited(meditation.stop().whenComplete(meditation.dispose));
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final userAccount = context.read<UserAccount>();
@@ -92,11 +99,7 @@ class _TimerViewState extends State<TimerView> {
               ],
               MeditationTile(
                 meditationNotifier: _currentMeditation,
-                onMeditationComplete: () {
-                  setState(() {
-                    _currentMeditation.value = null;
-                  });
-                },
+                onMeditationComplete: _completeMeditation,
               ),
             ],
           );

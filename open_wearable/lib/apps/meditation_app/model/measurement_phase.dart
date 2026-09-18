@@ -52,8 +52,10 @@ class CalibrationPhase extends MonitoringPhase {
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
     PhaseElapsed elapsed,
-  ) =>
-      null;
+  ) {
+    ctx.source.beginCalibration();
+    return null;
+  }
 }
 
 class BaselinePhase extends MonitoringPhase {
@@ -90,6 +92,7 @@ class BaselinePhase extends MonitoringPhase {
     PhaseContext ctx,
     PhaseElapsed elapsed,
   ) {
+    ctx.source.beginMeasurement();
     if (computationMode == BaselineComputationMode.physiologicalOnly) {
       return ctx.source.biometrics.listen((data) {
         _heartRateTotal += data.heartRate;
@@ -142,6 +145,7 @@ class StressMonitoringPhase extends MonitoringPhase {
     PhaseContext ctx,
     PhaseElapsed elapsed,
   ) {
+    ctx.source.beginMeasurement();
     return ctx.source.biometrics.listen((sample) {
       ctx.detector.onSample(
         sample,

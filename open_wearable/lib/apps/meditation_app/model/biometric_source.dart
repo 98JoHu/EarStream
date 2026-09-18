@@ -34,6 +34,8 @@ abstract interface class BiometricSource {
   // Whether stress detection should be suppressed (e.g. due to high activity)
   bool get suppressStressDetection;
 
+  void beginCalibration();
+  void beginMeasurement();
   void start();
   void pause();
   void resume();
@@ -48,6 +50,7 @@ class SensorBiometricSource implements BiometricSource {
   final SensorConfigurationProvider sensorConfigProvider;
 
   final Duration? hrvMinimumWindow;
+  final bool startInCalibration;
 
   SensorBiometricSource({
     required this.ppgSensor,
@@ -55,6 +58,7 @@ class SensorBiometricSource implements BiometricSource {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     this.hrvMinimumWindow,
+    this.startInCalibration = false,
   });
 
   late final Stream<PpgOpticalSample> _ppgStream;
@@ -151,6 +155,9 @@ class SensorBiometricSource implements BiometricSource {
       accelerometerFreq: accelerometerFreq,
       timestampExponent: ppgSensor.timestampExponent,
     );
+    if (startInCalibration) {
+      _processor.beginCalibration();
+    }
     _activityTracker = ActivityTracker(
       accelerometerStream: _accelerometerStream,
       gyroscopeStream: gyroscopeStream,
@@ -169,6 +176,16 @@ class SensorBiometricSource implements BiometricSource {
     _ppgSubscription?.cancel();
     _accelSubscription?.cancel();
     _activityTracker.pause();
+  }
+
+  @override
+  void beginCalibration() {
+    if (_started) _processor.beginCalibration();
+  }
+
+  @override
+  void beginMeasurement() {
+    if (_started) _processor.beginMeasurement();
   }
 
   @override
@@ -438,6 +455,7 @@ class SimulatedBiometricSource implements BiometricSource {
 
   final Stopwatch _clock = Stopwatch();
   Timer? _timer;
+  bool _measurementEnabled = true;
 
   @override
   Stream<HeartRateSample> get biometrics => _controller.stream;
@@ -447,6 +465,16 @@ class SimulatedBiometricSource implements BiometricSource {
 
   @override
   bool get suppressStressDetection => false;
+
+  @override
+  void beginCalibration() {
+    _measurementEnabled = false;
+  }
+
+  @override
+  void beginMeasurement() {
+    _measurementEnabled = true;
+  }
 
   // --- Ornstein-Uhlenbeck wandering state (gives the ramp a realistic wobble)
   double _hrOuState = 0;
@@ -463,8 +491,8 @@ class SimulatedBiometricSource implements BiometricSource {
   /// Step size of the HR wandering, scaled to the ramp: the 0.763 was tuned
   /// against a 26 BPM span, and on a narrower one an unscaled sigma would
   /// swamp the trend.
-  late final double _hrOuSigmaStep =
-      0.763 * (((peakHeartRate - startHeartRate).abs() / 26.0).clamp(0.15, 1.0));
+  late final double _hrOuSigmaStep = 0.763 *
+      (((peakHeartRate - startHeartRate).abs() / 26.0).clamp(0.15, 1.0));
 
   // Scenario timeline, in seconds from start: a rising build-up that stops
   // short of the peak, a spike that reaches it, a plateau long enough for a
@@ -525,6 +553,7 @@ class SimulatedBiometricSource implements BiometricSource {
   }
 
   void _emitNextSample() {
+    if (!_measurementEnabled) return;
     final tSec = _clock.elapsedMilliseconds / 1000.0;
     final (hr, hrv) = _scenarioValues(tSec);
 

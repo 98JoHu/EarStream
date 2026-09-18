@@ -44,8 +44,8 @@ class BioAdaptiveSessionConfig {
 
   /// Time-condensed conference cycle described in the demo paper.
   static const conferenceDemo = BioAdaptiveSessionConfig(
-    includeCalibration: false,
-    calibrationDuration: Duration.zero,
+    includeCalibration: true,
+    calibrationDuration: Duration(seconds: 30),
     baselineDuration: Duration(seconds: 30),
     baselineComputationMode: BaselineComputationMode.physiologicalOnly,
     stressThresholdOverride: 0.03,

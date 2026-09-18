@@ -11,7 +11,7 @@ import 'biometric_source.dart';
 import 'stress_detector.dart';
 import 'measurement_phase.dart';
 import 'activity_tracker.dart' show ActivityLevel;
-import 'meditation.dart' show BiometricMeditation;
+import 'meditation.dart' show BiometricMeditation, Meditation;
 import 'hr_hrv_processor.dart' show HeartRateSample;
 
 class Measurement {
@@ -67,6 +67,7 @@ class Measurement {
         gyroscopeSensor: gyroscopeSensor,
         sensorConfigProvider: sensorConfigProvider,
         hrvMinimumWindow: sessionConfig.hrvMinimumWindow,
+        startInCalibration: sessionConfig.includeCalibration,
       ),
       phases: [
         if (sessionConfig.includeCalibration)
@@ -177,21 +178,29 @@ class Measurement {
     );
     meditation.value = session;
 
-    session.start().catchError((error, stackTrace) {
-      debugPrint('Error starting meditation: $error');
-      debugPrint('$stackTrace');
-    }).whenComplete(() {
-      if (meditation.value == session) {
-        meditation.value = null;
-      }
-    });
+    unawaited(
+      session.start().catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Error starting meditation: $error');
+        debugPrint('$stackTrace');
+        if (meditation.value == session) {
+          meditation.value = null;
+        }
+        session.dispose();
+      }),
+    );
   }
 
   void _stopMeditation() {
     final session = meditation.value;
-    if (session != null) {
-      session.stop();
-      meditation.value = null;
-    }
+    if (session != null) dismissMeditation(session);
+  }
+
+  /// Removes a completed or manually stopped meditation from the UI and
+  /// releases its audio resources. Natural completion remains visible until
+  /// the attendee has acknowledged the success card.
+  void dismissMeditation(Meditation session) {
+    if (meditation.value != session) return;
+    meditation.value = null;
+    unawaited(session.stop().whenComplete(session.dispose));
   }
 }

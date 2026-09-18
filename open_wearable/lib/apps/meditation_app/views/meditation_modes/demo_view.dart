@@ -227,7 +227,7 @@ class _DemoViewState extends State<DemoView> {
             children: [
               MeditationTile(
                 meditationNotifier: _personalizedMeditation,
-                onMeditationComplete: _finish,
+                onMeditationComplete: (_) => _finish(),
               ),
               if (!_demoAccount.hasValidDeepseekKey) ...[
                 const SizedBox(height: 16),

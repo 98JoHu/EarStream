@@ -13,12 +13,14 @@ import 'package:open_wearable/apps/meditation_app/model/biometric_source.dart';
 import 'package:open_wearable/apps/meditation_app/model/measurement_phase.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_prompt_policy.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_analytics.dart';
+import 'package:open_wearable/apps/meditation_app/model/meditation.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_session_generator.dart';
 import 'package:open_wearable/apps/meditation_app/model/stress_detector.dart';
 import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:open_wearable/apps/meditation_app/views/meditation_modes/bio_adaptive_view.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/weekly_analytics_page.dart';
+import 'package:open_wearable/apps/meditation_app/widgets/meditation_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -43,6 +45,32 @@ void main() {
         expect(processor.hrvMinimumWindow, const Duration(seconds: 15));
       });
     }
+  });
+
+  test('calibration warms the pipeline without publishing biometrics',
+      () async {
+    final processor = HrHrvProcessor(
+      sampleFreq: 200,
+      accelerometerFreq: 100,
+      timestampExponent: -3,
+    );
+    addTearDown(processor.dispose);
+    final samples = <HeartRateSample>[];
+    final subscription = processor.biometricStream.listen(samples.add);
+    addTearDown(subscription.cancel);
+
+    processor.beginCalibration();
+    processor.emitSimulatedSample(92, 28);
+    await Future<void>.delayed(Duration.zero);
+    expect(samples, isEmpty);
+    expect(processor.latestSample, isNull);
+
+    processor.beginMeasurement();
+    processor.emitSimulatedSample(72, 44);
+    await Future<void>.delayed(Duration.zero);
+    expect(samples, hasLength(1));
+    expect(samples.single.heartRate, 72);
+    expect(samples.single.rmssd, 44);
   });
 
   group('meditation environment configuration', () {
@@ -80,7 +108,8 @@ void main() {
       const demo = BioAdaptiveSessionConfig.conferenceDemo;
       const standard = BioAdaptiveSessionConfig.standard;
 
-      expect(demo.includeCalibration, isFalse);
+      expect(demo.includeCalibration, isTrue);
+      expect(demo.calibrationDuration, const Duration(seconds: 30));
       expect(demo.baselineDuration, const Duration(seconds: 30));
       expect(
         demo.baselineComputationMode,
@@ -189,6 +218,27 @@ void main() {
   });
 
   group('physiological-only baseline', () {
+    test('calibration activates filtering without subscribing to metrics', () {
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = CalibrationPhase();
+
+      final subscription = phase.activate(
+        PhaseContext(source: source, detector: detector),
+        () => Duration.zero,
+      );
+
+      expect(subscription, isNull);
+      expect(source.calibrationStarts, 1);
+      expect(source.measurementStarts, 0);
+
+      detector.dispose();
+      source.dispose();
+    });
+
     test('uses only the mean of locally observed samples', () async {
       final account = UserAccount(
         firstName: 'ProfileSecretName',
@@ -210,6 +260,7 @@ void main() {
         PhaseContext(source: source, detector: detector),
         () => const Duration(seconds: 10),
       );
+      expect(source.measurementStarts, 1);
 
       source.add(const HeartRateSample(heartRate: 60, rmssd: 20));
       source.add(const HeartRateSample(heartRate: 80, rmssd: null));
@@ -223,6 +274,47 @@ void main() {
       await subscription.cancel();
       detector.dispose();
       source.dispose();
+    });
+  });
+
+  group('meditation session presentation', () {
+    testWidgets('active sessions show controls without a segment status box',
+        (tester) async {
+      final meditation = Meditation(userAccount: UserAccount());
+      final notifier = ValueNotifier<Meditation?>(meditation);
+      addTearDown(notifier.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MeditationTile(meditationNotifier: notifier),
+          ),
+        ),
+      );
+
+      expect(find.text('Pause'), findsOneWidget);
+      expect(find.text('Stop'), findsOneWidget);
+      expect(find.text('Meditating...'), findsNothing);
+      expect(find.textContaining('Segment'), findsNothing);
+    });
+
+    testWidgets('finished sessions show success and mood feedback',
+        (tester) async {
+      final meditation = Meditation(userAccount: UserAccount());
+      meditation.phase.value = MeditationPhase.finished;
+      final notifier = ValueNotifier<Meditation?>(meditation);
+      addTearDown(notifier.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MeditationTile(meditationNotifier: notifier),
+          ),
+        ),
+      );
+
+      expect(find.text('Great job!'), findsOneWidget);
+      expect(find.text('How do you feel right now?'), findsOneWidget);
     });
   });
 
@@ -495,6 +587,8 @@ class _TestBiometricSource implements BiometricSource {
       StreamController.broadcast(sync: true);
   final ValueNotifier<ActivityLevel> _activity =
       ValueNotifier(ActivityLevel.resting);
+  int calibrationStarts = 0;
+  int measurementStarts = 0;
 
   void add(HeartRateSample sample) => _controller.add(sample);
 
@@ -506,6 +600,12 @@ class _TestBiometricSource implements BiometricSource {
 
   @override
   bool get suppressStressDetection => false;
+
+  @override
+  void beginCalibration() => calibrationStarts++;
+
+  @override
+  void beginMeasurement() => measurementStarts++;
 
   @override
   void start() {}
