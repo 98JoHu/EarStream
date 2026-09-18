@@ -250,7 +250,9 @@ class TencentTtsManager extends ConnectionManager {
         secretId: userAccount.tencentSecretId!,
         secretKey: userAccount.tencentSecretKey!,
         region: userAccount.tencentTtsRegion,
-        voiceType: userAccount.voiceGender == Gender.male ? 1050 : 1051,
+        voiceType: userAccount.voiceGender == Gender.male
+            ? tencentPremiumMaleVoiceType
+            : tencentPremiumFemaleVoiceType,
         speed: 0,
       );
     } finally {

@@ -329,7 +329,9 @@ class TencentTtsProvider implements TtsProvider {
         _secretKey = account.tencentSecretKey,
         _isAvailable = account.hasValidTencentKey,
         _region = account.tencentTtsRegion,
-        _voiceType = account.voiceGender == Gender.male ? 1050 : 1051,
+        _voiceType = account.voiceGender == Gender.male
+            ? tencentPremiumMaleVoiceType
+            : tencentPremiumFemaleVoiceType,
         _speed = _tencentSpeed(account.speakingSpeed),
         _client = client ?? TencentTtsClient();
 

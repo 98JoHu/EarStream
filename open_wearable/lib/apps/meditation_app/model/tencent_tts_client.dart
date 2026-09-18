@@ -6,6 +6,9 @@ import 'package:http/http.dart' as http;
 
 import 'user_account.dart';
 
+const int tencentPremiumMaleVoiceType = 101050;
+const int tencentPremiumFemaleVoiceType = 101051;
+
 class TencentTtsException implements Exception {
   final String message;
 

@@ -911,7 +911,7 @@ void main() {
         secretId: 'AKIDexample',
         secretKey: 'secret-example',
         region: TencentTtsRegion.internationalSingapore,
-        voiceType: 1051,
+        voiceType: tencentPremiumFemaleVoiceType,
         speed: -1,
         requestTime: DateTime.utc(2026, 9, 18, 12),
       );
@@ -932,7 +932,7 @@ void main() {
       final payload = jsonDecode(capturedRequest.body) as Map<String, dynamic>;
       expect(payload['Text'], 'Breathe in slowly.');
       expect(payload['Codec'], 'mp3');
-      expect(payload['VoiceType'], 1051);
+      expect(payload['VoiceType'], tencentPremiumFemaleVoiceType);
       expect(payload['Speed'], -1);
     });
 
