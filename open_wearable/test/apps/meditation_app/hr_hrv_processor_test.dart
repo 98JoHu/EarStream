@@ -253,8 +253,53 @@ void main() {
       });
 
       expect(account.tencentSecretKey, 'legacy-secret-key');
-      expect(account.tencentTtsRegion, TencentTtsRegion.euFrankfurt);
+      expect(
+        account.tencentTtsRegion,
+        TencentTtsRegion.internationalSingapore,
+      );
       expect(account.hasValidTencentKey, isTrue);
+    });
+
+    test('maps the legacy Frankfurt setting to international TTS', () {
+      final account = UserAccount.fromEnvironment({
+        'TENCENT_TTS_REGION': 'eu-frankfurt',
+      });
+
+      expect(
+        account.tencentTtsRegion,
+        TencentTtsRegion.internationalSingapore,
+      );
+    });
+
+    test('uses the original Roger and Bella ElevenLabs voice mapping', () {
+      final male = UserAccount(voiceGender: Gender.male);
+      final female = UserAccount(voiceGender: Gender.female);
+      final unspecified = UserAccount();
+
+      expect(
+        ElevenLabsTtsProvider.resolveVoiceId(male),
+        ElevenLabsTtsProvider.maleVoiceId,
+      );
+      expect(
+        ElevenLabsTtsProvider.resolveVoiceId(female),
+        ElevenLabsTtsProvider.femaleVoiceId,
+      );
+      expect(
+        ElevenLabsTtsProvider.resolveVoiceId(unspecified),
+        ElevenLabsTtsProvider.femaleVoiceId,
+      );
+    });
+
+    test('preserves an explicitly selected ElevenLabs voice', () {
+      final account = UserAccount(
+        voiceGender: Gender.female,
+        elevenLabsApiKey: 'key',
+      )..elevenLabsVoiceId = 'custom-voice-id';
+
+      expect(
+        ElevenLabsTtsProvider.resolveVoiceId(account),
+        'custom-voice-id',
+      );
     });
   });
 
@@ -616,6 +661,31 @@ void main() {
       expect(find.text('Great job!'), findsOneWidget);
       expect(find.text('How do you feel right now?'), findsOneWidget);
     });
+
+    testWidgets('failed voice sessions explain why they stopped',
+        (tester) async {
+      final meditation = Meditation(userAccount: UserAccount());
+      meditation.failureMessage.value =
+          'The session stopped rather than switching voices.';
+      meditation.phase.value = MeditationPhase.failed;
+      final notifier = ValueNotifier<Meditation?>(meditation);
+      addTearDown(notifier.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MeditationTile(meditationNotifier: notifier),
+          ),
+        ),
+      );
+
+      expect(find.text('Voice service interrupted'), findsOneWidget);
+      expect(
+        find.text('The session stopped rather than switching voices.'),
+        findsOneWidget,
+      );
+      expect(find.text('Dismiss'), findsOneWidget);
+    });
   });
 
   group('conference prompt privacy', () {
@@ -817,7 +887,7 @@ void main() {
   });
 
   group('TencentTtsClient', () {
-    test('signs a Frankfurt request and decodes returned audio', () async {
+    test('signs an international request and decodes returned audio', () async {
       late http.Request capturedRequest;
       final client = TencentTtsClient(
         httpClient: MockClient((request) async {
@@ -840,7 +910,7 @@ void main() {
         text: 'Breathe in slowly.',
         secretId: 'AKIDexample',
         secretKey: 'secret-example',
-        region: TencentTtsRegion.euFrankfurt,
+        region: TencentTtsRegion.internationalSingapore,
         voiceType: 1051,
         speed: -1,
         requestTime: DateTime.utc(2026, 9, 18, 12),
@@ -849,11 +919,11 @@ void main() {
       expect(audio, orderedEquals(const [1, 2, 3, 4]));
       expect(
         capturedRequest.url.host,
-        'tts.eu-frankfurt.tencentcloudapi.com',
+        'tts.intl.tencentcloudapi.com',
       );
       expect(capturedRequest.method, 'POST');
       expect(capturedRequest.headers['X-TC-Action'], 'TextToVoice');
-      expect(capturedRequest.headers['X-TC-Region'], 'eu-frankfurt');
+      expect(capturedRequest.headers['X-TC-Region'], 'ap-singapore');
       final authorization = capturedRequest.headers['Authorization']!;
       expect(authorization, startsWith('TC3-HMAC-SHA256 Credential='));
       expect(authorization, contains('AKIDexample/2026-09-18/tts/tc3_request'));

@@ -88,15 +88,15 @@ enum TtsProviderOption {
 }
 
 enum TencentTtsRegion {
-  euFrankfurt(
-    label: 'Europe (Frankfurt)',
-    region: 'eu-frankfurt',
-    host: 'tts.eu-frankfurt.tencentcloudapi.com',
+  internationalSingapore(
+    label: 'International (Singapore)',
+    region: 'ap-singapore',
+    host: 'tts.intl.tencentcloudapi.com',
   ),
   chinaGuangzhou(
-    label: 'China (Guangzhou)',
+    label: 'Mainland China (Guangzhou)',
     region: 'ap-guangzhou',
-    host: 'tts.ap-guangzhou.tencentcloudapi.com',
+    host: 'tts.tencentcloudapi.com',
   );
 
   final String label;
@@ -111,10 +111,22 @@ enum TencentTtsRegion {
 
   static TencentTtsRegion fromConfig(String? value) {
     final normalized = value?.trim().toLowerCase();
-    return TencentTtsRegion.values.firstWhere(
-      (option) => option.region == normalized,
-      orElse: () => TencentTtsRegion.euFrankfurt,
-    );
+    return switch (normalized) {
+      'ap-guangzhou' ||
+      'china' ||
+      'mainland-china' =>
+        TencentTtsRegion.chinaGuangzhou,
+      // Frankfurt is retained as a compatibility alias for configurations
+      // created before Tencent's product-specific TTS regions were verified.
+      // International TextToVoice uses the global endpoint and Singapore
+      // processing; eu-frankfurt is not supported by that API.
+      'ap-singapore' ||
+      'international' ||
+      'global' ||
+      'eu-frankfurt' =>
+        TencentTtsRegion.internationalSingapore,
+      _ => TencentTtsRegion.internationalSingapore,
+    };
   }
 }
 
@@ -231,7 +243,7 @@ class UserAccount {
     this.ttsProvider = TtsProviderOption.elevenLabs,
     this.tencentSecretId,
     this.tencentSecretKey,
-    this.tencentTtsRegion = TencentTtsRegion.euFrankfurt,
+    this.tencentTtsRegion = TencentTtsRegion.internationalSingapore,
     this.baselineHeartRate,
     this.baselineRMSSD,
   });

@@ -63,6 +63,13 @@ class MeditationTile extends StatelessWidget {
                 },
               );
             }
+            if (phase == MeditationPhase.failed) {
+              return _FailedMeditation(
+                message: meditation.failureMessage.value ??
+                    'The meditation could not continue.',
+                onDismissed: () => _complete(meditation),
+              );
+            }
 
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -108,6 +115,59 @@ class MeditationTile extends StatelessWidget {
     } else {
       meditation.stop();
     }
+  }
+}
+
+class _FailedMeditation extends StatelessWidget {
+  final String message;
+  final VoidCallback onDismissed;
+
+  const _FailedMeditation({
+    required this.message,
+    required this.onDismissed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.cloud_off_outlined,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Voice service interrupted',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(message),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onDismissed,
+                child: const Text('Dismiss'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

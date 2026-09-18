@@ -12,6 +12,7 @@ import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'stress_detector.dart' show StressLevel;
 import 'tencent_tts_client.dart';
+import 'elevenlabs_api.dart';
 
 class SessionProgress {
   final int currentSegment;
@@ -30,6 +31,7 @@ enum MeditationPhase {
   welcome,
   segment,
   completion,
+  failed,
   finished,
 }
 
@@ -46,6 +48,7 @@ class Meditation {
   final ValueNotifier<SessionProgress?> progress =
       ValueNotifier<SessionProgress?>(null);
   late final ValueNotifier<MeditationPhase> phase;
+  final ValueNotifier<String?> failureMessage = ValueNotifier<String?>(null);
 
   bool isStopped = false;
   final ValueNotifier<bool> isPaused = ValueNotifier<bool>(false);
@@ -83,11 +86,25 @@ class Meditation {
 
   Future<void> start() async {
     isStopped = false;
+    failureMessage.value = null;
     _analyticsStartedAt = DateTime.now();
     _analyticsRecorded = false;
 
     try {
       await _run();
+    } on TtsSessionException catch (error) {
+      print('Meditation stopped after voice service failure: $error');
+      isStopped = true;
+      progress.value = null;
+      failureMessage.value =
+          'The selected voice service became unavailable. The session was '
+          'stopped rather than switching to a different voice. Check the '
+          'network connection and try again.';
+      phase.value = MeditationPhase.failed;
+      await musicPlayer.stop();
+      await ttsService.stop();
+      _endRun();
+      await _recordAnalytics(completed: false);
     } catch (_) {
       _endRun();
       await _recordAnalytics(completed: false);
@@ -174,6 +191,7 @@ class Meditation {
     musicPlayer.dispose();
     ttsService.dispose();
     isPaused.dispose();
+    failureMessage.dispose();
     unawaited(_recordAnalytics(completed: false));
   }
 
@@ -298,14 +316,28 @@ abstract interface class TtsProvider {
 }
 
 class TencentTtsProvider implements TtsProvider {
-  final UserAccount account;
+  final String? _secretId;
+  final String? _secretKey;
+  final bool _isAvailable;
+  final TencentTtsRegion _region;
+  final int _voiceType;
+  final double _speed;
   final TencentTtsClient _client;
 
-  TencentTtsProvider(this.account, {TencentTtsClient? client})
-      : _client = client ?? TencentTtsClient();
+  TencentTtsProvider(UserAccount account, {TencentTtsClient? client})
+      : _secretId = account.tencentSecretId,
+        _secretKey = account.tencentSecretKey,
+        _isAvailable = account.hasValidTencentKey,
+        _region = account.tencentTtsRegion,
+        _voiceType = account.voiceGender == Gender.male ? 1050 : 1051,
+        _speed = _tencentSpeed(account.speakingSpeed),
+        _client = client ?? TencentTtsClient();
 
   @override
-  bool get isAvailable => account.hasValidTencentKey;
+  bool get isAvailable =>
+      _isAvailable &&
+      _secretId?.trim().isNotEmpty == true &&
+      _secretKey?.trim().isNotEmpty == true;
 
   @override
   Future<List<Source>> synthesize(String text) async {
@@ -314,13 +346,13 @@ class TencentTtsProvider implements TtsProvider {
     for (final chunk in chunks) {
       final bytes = await _client.synthesize(
         text: chunk,
-        secretId: account.tencentSecretId!,
-        secretKey: account.tencentSecretKey!,
-        region: account.tencentTtsRegion,
-        voiceType: account.voiceGender == Gender.male ? 1050 : 1051,
-        speed: _tencentSpeed(account.speakingSpeed),
+        secretId: _secretId!,
+        secretKey: _secretKey!,
+        region: _region,
+        voiceType: _voiceType,
+        speed: _speed,
       );
-      sources.add(BytesSource(bytes));
+      sources.add(BytesSource(bytes, mimeType: 'audio/mpeg'));
     }
     return sources;
   }
@@ -339,87 +371,86 @@ class TencentTtsProvider implements TtsProvider {
 }
 
 class ElevenLabsTtsProvider implements TtsProvider {
-  final UserAccount account;
-  ElevenLabsTtsProvider(this.account);
+  static const maleVoiceId = 'CwhRBWXzGAHq8TQ4Fs17';
+  static const femaleVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
+
+  final String? _apiKey;
+  final bool _isAvailable;
+  final String voiceId;
+
+  ElevenLabsTtsProvider(UserAccount account)
+      : _apiKey = account.elevenLabsApiKey,
+        _isAvailable = account.hasValidElevenLabsKey,
+        voiceId = resolveVoiceId(account);
+
+  static String resolveVoiceId(UserAccount account) {
+    final selected = account.elevenLabsVoiceId?.trim();
+    if (selected?.isNotEmpty == true) return selected!;
+    return account.voiceGender == Gender.male ? maleVoiceId : femaleVoiceId;
+  }
 
   @override
-  bool get isAvailable => account.hasValidElevenLabsKey;
+  bool get isAvailable => _isAvailable && _apiKey?.trim().isNotEmpty == true;
 
   @override
   Future<List<Source>> synthesize(String text) async {
-    final voiceId = await _resolveVoiceId();
-    final key = account.elevenLabsApiKey!;
     final endpoint = Uri.parse(
       'https://api.elevenlabs.io/v1/text-to-speech/$voiceId',
     );
-    final res = await http.post(
-      endpoint,
-      headers: {
-        'xi-api-key': key,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'text': text,
-        'model_id': 'eleven_flash_v2_5', // fast + cheap
-      }),
-    );
-    if (res.statusCode != 200) {
-      throw Exception('ElevenLabs ${res.statusCode}: ${res.body}');
-    }
-    return [BytesSource(res.bodyBytes)];
-  }
-
-  Future<String> _resolveVoiceId() async {
-    final selected = account.elevenLabsVoiceId;
-    if (selected != null && selected.isNotEmpty) return selected;
-
-    final knownVoices = account.availableElevenLabsVoices;
-    if (knownVoices != null && knownVoices.isNotEmpty) {
-      return knownVoices.first.id;
-    }
-
-    final response = await http.get(
-      Uri.parse('https://api.elevenlabs.io/v1/voices'),
-      headers: {'xi-api-key': account.elevenLabsApiKey!},
-    ).timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) {
-      throw Exception('ElevenLabs rejected the configured credentials.');
-    }
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    final voices = (decoded['voices'] as List)
-        .map(
-          (voice) => (
-            voice: voice['name'] as String,
-            id: voice['voice_id'] as String,
-          ),
+    final res = await http
+        .post(
+          endpoint,
+          headers: {
+            'xi-api-key': _apiKey!,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg',
+          },
+          body: jsonEncode({
+            'text': text,
+            'model_id': 'eleven_flash_v2_5', // fast + cheap
+          }),
         )
-        .toList();
-    if (voices.isEmpty) {
-      throw Exception('ElevenLabs returned no available voices.');
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) {
+      throw ElevenLabsApiException.fromResponse(res);
     }
-    account.availableElevenLabsVoices = voices;
-    account.elevenLabsVoiceId = voices.first.id;
-    return voices.first.id;
+    return [BytesSource(res.bodyBytes, mimeType: 'audio/mpeg')];
   }
 
   @override
   void dispose() {}
 }
 
+class TtsSessionException implements Exception {
+  final String providerName;
+  final Object cause;
+
+  const TtsSessionException({
+    required this.providerName,
+    required this.cause,
+  });
+
+  @override
+  String toString() => '$providerName failed after retries: $cause';
+}
+
 class TtsService {
-  final List<TtsProvider> _providers;
+  final TtsProvider _provider;
   final FlutterTts _fallbackTts;
   final AudioPlayer _player = AudioPlayer();
+  late final bool _usesDeviceFallback;
   int _playbackGeneration = 0;
 
   TtsService({required UserAccount userAccount})
-      : _providers = [
-          switch (userAccount.ttsProvider) {
-            TtsProviderOption.elevenLabs => ElevenLabsTtsProvider(userAccount),
-            TtsProviderOption.tencent => TencentTtsProvider(userAccount),
-          },
-        ],
+      : _provider = switch (userAccount.ttsProvider) {
+          TtsProviderOption.elevenLabs => ElevenLabsTtsProvider(userAccount),
+          TtsProviderOption.tencent => TencentTtsProvider(userAccount),
+        },
         _fallbackTts = FlutterTts() {
+    // The route is selected once for the whole meditation. If a configured
+    // cloud provider succeeds initially and later loses connectivity, the
+    // session must not silently change to an unrelated device voice.
+    _usesDeviceFallback = !_provider.isAvailable;
     _initializeFallbackTts(userAccount);
   }
 
@@ -454,32 +485,64 @@ class TtsService {
 
   Future<void> speak(String text) async {
     final playbackGeneration = ++_playbackGeneration;
-    for (final provider in _providers) {
-      if (provider.isAvailable) {
-        try {
-          final sources = await provider.synthesize(text);
-          if (playbackGeneration != _playbackGeneration) return;
-          await _player.setAudioContext(_premiumTtsAudioContext);
-          for (final source in sources) {
-            if (playbackGeneration != _playbackGeneration) return;
-            final playbackEnded = Future.any([
-              _player.onPlayerComplete.first,
-              _player.onPlayerStateChanged
-                  .firstWhere((state) => state == PlayerState.stopped),
-            ]);
-            await _player.play(source);
-            await playbackEnded;
-          }
-          return;
-        } catch (e) {
-          print("Error using ${provider.runtimeType}: $e");
-        }
+    if (_usesDeviceFallback) {
+      await _fallbackTts.speak(text);
+      return;
+    }
+
+    Object? lastError;
+    const retryDelays = [
+      Duration.zero,
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+    ];
+    for (var attempt = 0; attempt < retryDelays.length; attempt++) {
+      if (playbackGeneration != _playbackGeneration) return;
+      final delay = retryDelays[attempt];
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
+      if (playbackGeneration != _playbackGeneration) return;
+
+      try {
+        await _speakWithProvider(text, playbackGeneration);
+        return;
+      } catch (error) {
+        lastError = error;
+        print(
+          'Error using ${_provider.runtimeType} '
+          '(attempt ${attempt + 1}/${retryDelays.length}): $error',
+        );
+        await _player.stop();
       }
     }
 
-    // Fallback to FlutterTts if no premium provider is available or fails
+    throw TtsSessionException(
+      providerName: _provider.runtimeType.toString(),
+      cause: lastError ?? StateError('Unknown voice service error'),
+    );
+  }
+
+  Future<void> _speakWithProvider(
+    String text,
+    int playbackGeneration,
+  ) async {
+    final sources = await _provider.synthesize(text);
+    if (sources.isEmpty) {
+      throw StateError('The voice service returned no audio.');
+    }
     if (playbackGeneration != _playbackGeneration) return;
-    await _fallbackTts.speak(text);
+
+    await _player.setAudioContext(_premiumTtsAudioContext);
+    for (final source in sources) {
+      if (playbackGeneration != _playbackGeneration) return;
+      final playbackEnded = Future.any([
+        _player.onPlayerComplete.first,
+        _player.onPlayerStateChanged
+            .firstWhere((state) => state == PlayerState.stopped),
+      ]);
+      await _player.play(source);
+      await playbackEnded;
+      if (playbackGeneration != _playbackGeneration) return;
+    }
   }
 
   Future<void> stop() async {
@@ -490,9 +553,7 @@ class TtsService {
 
   void dispose() {
     _playbackGeneration++;
-    for (final provider in _providers) {
-      provider.dispose();
-    }
+    _provider.dispose();
     _player.dispose();
     _fallbackTts.stop();
   }

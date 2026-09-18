@@ -127,9 +127,9 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
               const SizedBox(height: 8),
               Text(
                 widget.userAccount.tencentTtsRegion ==
-                        TencentTtsRegion.euFrankfurt
-                    ? 'Routes synthesis to Tencent Cloud in Frankfurt.'
-                    : 'Routes synthesis to Tencent Cloud in Guangzhou.',
+                        TencentTtsRegion.internationalSingapore
+                    ? 'Uses Tencent Cloud International with TTS processing in Singapore. Select this for international accounts and EU demos.'
+                    : 'Uses Tencent Cloud mainland with TTS processing in Guangzhou. This requires TTS activated on a mainland China account.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),

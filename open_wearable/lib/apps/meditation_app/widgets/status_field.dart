@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../model/user_account.dart';
 import '../model/tencent_tts_client.dart';
+import '../model/elevenlabs_api.dart';
 
 enum Status { missing, checking, error, ok }
 
@@ -48,7 +49,8 @@ class StatusField extends StatelessWidget {
       case Status.checking:
         return "Checking the service connection. This may take a few seconds.";
       case Status.error:
-        return "The service check failed. Please review the credentials and region, then try again.";
+        return connectionManager.lastError ??
+            "The service check failed. Please review the credentials and region, then try again.";
       case Status.ok:
         return "The current credentials and settings were accepted.";
     }
@@ -123,14 +125,18 @@ abstract class ConnectionManager extends ChangeNotifier {
   ConnectionManager({required this.userAccount});
   Status _status = Status.missing;
   Status get status => _status;
+  String? _lastError;
+  String? get lastError => _lastError;
 
   void markUnverified() {
     _status = Status.missing;
+    _lastError = null;
     notifyListeners();
   }
 
   Future<void> checkConnection() async {
     _status = Status.checking;
+    _lastError = null;
     notifyListeners();
 
     try {
@@ -141,6 +147,7 @@ abstract class ConnectionManager extends ChangeNotifier {
     } catch (e) {
       print("Connection check failed: $e");
       _status = Status.error;
+      _lastError = e.toString();
       notifyListeners();
     }
   }
@@ -204,9 +211,7 @@ class ElevenLabsManager extends ConnectionManager {
     ).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
       userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
-      throw Exception(
-        'ElevenLabs API rejected key (Code: ${response.statusCode})',
-      );
+      throw ElevenLabsApiException.fromResponse(response);
     }
 
     return json.decode(response.body);
