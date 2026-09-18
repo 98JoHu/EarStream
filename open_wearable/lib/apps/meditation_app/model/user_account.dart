@@ -319,6 +319,10 @@ class UserAccount {
     required UserAccount serviceConfiguration,
   }) {
     final account = UserAccount(
+      // Voice choice is service configuration managed on the API Keys page,
+      // not attendee profile data. It is used for TTS but never added to the
+      // privacy-restricted demo prompt.
+      voiceGender: serviceConfiguration.voiceGender,
       deepseekApiKey: serviceConfiguration.deepseekApiKey,
       elevenLabsApiKey: serviceConfiguration.elevenLabsApiKey,
       ttsProvider: serviceConfiguration.ttsProvider,

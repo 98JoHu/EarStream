@@ -227,6 +227,8 @@ class TencentTtsRegionDropdown extends StatelessWidget {
 }
 
 class ElevenLabsVoiceDropdown extends StatelessWidget {
+  static const String _codedDefaultValue = '';
+
   final List<({String voice, String id})> voices;
   final String? initialSelection;
   final ValueChanged<String?> onSelected;
@@ -241,14 +243,19 @@ class ElevenLabsVoiceDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FormDropdown<String>(
-      initialSelection: initialSelection ?? voices.first.id,
+      initialSelection: initialSelection ?? _codedDefaultValue,
       menuHeight: 300,
-      entries: voices
-          .map(
-            (voice) => DropdownMenuEntry(value: voice.id, label: voice.voice),
-          )
-          .toList(),
-      onSelected: onSelected,
+      entries: [
+        const DropdownMenuEntry(
+          value: _codedDefaultValue,
+          label: 'Default voice (configured in app)',
+        ),
+        ...voices.map(
+          (voice) => DropdownMenuEntry(value: voice.id, label: voice.voice),
+        ),
+      ],
+      onSelected: (value) =>
+          onSelected(value == _codedDefaultValue ? null : value),
     );
   }
 }

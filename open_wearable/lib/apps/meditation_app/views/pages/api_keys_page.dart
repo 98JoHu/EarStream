@@ -33,10 +33,20 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
     _deepseekManager = DeepseekManager(userAccount: widget.userAccount);
     _elevenLabsManager = ElevenLabsManager(userAccount: widget.userAccount);
     _tencentManager = TencentTtsManager(userAccount: widget.userAccount);
+    _deepseekManager.addListener(_refreshFromServiceState);
+    _elevenLabsManager.addListener(_refreshFromServiceState);
+    _tencentManager.addListener(_refreshFromServiceState);
+  }
+
+  void _refreshFromServiceState() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _deepseekManager.removeListener(_refreshFromServiceState);
+    _elevenLabsManager.removeListener(_refreshFromServiceState);
+    _tencentManager.removeListener(_refreshFromServiceState);
     _deepseekManager.dispose();
     _elevenLabsManager.dispose();
     _tencentManager.dispose();
@@ -45,6 +55,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
 
   @override
   Widget build(BuildContext context) {
+    final elevenLabsVoices = widget.userAccount.availableElevenLabsVoices;
     return Card(
       margin: const EdgeInsets.all(16.0),
       child: Padding(
@@ -54,7 +65,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Service Credentials',
+                'Voice & Service Configuration',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -76,6 +87,50 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                   setState(() => widget.userAccount.ttsProvider = value);
                 },
               ),
+              const SizedBox(height: 24),
+              const Text(
+                'Default Voice',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Select the male or female voice configured in the app. An explicitly selected ElevenLabs voice overrides this default.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              VoiceGenderDropdown(
+                key: ValueKey(widget.userAccount.voiceGender),
+                initialSelection:
+                    widget.userAccount.voiceGender ?? Gender.female,
+                onSelected: (value) {
+                  if (value == null) return;
+                  setState(() => widget.userAccount.voiceGender = value);
+                  widget.userAccount.hasValidTencentKey = false;
+                  _tencentManager.markUnverified();
+                },
+              ),
+              if (widget.userAccount.ttsProvider ==
+                      TtsProviderOption.elevenLabs &&
+                  widget.userAccount.hasValidElevenLabsKey &&
+                  elevenLabsVoices != null &&
+                  elevenLabsVoices.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'ElevenLabs Voice',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                ElevenLabsVoiceDropdown(
+                  key: ValueKey(widget.userAccount.elevenLabsVoiceId),
+                  voices: elevenLabsVoices,
+                  initialSelection: widget.userAccount.elevenLabsVoiceId,
+                  onSelected: (value) {
+                    setState(() {
+                      widget.userAccount.elevenLabsVoiceId = value;
+                    });
+                  },
+                ),
+              ],
               const SizedBox(height: 24),
               StatusField(
                 connectionManager: _deepseekManager,

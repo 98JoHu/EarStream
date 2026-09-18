@@ -296,7 +296,7 @@ class BioAdaptiveContent extends StatelessWidget {
                               key: ValueKey('rmssd-${phase.runtimeType}'),
                               label: "RMSSD",
                               unit: "ms",
-                              icon: Icons.air,
+                              icon: Icons.show_chart,
                               iconColor: Colors.blueAccent,
                               backgroundColor:
                                   Colors.blueAccent.withValues(alpha: 0.1),

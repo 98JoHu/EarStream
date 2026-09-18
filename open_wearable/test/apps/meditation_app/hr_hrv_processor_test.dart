@@ -25,6 +25,9 @@ import 'package:open_wearable/apps/meditation_app/model/stress_detector.dart';
 import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:open_wearable/apps/meditation_app/views/meditation_modes/bio_adaptive_view.dart';
+import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_view.dart';
+import 'package:open_wearable/apps/meditation_app/views/pages/api_keys_page.dart';
+import 'package:open_wearable/apps/meditation_app/views/pages/preferences_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/weekly_analytics_page.dart';
 import 'package:open_wearable/apps/meditation_app/widgets/meditation_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -597,7 +600,7 @@ void main() {
       expect(demo.gender, isNull);
       expect(demo.age, isNull);
       expect(demo.fitnessLevel, isNull);
-      expect(demo.voiceGender, isNull);
+      expect(demo.voiceGender, Gender.male);
       expect(demo.speakingSpeed, isNull);
       expect(demo.meditationType, isNull);
       expect(demo.meditationEnvironment, isNull);
@@ -816,6 +819,8 @@ void main() {
 
       expect(find.text('Great job!'), findsOneWidget);
       expect(find.text('How do you feel right now?'), findsOneWidget);
+      expect(find.text('Serene'), findsOneWidget);
+      expect(find.text('Very Relaxed'), findsNothing);
     });
 
     testWidgets('failed voice sessions explain why they stopped',
@@ -841,6 +846,67 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Dismiss'), findsOneWidget);
+    });
+  });
+
+  group('voice settings location', () {
+    testWidgets('personal preferences contain no provider or voice selector',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PreferencesPage(userAccount: UserAccount()),
+          ),
+        ),
+      );
+
+      expect(find.text('Speaking Speed'), findsOneWidget);
+      expect(find.text('TTS Provider'), findsNothing);
+      expect(find.text('Default Voice'), findsNothing);
+      expect(find.text('ElevenLabs Voice'), findsNothing);
+      expect(find.text('Tencent processing region'), findsNothing);
+    });
+
+    testWidgets('API Keys contains provider and voice controls',
+        (tester) async {
+      final account = UserAccount()
+        ..hasValidElevenLabsKey = true
+        ..availableElevenLabsVoices = [
+          (voice: 'Test Voice', id: 'test-voice-id'),
+        ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ApiKeysPage(userAccount: account),
+          ),
+        ),
+      );
+
+      expect(find.text('TTS Provider'), findsOneWidget);
+      expect(find.text('Default Voice'), findsOneWidget);
+      expect(find.text('ElevenLabs Voice'), findsOneWidget);
+      expect(find.text('Tencent processing region'), findsOneWidget);
+    });
+
+    testWidgets('demo preferences inherit voice service settings',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SettingsView(
+              userAccount: UserAccount(),
+              onBack: () {},
+              onContinue: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Speaking Speed'), findsOneWidget);
+      expect(find.text('Text-to-Speech Provider'), findsNothing);
+      expect(find.text('Voice Gender'), findsNothing);
+      expect(find.text('Tencent Processing Region'), findsNothing);
     });
   });
 

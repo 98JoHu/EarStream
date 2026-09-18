@@ -4,7 +4,7 @@ import 'emojis.dart';
 
 enum MoodRating {
   veryRelaxed(
-    label: "Very Relaxed",
+    label: "Serene",
     emoji: AppEmojis.veryRelaxed,
   ),
   relaxed(
@@ -259,10 +259,15 @@ class _FinishedMoodCheck extends StatelessWidget {
           children: [
             Text(mood.emoji, style: const TextStyle(fontSize: 32)),
             const SizedBox(height: 4),
-            Text(
-              mood.label,
-              style: const TextStyle(fontSize: 10),
-              textAlign: TextAlign.center,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                mood.label,
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
