@@ -147,6 +147,50 @@ void main() {
     });
   });
 
+  group('HR-only meditation recovery', () {
+    test('stays stressed above baseline regardless of recovered RMSSD', () {
+      final detector = StressDetector(
+        thresholds: () => (80, 40),
+        baselineHeartRate: () => 70,
+      );
+      addTearDown(detector.dispose);
+
+      detector.onSample(
+        const HeartRateSample(heartRate: 90, rmssd: 20),
+        suppress: false,
+      );
+      expect(detector.currentStressLevel, StressLevel.stressed);
+
+      detector.onSample(
+        const HeartRateSample(heartRate: 71, rmssd: 100),
+        suppress: false,
+      );
+      expect(detector.currentStressLevel, StressLevel.stressed);
+    });
+
+    test('recovers at baseline even when RMSSD is absent', () {
+      final detector = StressDetector(
+        thresholds: () => (80, 40),
+        baselineHeartRate: () => 70,
+      );
+      addTearDown(detector.dispose);
+
+      detector.onSample(
+        const HeartRateSample(heartRate: 90, rmssd: 20),
+        suppress: false,
+      );
+      detector.onSample(
+        const HeartRateSample(heartRate: 70, rmssd: null),
+        suppress: false,
+      );
+
+      expect(detector.currentStressLevel, StressLevel.relaxed);
+      expect(detector.isHeartRateRecovered(70), isTrue);
+      expect(detector.isHeartRateRecovered(69), isTrue);
+      expect(detector.isHeartRateRecovered(71), isFalse);
+    });
+  });
+
   test('calibration warms the pipeline without publishing biometrics',
       () async {
     final processor = HrHrvProcessor(
@@ -377,6 +421,7 @@ void main() {
       expect(demo.metricWindowDuration, const Duration(seconds: 30));
       expect(demo.guaranteedMeditationDelay, const Duration(minutes: 2));
       expect(demo.useBestEffortEstimates, isTrue);
+      expect(demo.meditationSegmentCount, 1);
       expect(demo.meditationSegmentDuration, const Duration(seconds: 30));
       expect(demo.promptPolicy, MeditationPromptPolicy.conferenceDemo);
       expect(demo.allowStressSimulation, isFalse);
@@ -393,6 +438,7 @@ void main() {
       expect(standard.metricWindowDuration, isNull);
       expect(standard.guaranteedMeditationDelay, isNull);
       expect(standard.useBestEffortEstimates, isFalse);
+      expect(standard.meditationSegmentCount, 10);
       expect(standard.meditationSegmentDuration, isNull);
       expect(standard.promptPolicy, MeditationPromptPolicy.standard);
       expect(standard.allowStressSimulation, isTrue);
@@ -840,6 +886,52 @@ void main() {
       expect(requestBody, contains('Approximately 280 words per segment.'));
       expect(requestBody, isNot(contains('approximately 30 seconds')));
       expect(opening.firstSegment.durationSeconds, 0);
+    });
+
+    test('biosignal-adaptive demo has one generated segment between messages',
+        () async {
+      var requestCount = 0;
+      final client = MockClient((request) async {
+        requestCount++;
+        final content = jsonEncode({
+          'welcomeMessage': 'Welcome to the demo.',
+          'completionMessage': 'The demo is complete.',
+          'segment': {
+            'segmentId': 1,
+            'instruction': 'Breathe slowly for this short demonstration.',
+            'durationSeconds': 30,
+          },
+        });
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': content},
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      const demo = BioAdaptiveSessionConfig.conferenceDemo;
+      final script = AdaptiveMeditationScript(
+        account: UserAccount(deepseekApiKey: 'service-key'),
+        maxSegments: demo.meditationSegmentCount,
+        segmentDuration: demo.meditationSegmentDuration,
+        promptPolicy: demo.promptPolicy,
+        client: client,
+      );
+      addTearDown(script.dispose);
+
+      final opening = await script.begin();
+      final followingSegment = await script.nextSegment(null);
+
+      expect(opening.welcomeMessage, 'Welcome to the demo.');
+      expect(opening.firstSegment.segmentId, 1);
+      expect(opening.firstSegment.durationSeconds, 30);
+      expect(followingSegment, isNull);
+      expect(opening.completionMessage, 'The demo is complete.');
+      expect(requestCount, 1);
     });
   });
 

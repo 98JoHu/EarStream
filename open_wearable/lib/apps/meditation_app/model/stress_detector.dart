@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
+import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 
 enum StressLevel {
@@ -64,13 +65,21 @@ class StressDetector {
 
   void dispose() => _level.dispose();
 
+  /// Recovery is deliberately based on heart rate alone. RMSSD remains part
+  /// of the stricter two-signal condition used to detect stress onset.
+  bool isHeartRateRecovered(int heartRate) {
+    final recoveryThreshold =
+        _baselineHeartRate() + BioAdaptiveModeConfig.recoveryHeartRateMarginBpm;
+    return heartRate <= recoveryThreshold;
+  }
+
   bool _isStressed(int heartRate, double? rmssd) {
     final (hrThreshold, rmssdThreshold) = _thresholds();
     return heartRate > hrThreshold && rmssd != null && rmssd < rmssdThreshold;
   }
 
   void _trackRecovery(int heartRate) {
-    if (heartRate <= _baselineHeartRate()) {
+    if (isHeartRateRecovered(heartRate)) {
       _level.value = StressLevel.relaxed;
     }
   }

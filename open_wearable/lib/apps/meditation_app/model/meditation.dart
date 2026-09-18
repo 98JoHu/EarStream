@@ -13,7 +13,6 @@ import 'meditation_session_generator.dart';
 import 'meditation_prompt_policy.dart';
 import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
-import 'stress_detector.dart' show StressLevel;
 import 'tencent_tts_client.dart';
 import 'elevenlabs_api.dart';
 
@@ -582,8 +581,7 @@ class BiometricMeditation extends Meditation {
   });
 
   @override
-  bool checkEarlyExit() =>
-      measurement.currentStressLevel == StressLevel.relaxed;
+  bool checkEarlyExit() => measurement.hasHeartRateRecoveredToBaseline;
 
   @override
   HeartRateSample? readCurrentBiometrics() =>

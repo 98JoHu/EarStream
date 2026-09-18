@@ -130,6 +130,13 @@ class Measurement {
   int? get baselineHeartRate => userAccount.baselineHeartRate;
   double? get baselineRmssd => userAccount.baselineRMSSD;
 
+  /// Whether the latest measured HR has returned to the baseline used by the
+  /// detector. RMSSD is intentionally irrelevant to meditation completion.
+  bool get hasHeartRateRecoveredToBaseline {
+    final latest = _latestBiometrics;
+    return latest != null && _detector.isHeartRateRecovered(latest.heartRate);
+  }
+
   // Publish the stress level
   ValueListenable<StressLevel> get stressLevel => _detector.stressLevel;
   StressLevel get currentStressLevel => _detector.stressLevel.value;
@@ -207,6 +214,7 @@ class Measurement {
     final session = BiometricMeditation(
       userAccount: userAccount,
       measurement: this,
+      maxSegments: sessionConfig.meditationSegmentCount,
       meditationSegmentDuration: sessionConfig.meditationSegmentDuration,
       promptPolicy: sessionConfig.promptPolicy,
       analyticsStore: analyticsStore,

@@ -10,6 +10,8 @@ abstract final class DemoModeConfig {
   static const Duration metricWindowDuration = Duration(seconds: 30);
   static const Duration hrvMinimumWindow = Duration(seconds: 30);
   static const Duration guaranteedMeditationDelay = Duration(minutes: 2);
+  // Welcome and completion messages remain outside this generated count.
+  static const int biosignalAdaptiveMeditationSegmentCount = 1;
   static const Duration meditationSegmentDuration = Duration(seconds: 30);
   static const bool useBestEffortEstimates = true;
   static const bool allowStressSimulation = false;

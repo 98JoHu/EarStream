@@ -14,6 +14,7 @@ class BioAdaptiveSessionConfig {
   final Duration? hrvMinimumWindow;
   final Duration? metricWindowDuration;
   final Duration? guaranteedMeditationDelay;
+  final int meditationSegmentCount;
 
   /// Allows physiologically plausible, beat-derived estimates that fall below
   /// the production stream's confidence threshold. Used only by the
@@ -32,6 +33,7 @@ class BioAdaptiveSessionConfig {
     required this.hrvMinimumWindow,
     required this.metricWindowDuration,
     required this.guaranteedMeditationDelay,
+    required this.meditationSegmentCount,
     required this.useBestEffortEstimates,
     required this.promptPolicy,
     required this.allowStressSimulation,
@@ -51,6 +53,7 @@ class BioAdaptiveSessionConfig {
     hrvMinimumWindow: BioAdaptiveModeConfig.hrvMinimumWindowOverride,
     metricWindowDuration: BioAdaptiveModeConfig.metricWindowDurationOverride,
     guaranteedMeditationDelay: BioAdaptiveModeConfig.guaranteedMeditationDelay,
+    meditationSegmentCount: BioAdaptiveModeConfig.meditationSegmentCount,
     useBestEffortEstimates: BioAdaptiveModeConfig.useBestEffortEstimates,
     promptPolicy: MeditationPromptPolicy.standard,
     allowStressSimulation: BioAdaptiveModeConfig.allowStressSimulation,
@@ -67,6 +70,8 @@ class BioAdaptiveSessionConfig {
     hrvMinimumWindow: DemoModeConfig.hrvMinimumWindow,
     metricWindowDuration: DemoModeConfig.metricWindowDuration,
     guaranteedMeditationDelay: DemoModeConfig.guaranteedMeditationDelay,
+    meditationSegmentCount:
+        DemoModeConfig.biosignalAdaptiveMeditationSegmentCount,
     useBestEffortEstimates: DemoModeConfig.useBestEffortEstimates,
     promptPolicy: MeditationPromptPolicy.conferenceDemo,
     allowStressSimulation: DemoModeConfig.allowStressSimulation,

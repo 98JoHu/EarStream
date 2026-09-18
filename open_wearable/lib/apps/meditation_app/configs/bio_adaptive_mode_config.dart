@@ -25,6 +25,11 @@ abstract final class BioAdaptiveModeConfig {
   static const bool useBestEffortEstimates = false;
   static const bool allowStressSimulation = true;
 
+  // Shared recovery rule for regular and demo biosignal-adaptive sessions.
+  // The current generated segment is allowed to finish once measured HR is
+  // at or below baseline. RMSSD is deliberately not part of recovery.
+  static const int recoveryHeartRateMarginBpm = 0;
+
   // Production HR/HRV windows. Null delegates to HrHrvProcessor's defaults:
   // 10 s HR buffer, 4 s metric eligibility, 60 s minimum RMSSD history, and
   // 5 min maximum RMSSD history.
