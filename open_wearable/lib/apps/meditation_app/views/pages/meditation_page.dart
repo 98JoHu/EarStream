@@ -8,6 +8,7 @@ import '../meditation_modes/bio_adaptive_view.dart';
 import '../meditation_modes/demo_view.dart';
 import '../meditation_modes/timer_view.dart';
 import '../../model/user_account.dart';
+import '../../model/meditation_analytics.dart';
 
 enum MeditationMode {
   bioAdaptive(
@@ -48,8 +49,11 @@ Widget _bioAdaptiveView(MeditationPage page) => BioAdaptiveView(
       accelerometerSensor: page.accelerometerSensor,
       gyroscopeSensor: page.gyroscopeSensor,
       sensorConfigProvider: page.sensorConfigProvider,
+      analyticsStore: page.analyticsStore,
     );
-Widget _timerView(MeditationPage page) => const TimerView();
+Widget _timerView(MeditationPage page) => TimerView(
+      analyticsStore: page.analyticsStore,
+    );
 Widget _demoView(MeditationPage page) => DemoView(
       ppgSensor: page.ppgSensor,
       accelerometerSensor: page.accelerometerSensor,
@@ -63,6 +67,7 @@ class MeditationPage extends StatelessWidget implements DrawerPage {
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
   final UserAccount userAccount;
+  final MeditationAnalyticsStore analyticsStore;
   final Wearable? wearable;
 
   /// The mode being shown, or null for the picker. Owned by the parent so that
@@ -78,6 +83,7 @@ class MeditationPage extends StatelessWidget implements DrawerPage {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     required this.userAccount,
+    required this.analyticsStore,
     required this.selectedMode,
     required this.onModeSelected,
     this.wearable,

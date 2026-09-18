@@ -12,13 +12,18 @@ import 'package:open_wearable/apps/meditation_app/model/bio_adaptive_session_con
 import 'package:open_wearable/apps/meditation_app/model/biometric_source.dart';
 import 'package:open_wearable/apps/meditation_app/model/measurement_phase.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_prompt_policy.dart';
+import 'package:open_wearable/apps/meditation_app/model/meditation_analytics.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_session_generator.dart';
 import 'package:open_wearable/apps/meditation_app/model/stress_detector.dart';
 import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:open_wearable/apps/meditation_app/views/meditation_modes/bio_adaptive_view.dart';
+import 'package:open_wearable/apps/meditation_app/views/pages/weekly_analytics_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('HrHrvProcessor.hrvMinimumWindow', () {
     // The setter converts a Duration into sensor ticks via timestampExponent,
     // so it must round-trip for every exponent the sensors actually report.
@@ -291,6 +296,131 @@ void main() {
       expect(cloudPayload, isNot(contains('111 BPM')));
       expect(cloudPayload, isNot(contains('197 bpm')));
       expect(cloudPayload, isNot(contains('3 ms')));
+    });
+  });
+
+  group('MeditationAnalyticsStore', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+    });
+
+    test('combines regular modes and filters records by Monday-based week',
+        () async {
+      final store = MeditationAnalyticsStore();
+      final thisWeek = MeditationAnalyticsStore.startOfWeek(DateTime.now());
+      final previousWeek = thisWeek.subtract(const Duration(days: 7));
+
+      await store.recordSession(
+        MeditationSessionRecord(
+          mode: MeditationAnalyticsMode.bioAdaptive,
+          startedAt: thisWeek.add(const Duration(days: 1, hours: 9)),
+          endedAt: thisWeek.add(
+            const Duration(days: 1, hours: 9, minutes: 4),
+          ),
+          completed: true,
+        ),
+      );
+      await store.recordSession(
+        MeditationSessionRecord(
+          mode: MeditationAnalyticsMode.timed,
+          startedAt: thisWeek.add(const Duration(days: 3, hours: 18)),
+          endedAt: thisWeek.add(
+            const Duration(days: 3, hours: 18, minutes: 6),
+          ),
+          completed: false,
+        ),
+      );
+      await store.recordSession(
+        MeditationSessionRecord(
+          mode: MeditationAnalyticsMode.timed,
+          startedAt: previousWeek.add(const Duration(days: 2, hours: 12)),
+          endedAt: previousWeek.add(
+            const Duration(days: 2, hours: 12, minutes: 3),
+          ),
+          completed: true,
+        ),
+      );
+
+      final current = store.recordsForWeek(thisWeek);
+      expect(current, hasLength(2));
+      expect(
+        current.map((record) => record.mode),
+        containsAll([
+          MeditationAnalyticsMode.bioAdaptive,
+          MeditationAnalyticsMode.timed,
+        ]),
+      );
+      expect(
+        current.fold<int>(
+          0,
+          (seconds, record) => seconds + record.duration.inSeconds,
+        ),
+        const Duration(minutes: 10).inSeconds,
+      );
+      expect(store.recordsForWeek(previousWeek), hasLength(1));
+    });
+
+    test('persists session records locally and reloads them', () async {
+      final startedAt = DateTime.now().subtract(const Duration(minutes: 5));
+      final store = MeditationAnalyticsStore();
+      await store.recordSession(
+        MeditationSessionRecord(
+          mode: MeditationAnalyticsMode.bioAdaptive,
+          startedAt: startedAt,
+          endedAt: startedAt.add(const Duration(minutes: 5)),
+          completed: true,
+        ),
+      );
+
+      final reloaded = MeditationAnalyticsStore();
+      await reloaded.load();
+
+      expect(reloaded.records, hasLength(1));
+      expect(
+        reloaded.records.single.mode,
+        MeditationAnalyticsMode.bioAdaptive,
+      );
+      expect(reloaded.records.single.completed, isTrue);
+      expect(reloaded.records.single.duration, const Duration(minutes: 5));
+    });
+
+    testWidgets('weekly dashboard renders combined mode analytics',
+        (tester) async {
+      final store = MeditationAnalyticsStore();
+      final week = MeditationAnalyticsStore.startOfWeek(DateTime.now());
+      await store.recordSession(
+        MeditationSessionRecord(
+          mode: MeditationAnalyticsMode.bioAdaptive,
+          startedAt: week.add(const Duration(hours: 9)),
+          endedAt: week.add(const Duration(hours: 9, minutes: 4)),
+          completed: true,
+        ),
+      );
+      await store.recordSession(
+        MeditationSessionRecord(
+          mode: MeditationAnalyticsMode.timed,
+          startedAt: week.add(const Duration(days: 1, hours: 18)),
+          endedAt: week.add(
+            const Duration(days: 1, hours: 18, minutes: 6),
+          ),
+          completed: true,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WeeklyAnalyticsPage(analyticsStore: store),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Weekly Analytics'), findsOneWidget);
+      expect(find.text('Biosignal-Adaptive'), findsWidgets);
+      expect(find.text('Timed'), findsWidgets);
+      expect(find.text('10 min'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 

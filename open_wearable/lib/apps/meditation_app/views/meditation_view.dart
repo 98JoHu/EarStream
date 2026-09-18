@@ -3,12 +3,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
+import '../model/meditation_analytics.dart';
 import 'pages/drawer_page.dart';
 import 'pages/meditation_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/preferences_page.dart';
 import 'pages/weekly_analytics_page.dart';
-import 'pages/calendar_integration_page.dart';
 import 'pages/seal_check_page.dart';
 import 'pages/api_keys_page.dart';
 
@@ -36,11 +36,13 @@ class _MeditationViewState extends State<MeditationView> {
   int _selectedIndex = 0;
   MeditationMode? _selectedMode;
   late final UserAccount _userAccount;
+  late final MeditationAnalyticsStore _analyticsStore;
 
   @override
   void initState() {
     super.initState();
     _userAccount = UserAccount.fromEnvironment(dotenv.env);
+    _analyticsStore = MeditationAnalyticsStore()..load();
   }
 
   List<DrawerPage> get _pages => [
@@ -50,14 +52,14 @@ class _MeditationViewState extends State<MeditationView> {
           gyroscopeSensor: widget.gyroscopeSensor,
           sensorConfigProvider: widget.sensorConfigProvider,
           userAccount: _userAccount,
+          analyticsStore: _analyticsStore,
           wearable: widget.wearable,
           selectedMode: _selectedMode,
           onModeSelected: (mode) => setState(() => _selectedMode = mode),
         ),
         ProfilePage(userAccount: _userAccount),
         PreferencesPage(userAccount: _userAccount),
-        const WeeklyAnalyticsPage(),
-        CalendarIntegrationPage(userAccount: _userAccount),
+        WeeklyAnalyticsPage(analyticsStore: _analyticsStore),
         SealCheckPage(wearable: widget.wearable),
         ApiKeysPage(userAccount: _userAccount),
       ];

@@ -152,50 +152,6 @@ abstract class ConnectionManager extends ChangeNotifier {
   Future<void> updateUser(dynamic result);
 }
 
-class OutlookConnectionManager extends ConnectionManager {
-  OutlookConnectionManager({required super.userAccount});
-
-  @override
-  Future<dynamic> verifyCredentials() async {
-    if (userAccount.outlookSuppressionToken?.isEmpty ?? true) {
-      throw Exception('Outlook token cannot be empty.');
-    }
-
-    final now = DateTime.now().toUtc();
-    final url =
-        'https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${now.toIso8601String()}&endDateTime=${now.add(const Duration(minutes: 1)).toIso8601String()}';
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Authorization': 'Bearer ${userAccount.outlookSuppressionToken}',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Outlook API rejected token (Code: ${response.statusCode})',
-      );
-    }
-
-    // Pass the decoded JSON body forward to the next step
-    return json.decode(response.body);
-  }
-
-  @override
-  Future<void> updateUser(dynamic rawData) async {
-    final List events = rawData['value'] ?? [];
-
-    // Check if there's an active meeting that blocks the user's schedule
-    bool isCurrentlyInMeeting =
-        events.any((event) => event['showAs'] != 'free');
-
-    // Update your local user database or user state object here!
-    // Example: currentUser.isMutedByCalendar = isCurrentlyInMeeting;
-    print('Outlook Synced. User Busy Status: $isCurrentlyInMeeting');
-  }
-}
-
 class DeepseekManager extends ConnectionManager {
   DeepseekManager({required super.userAccount});
 

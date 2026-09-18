@@ -8,6 +8,7 @@ import 'user_account.dart';
 import 'measurement.dart';
 import 'meditation_session_generator.dart';
 import 'meditation_prompt_policy.dart';
+import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'stress_detector.dart' show StressLevel;
 import 'tencent_tts_client.dart';
@@ -39,6 +40,8 @@ class Meditation {
   final int maxSegments;
   Duration? meditationSegmentDuration;
   final MeditationPromptPolicy promptPolicy;
+  final MeditationAnalyticsStore? analyticsStore;
+  final MeditationAnalyticsMode? analyticsMode;
 
   final ValueNotifier<SessionProgress?> progress =
       ValueNotifier<SessionProgress?>(null);
@@ -49,13 +52,20 @@ class Meditation {
   Completer<void>? _resumeCompleter;
 
   MeditationScript? _script;
+  DateTime? _analyticsStartedAt;
+  bool _analyticsRecorded = false;
 
   Meditation({
     required this.userAccount,
     this.maxSegments = 10,
     this.meditationSegmentDuration,
     this.promptPolicy = MeditationPromptPolicy.standard,
-  }) {
+    this.analyticsStore,
+    this.analyticsMode,
+  }) : assert(
+          (analyticsStore == null) == (analyticsMode == null),
+          'Analytics store and mode must either both be set or both be null.',
+        ) {
     phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
     ttsService = TtsService(userAccount: userAccount);
   }
@@ -73,6 +83,19 @@ class Meditation {
 
   Future<void> start() async {
     isStopped = false;
+    _analyticsStartedAt = DateTime.now();
+    _analyticsRecorded = false;
+
+    try {
+      await _run();
+    } catch (_) {
+      _endRun();
+      await _recordAnalytics(completed: false);
+      rethrow;
+    }
+  }
+
+  Future<void> _run() async {
     // Start background music
     await _startBackgroundMusic();
 
@@ -115,6 +138,7 @@ class Meditation {
     // Mark the meditation as finished
     phase.value = MeditationPhase.finished;
     _endRun();
+    await _recordAnalytics(completed: true);
   }
 
   Future<void> stop() async {
@@ -125,6 +149,7 @@ class Meditation {
 
     await musicPlayer.stop();
     await ttsService.stop();
+    await _recordAnalytics(completed: false);
   }
 
   void pause() {
@@ -149,6 +174,7 @@ class Meditation {
     musicPlayer.dispose();
     ttsService.dispose();
     isPaused.dispose();
+    unawaited(_recordAnalytics(completed: false));
   }
 
   Future<void> _waitForResume() {
@@ -239,6 +265,28 @@ class Meditation {
   void _endRun() {
     _script?.dispose();
     _script = null;
+  }
+
+  Future<void> _recordAnalytics({required bool completed}) {
+    final store = analyticsStore;
+    final mode = analyticsMode;
+    final startedAt = _analyticsStartedAt;
+    if (store == null ||
+        mode == null ||
+        startedAt == null ||
+        _analyticsRecorded) {
+      return Future.value();
+    }
+
+    _analyticsRecorded = true;
+    return store.recordSession(
+      MeditationSessionRecord(
+        mode: mode,
+        startedAt: startedAt,
+        endedAt: DateTime.now(),
+        completed: completed,
+      ),
+    );
   }
 }
 
@@ -458,6 +506,8 @@ class BiometricMeditation extends Meditation {
     super.maxSegments = 10,
     super.meditationSegmentDuration,
     super.promptPolicy,
+    super.analyticsStore,
+    super.analyticsMode,
     required this.measurement,
   });
 
@@ -478,7 +528,11 @@ class ScheduledMeditation extends Meditation {
   ScheduledMeditation({
     required super.userAccount,
     required this.scheduledTime,
-  });
+    required MeditationAnalyticsStore analyticsStore,
+  }) : super(
+          analyticsStore: analyticsStore,
+          analyticsMode: MeditationAnalyticsMode.timed,
+        );
 
   bool isDue() {
     final now = DateTime.now();

@@ -6,6 +6,7 @@ import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 
 import 'user_account.dart';
 import 'bio_adaptive_session_config.dart';
+import 'meditation_analytics.dart';
 import 'biometric_source.dart';
 import 'stress_detector.dart';
 import 'measurement_phase.dart';
@@ -16,6 +17,7 @@ import 'hr_hrv_processor.dart' show HeartRateSample;
 class Measurement {
   final UserAccount userAccount;
   final BioAdaptiveSessionConfig sessionConfig;
+  final MeditationAnalyticsStore? analyticsStore;
 
   final BiometricSource _source;
   late final StressDetector _detector;
@@ -32,6 +34,7 @@ class Measurement {
     required StressThresholdProvider stressThresholdProvider,
     required BaselineHeartRateProvider baselineHeartRateProvider,
     required this.sessionConfig,
+    this.analyticsStore,
   }) : _source = source {
     _detector = StressDetector(
       thresholds: stressThresholdProvider,
@@ -54,6 +57,7 @@ class Measurement {
     required SensorConfigurationProvider sensorConfigProvider,
     required UserAccount userAccount,
     BioAdaptiveSessionConfig sessionConfig = BioAdaptiveSessionConfig.standard,
+    MeditationAnalyticsStore? analyticsStore,
   }) {
     return Measurement._(
       userAccount: userAccount,
@@ -79,6 +83,7 @@ class Measurement {
       ),
       baselineHeartRateProvider: () => userAccount.baselineBiometrics.$1,
       sessionConfig: sessionConfig,
+      analyticsStore: analyticsStore,
     );
   }
 
@@ -166,6 +171,9 @@ class Measurement {
       measurement: this,
       meditationSegmentDuration: sessionConfig.meditationSegmentDuration,
       promptPolicy: sessionConfig.promptPolicy,
+      analyticsStore: analyticsStore,
+      analyticsMode:
+          analyticsStore == null ? null : MeditationAnalyticsMode.bioAdaptive,
     );
     meditation.value = session;
 

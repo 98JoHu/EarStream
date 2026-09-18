@@ -196,7 +196,6 @@ class UserAccount {
   double? stressThreshold;
 
   // API keys and tokens
-  String? outlookSuppressionToken;
   String? deepseekApiKey;
   bool hasValidDeepseekKey = false;
   String? elevenLabsApiKey;
@@ -227,7 +226,6 @@ class UserAccount {
     this.meditationEnvironment,
     this.additionalPreferences,
     this.stressThreshold,
-    this.outlookSuppressionToken,
     this.deepseekApiKey,
     this.elevenLabsApiKey,
     this.ttsProvider = TtsProviderOption.elevenLabs,

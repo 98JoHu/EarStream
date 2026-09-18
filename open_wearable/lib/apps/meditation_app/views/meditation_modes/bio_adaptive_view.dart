@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../model/measurement.dart';
 import '../../model/bio_adaptive_session_config.dart';
+import '../../model/meditation_analytics.dart';
 import '../../model/measurement_phase.dart' show MonitoringPhase;
 import '../../model/stress_detector.dart' show StressLevel;
 import '../../model/user_account.dart';
@@ -23,6 +24,7 @@ class BioAdaptiveView extends StatefulWidget {
   final SensorConfigurationProvider sensorConfigProvider;
   final UserAccount? userAccount;
   final BioAdaptiveSessionConfig sessionConfig;
+  final MeditationAnalyticsStore? analyticsStore;
   const BioAdaptiveView({
     super.key,
     required this.ppgSensor,
@@ -31,6 +33,7 @@ class BioAdaptiveView extends StatefulWidget {
     required this.sensorConfigProvider,
     this.userAccount,
     this.sessionConfig = BioAdaptiveSessionConfig.standard,
+    this.analyticsStore,
   });
 
   @override
@@ -50,6 +53,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
       sensorConfigProvider: widget.sensorConfigProvider,
       userAccount: account,
       sessionConfig: widget.sessionConfig,
+      analyticsStore: widget.analyticsStore,
     );
     setState(() {
       _measurement = measurement;

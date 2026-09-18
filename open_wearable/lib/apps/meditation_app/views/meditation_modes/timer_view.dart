@@ -4,11 +4,17 @@ import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../model/meditation.dart' show ScheduledMeditation;
+import '../../model/meditation_analytics.dart';
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/api_warning.dart';
 
 class TimerView extends StatefulWidget {
-  const TimerView({super.key});
+  final MeditationAnalyticsStore analyticsStore;
+
+  const TimerView({
+    super.key,
+    required this.analyticsStore,
+  });
 
   @override
   State<TimerView> createState() => _TimerViewState();
@@ -34,6 +40,7 @@ class _TimerViewState extends State<TimerView> {
     if (_currentMeditation.value != null) {
       _currentMeditation.value!.stop();
     }
+    _currentMeditation.dispose();
     super.dispose();
   }
 
@@ -56,6 +63,7 @@ class _TimerViewState extends State<TimerView> {
     ScheduledMeditation scheduledMeditation = ScheduledMeditation(
       userAccount: userAccount,
       scheduledTime: time,
+      analyticsStore: widget.analyticsStore,
     );
     setState(() {
       _scheduledMeditations.add(scheduledMeditation);
@@ -124,6 +132,7 @@ class _TimerViewState extends State<TimerView> {
                                   ScheduledMeditation(
                                 userAccount: userAccount,
                                 scheduledTime: DateTime.now(),
+                                analyticsStore: widget.analyticsStore,
                               );
                               setState(() {
                                 _currentMeditation.value = scheduledMeditation;
