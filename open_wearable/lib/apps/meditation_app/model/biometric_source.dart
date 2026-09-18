@@ -453,22 +453,24 @@ class SensorBiometricSource implements BiometricSource {
   }
 }
 
-class SimulatedBiometricSource implements BiometricSource {
+/// Replays the recording-derived stress trajectory from the original app.
+///
+/// The centre line is the original two-minute scenario: HR 71 -> 80 -> 97
+/// BPM and RMSSD 80 -> 50 -> 12 ms. The first transition lasts 90 seconds and
+/// the stress spike lasts another 30 seconds. The small mean-reverting
+/// variation is also retained from the original implementation so the signal
+/// has the same natural character instead of looking perfectly linear.
+class RecordedStressBiometricSource implements BiometricSource {
   final ValueNotifier<ActivityLevel> _activityLevel;
 
-  /// The two ends of the scripted arc: the resting values it starts from and
-  /// the values its spike peaks at. The caller picks both, so the simulation
-  /// depends on nothing but its own constructor arguments.
-  final int startHeartRate;
-  final double startRmssd;
-  final int peakHeartRate;
-  final double peakRmssd;
+  static const double baselineHeartRate = 71;
+  static const double baselineRmssd = 80;
+  static const double buildUpHeartRate = 80;
+  static const double buildUpRmssd = 50;
+  static const double peakHeartRate = 97;
+  static const double peakRmssd = 12;
 
-  SimulatedBiometricSource({
-    required this.startHeartRate,
-    required this.startRmssd,
-    required this.peakHeartRate,
-    required this.peakRmssd,
+  RecordedStressBiometricSource({
     required ActivityLevel restingActivityLevel,
   }) : _activityLevel = ValueNotifier<ActivityLevel>(restingActivityLevel);
 
@@ -478,6 +480,9 @@ class SimulatedBiometricSource implements BiometricSource {
   Timer? _timer;
   bool _measurementEnabled = true;
   HeartRateSample? _latestEstimate;
+  bool _relaxationActive = false;
+  double _relaxationStartHr = peakHeartRate;
+  double _relaxationStartHrv = peakRmssd;
 
   @override
   Stream<HeartRateSample> get biometrics => _controller.stream;
@@ -513,23 +518,15 @@ class SimulatedBiometricSource implements BiometricSource {
   final Random _random = Random();
   static const double _ouAlpha = 0.9672;
 
-  /// How far up the start -> peak ramp the build-up climbs before the spike.
-  /// Kept short of the peak so the rise is visible before anything triggers.
-  static const double _buildUpIntensity = 0.3;
+  static const double _hrOuSigmaStep = 0.763;
+  static const double _buildUpEndSec = 90;
+  static const double _spikeEndSec = 120;
 
-  /// Step size of the HR wandering, scaled to the ramp: the 0.763 was tuned
-  /// against a 26 BPM span, and on a narrower one an unscaled sigma would
-  /// swamp the trend.
-  late final double _hrOuSigmaStep = 0.763 *
-      (((peakHeartRate - startHeartRate).abs() / 26.0).clamp(0.15, 1.0));
-
-  // Scenario timeline, in seconds from start: a rising build-up that stops
-  // short of the peak, a spike that reaches it, a plateau long enough for a
-  // meditation segment or two, then a recovery back to the starting values.
-  static const double _buildUpEndSec = 20;
-  static const double _spikeEndSec = 35;
-  static const double _plateauEndSec = 80;
-  static const double _recoveryEndSec = 120;
+  // The original app started this six-minute recovery when the meditation
+  // began, allowing its normal HR-based early-exit behavior to remain intact.
+  static const double _relaxationTargetHr = 62;
+  static const double _relaxationTargetHrv = 90;
+  static const double _relaxationDurationSec = 360;
 
   @override
   void start() {
@@ -574,19 +571,22 @@ class SimulatedBiometricSource implements BiometricSource {
     _hrOuState = 0;
     _hrvOuState = 0;
     _hasGaussianSpare = false;
+    _relaxationActive = false;
   }
 
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _emitNextSample();
     });
   }
 
   void _emitNextSample() {
     if (!_measurementEnabled) return;
-    final tSec = _clock.elapsedMilliseconds / 1000.0;
-    final (hr, hrv) = _scenarioValues(tSec);
+    final tSec = _clock.elapsed.inSeconds.toDouble();
+    final (hr, hrv) = _relaxationActive
+        ? _relaxationValues(tSec)
+        : stressTrajectoryAt(_clock.elapsed);
 
     // Mean-reverting random walk around the deterministic trend.
     _hrOuState = (_ouAlpha * _hrOuState) + (_hrOuSigmaStep * _gaussian());
@@ -606,31 +606,48 @@ class SimulatedBiometricSource implements BiometricSource {
     _controller.add(sample);
   }
 
-  /// Deterministic HR/HRV arc, as a fraction of the way from the starting
-  /// values (0) to the peak values (1).
-  double _scenarioIntensity(double tSec) {
+  /// Returns the exact centre line of the old recording-derived scenario.
+  /// Exposed as a pure function so its keyframes cannot silently drift.
+  static (double heartRate, double rmssd) stressTrajectoryAt(
+    Duration elapsed,
+  ) {
+    final tSec = max(0, elapsed.inSeconds).toDouble();
     if (tSec <= _buildUpEndSec) {
-      return _buildUpIntensity * (tSec / _buildUpEndSec);
+      final fraction = tSec / _buildUpEndSec;
+      return (
+        baselineHeartRate + (buildUpHeartRate - baselineHeartRate) * fraction,
+        baselineRmssd - (baselineRmssd - buildUpRmssd) * fraction,
+      );
     }
-    if (tSec <= _spikeEndSec) {
-      final frac = (tSec - _buildUpEndSec) / (_spikeEndSec - _buildUpEndSec);
-      return _buildUpIntensity + (1.0 - _buildUpIntensity) * frac;
-    }
-    if (tSec <= _plateauEndSec) {
-      return 1.0;
-    }
-    if (tSec <= _recoveryEndSec) {
-      final frac = (tSec - _plateauEndSec) / (_recoveryEndSec - _plateauEndSec);
-      return 1.0 - frac;
-    }
-    return 0.0;
+
+    final fraction = ((tSec - _buildUpEndSec) / (_spikeEndSec - _buildUpEndSec))
+        .clamp(0.0, 1.0);
+    return (
+      buildUpHeartRate + (peakHeartRate - buildUpHeartRate) * fraction,
+      buildUpRmssd - (buildUpRmssd - peakRmssd) * fraction,
+    );
   }
 
-  (double hr, double hrv) _scenarioValues(double tSec) {
-    final intensity = _scenarioIntensity(tSec);
-    final hr = startHeartRate + (peakHeartRate - startHeartRate) * intensity;
-    final hrv = startRmssd + (peakRmssd - startRmssd) * intensity;
-    return (hr, hrv);
+  /// Switches from the stress recording into the original gradual recovery
+  /// once the adaptive meditation has started.
+  void startRelaxationScenario() {
+    final latest = _latestEstimate;
+    _relaxationStartHr = latest?.heartRate.toDouble() ?? peakHeartRate;
+    _relaxationStartHrv = latest?.rmssd ?? peakRmssd;
+    _relaxationActive = true;
+    _clock
+      ..reset()
+      ..start();
+  }
+
+  (double heartRate, double rmssd) _relaxationValues(double tSec) {
+    final fraction = (tSec / _relaxationDurationSec).clamp(0.0, 1.0);
+    final eased = fraction * (2.0 - fraction);
+    return (
+      _relaxationStartHr + (_relaxationTargetHr - _relaxationStartHr) * eased,
+      _relaxationStartHrv +
+          (_relaxationTargetHrv - _relaxationStartHrv) * eased,
+    );
   }
 
   /// Polar Box-Muller transform — standard-normal samples for the OU wandering.

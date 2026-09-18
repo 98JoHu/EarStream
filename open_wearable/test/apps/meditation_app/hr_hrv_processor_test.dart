@@ -359,7 +359,56 @@ void main() {
       );
 
       expect(find.text('Simulate Stress'), findsNothing);
+      expect(find.text('Play Stress'), findsNothing);
       expect(find.text('Reset'), findsOneWidget);
+    });
+  });
+
+  group('recorded stress trajectory', () {
+    test('preserves every original recording-derived keyframe', () {
+      expect(
+        RecordedStressBiometricSource.stressTrajectoryAt(Duration.zero),
+        (71.0, 80.0),
+      );
+      expect(
+        RecordedStressBiometricSource.stressTrajectoryAt(
+          const Duration(seconds: 90),
+        ),
+        (80.0, 50.0),
+      );
+      expect(
+        RecordedStressBiometricSource.stressTrajectoryAt(
+          const Duration(seconds: 120),
+        ),
+        (97.0, 12.0),
+      );
+      expect(
+        RecordedStressBiometricSource.stressTrajectoryAt(
+          const Duration(minutes: 3),
+        ),
+        (97.0, 12.0),
+      );
+    });
+
+    testWidgets('regular mode exposes the stress playback control',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: BioAdaptiveControls(
+              earstreamState: EarstreamState.running,
+              onStart: () {},
+              onResume: () {},
+              onPause: () {},
+              onSimulateStress: () {},
+              onReset: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Play Stress'), findsOneWidget);
+      expect(find.text('Simulate Stress'), findsNothing);
     });
   });
 

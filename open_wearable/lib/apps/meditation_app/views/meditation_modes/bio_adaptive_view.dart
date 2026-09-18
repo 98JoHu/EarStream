@@ -82,10 +82,10 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
     });
   }
 
-  void _simulateStress(UserAccount account) {
+  void _playRecordedStress(UserAccount account) {
     if (!widget.sessionConfig.allowStressSimulation) return;
     _measurement?.dispose();
-    final measurement = Measurement.simulated(
+    final measurement = Measurement.recordedStress(
       userAccount: account,
       restingActivityLevel: ActivityLevel.resting,
       sessionConfig: widget.sessionConfig,
@@ -146,7 +146,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
           onStart: () => _startEarstream(userAccount),
           onResume: _resumeEarstream,
           onPause: _pauseEarstream,
-          onSimulateStress: () => _simulateStress(userAccount),
+          onSimulateStress: () => _playRecordedStress(userAccount),
           onReset: _resetEarstream,
           showStressSimulation: widget.sessionConfig.allowStressSimulation,
         ),
@@ -218,7 +218,7 @@ class BioAdaptiveControls extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: isRunning ? onSimulateStress : null,
                     icon: const Icon(Icons.psychology),
-                    label: const Text("Simulate Stress"),
+                    label: const Text("Play Stress"),
                   ),
                 ),
                 const SizedBox(width: 8),

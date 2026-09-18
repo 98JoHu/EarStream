@@ -98,23 +98,20 @@ class Measurement {
     );
   }
 
-  factory Measurement.simulated({
+  factory Measurement.recordedStress({
     required UserAccount userAccount,
     required ActivityLevel restingActivityLevel,
     BioAdaptiveSessionConfig sessionConfig = BioAdaptiveSessionConfig.standard,
   }) {
     return Measurement._(
       userAccount: userAccount,
-      source: SimulatedBiometricSource(
-        startHeartRate: 50,
-        peakHeartRate: 120,
-        startRmssd: 80.0,
-        peakRmssd: 20.0,
+      source: RecordedStressBiometricSource(
         restingActivityLevel: restingActivityLevel,
       ),
       phases: [StressMonitoringPhase()],
       stressThresholdProvider: () => (90, 40.0),
-      baselineHeartRateProvider: () => 60,
+      baselineHeartRateProvider: () =>
+          RecordedStressBiometricSource.baselineHeartRate.round(),
       sessionConfig: sessionConfig,
     );
   }
@@ -200,6 +197,9 @@ class Measurement {
   void _startMeditation() {
     if (meditation.value != null) return;
     _meditationDeadline.satisfy();
+    if (_source case final RecordedStressBiometricSource recordedStress) {
+      recordedStress.startRelaxationScenario();
+    }
     final session = BiometricMeditation(
       userAccount: userAccount,
       measurement: this,
