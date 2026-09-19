@@ -1,35 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 
-enum StressLevel {
-  relaxed(
-    label: "Relaxed",
-    icon: Icons.spa_rounded,
-    color: Colors.green,
-    backgroundColor: Color(0xFFC8E6C9),
-  ),
-  stressed(
-    label: "Stressed",
-    icon: Icons.bolt_rounded,
-    color: Colors.red,
-    backgroundColor: Color(0xFFFFCDD2),
-  );
-
-  final String label;
-  final IconData icon;
-  final Color color;
-  final Color backgroundColor;
-
-  const StressLevel({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.backgroundColor,
-  });
-}
+enum StressLevel { relaxed, stressed }
 
 typedef StressThresholdProvider = (int heartRate, double rmssd) Function();
 typedef BaselineHeartRateProvider = int Function();

@@ -79,25 +79,7 @@ class _TimerViewState extends State<TimerView> {
 
   void _startMeditation(ScheduledMeditation meditation) {
     _currentMeditation.value = meditation;
-    unawaited(
-      meditation
-          .start()
-          .catchError((Object error, StackTrace stackTrace) async {
-        debugPrint('Error starting scheduled meditation: $error');
-        debugPrint('$stackTrace');
-        if (mounted && _currentMeditation.value == meditation) {
-          _currentMeditation.value = null;
-          setState(() {});
-        }
-        try {
-          await meditation.stop();
-        } catch (stopError) {
-          debugPrint('Error stopping failed meditation: $stopError');
-        } finally {
-          meditation.dispose();
-        }
-      }),
-    );
+    unawaited(meditation.start());
   }
 
   void _completeMeditation(Meditation meditation) {

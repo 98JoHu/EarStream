@@ -67,7 +67,8 @@ class MeditationTile extends StatelessWidget {
             }
             if (phase == MeditationPhase.failed) {
               return _FailedMeditation(
-                message: meditation.failureMessage.value ??
+                title: meditation.failureTitle ?? 'Meditation interrupted',
+                message: meditation.failureMessage ??
                     'The meditation could not continue.',
                 onDismissed: () => _complete(meditation),
               );
@@ -121,10 +122,12 @@ class MeditationTile extends StatelessWidget {
 }
 
 class _FailedMeditation extends StatelessWidget {
+  final String title;
   final String message;
   final VoidCallback onDismissed;
 
   const _FailedMeditation({
+    required this.title,
     required this.message,
     required this.onDismissed,
   });
@@ -141,13 +144,15 @@ class _FailedMeditation extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  Icons.cloud_off_outlined,
+                  title == 'Voice service interrupted'
+                      ? Icons.cloud_off_outlined
+                      : Icons.error_outline,
                   color: Theme.of(context).colorScheme.error,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Voice service interrupted',
+                    title,
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium

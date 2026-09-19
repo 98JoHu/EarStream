@@ -21,6 +21,67 @@ import '../../model/activity_tracker.dart' show ActivityLevel;
 import '../../widgets/meditation_tile.dart';
 import '../../widgets/api_warning.dart';
 
+extension on ActivityLevel {
+  String get presentationLabel => switch (this) {
+        ActivityLevel.resting => 'Resting',
+        ActivityLevel.light => 'Light',
+        ActivityLevel.moderate => 'Moderate',
+        ActivityLevel.vigorous => 'Vigorous',
+        ActivityLevel.intense => 'Intense',
+      };
+
+  IconData get presentationIcon => switch (this) {
+        ActivityLevel.resting => Icons.airline_seat_individual_suite,
+        ActivityLevel.light => Icons.directions_walk,
+        ActivityLevel.moderate => Icons.directions_run,
+        ActivityLevel.vigorous => Icons.fitness_center,
+        ActivityLevel.intense => Icons.local_fire_department,
+      };
+}
+
+extension on StressLevel {
+  String get presentationLabel => switch (this) {
+        StressLevel.relaxed => 'Relaxed',
+        StressLevel.stressed => 'Stressed',
+      };
+
+  IconData get presentationIcon => switch (this) {
+        StressLevel.relaxed => Icons.spa_rounded,
+        StressLevel.stressed => Icons.bolt_rounded,
+      };
+
+  Color get presentationColor => switch (this) {
+        StressLevel.relaxed => Colors.green,
+        StressLevel.stressed => Colors.red,
+      };
+
+  Color get presentationBackgroundColor => switch (this) {
+        StressLevel.relaxed => const Color(0xFFC8E6C9),
+        StressLevel.stressed => const Color(0xFFFFCDD2),
+      };
+}
+
+extension on MonitoringPhase {
+  String get presentationLabel => switch (this) {
+        CalibrationPhase(:final duration) =>
+          'Calibration (${duration.inSeconds}s)',
+        BaselinePhase() => 'Monitoring · Baseline Adjustment',
+        StressMonitoringPhase() => 'Monitoring',
+      };
+
+  IconData get presentationIcon => switch (this) {
+        CalibrationPhase() => Icons.settings_outlined,
+        BaselinePhase() => Icons.straighten_outlined,
+        StressMonitoringPhase() => Icons.monitor_heart,
+      };
+
+  Color get presentationColor => switch (this) {
+        CalibrationPhase() => Colors.orange,
+        BaselinePhase() => Colors.blue,
+        StressMonitoringPhase() => const Color(0xFF4ECDC4),
+      };
+}
+
 enum EarstreamState { idle, running, paused }
 
 class BioAdaptiveView extends StatefulWidget {
@@ -511,10 +572,10 @@ class _ActivityLevelTile extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(value.icon, color: Colors.blueGrey[700]),
+              Icon(value.presentationIcon, color: Colors.blueGrey[700]),
               const SizedBox(width: 8),
               Text(
-                value.label,
+                value.presentationLabel,
                 style: TextStyle(
                   color: Colors.blueGrey[700],
                   fontWeight: FontWeight.w600,
@@ -546,17 +607,20 @@ class _StressLevelTile extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: value.backgroundColor,
+            color: value.presentationBackgroundColor,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(value.icon, color: value.color),
+              Icon(
+                value.presentationIcon,
+                color: value.presentationColor,
+              ),
               const SizedBox(width: 8),
               Text(
-                value.label,
+                value.presentationLabel,
                 style: TextStyle(
-                  color: value.color,
+                  color: value.presentationColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -596,21 +660,27 @@ class _MonitoringPhaseTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: phase.color.withValues(alpha: 0.1),
-            border: Border.all(color: phase.color.withValues(alpha: 0.3)),
+            color: phase.presentationColor.withValues(alpha: 0.1),
+            border: Border.all(
+              color: phase.presentationColor.withValues(alpha: 0.3),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(phase.icon, color: phase.color, size: 20),
+                  Icon(
+                    phase.presentationIcon,
+                    color: phase.presentationColor,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      phase.label,
+                      phase.presentationLabel,
                       style: TextStyle(
-                        color: phase.color,
+                        color: phase.presentationColor,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -620,8 +690,9 @@ class _MonitoringPhaseTile extends StatelessWidget {
                       width: 96,
                       child: LinearProgressIndicator(
                         value: progressValue,
-                        color: phase.color,
-                        backgroundColor: phase.color.withValues(alpha: 0.14),
+                        color: phase.presentationColor,
+                        backgroundColor:
+                            phase.presentationColor.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -632,7 +703,7 @@ class _MonitoringPhaseTile extends StatelessWidget {
                 Text(
                   '$waitingMessage Check the earbud fit and remain still; only measured values will be used.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: phase.color,
+                        color: phase.presentationColor,
                       ),
                 ),
               ],

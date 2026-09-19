@@ -64,6 +64,7 @@ class MeditationAnalyticsStore extends ChangeNotifier {
   final List<MeditationSessionRecord> _records = [];
   Future<void>? _loadFuture;
   bool _isLoading = true;
+  bool _isDisposed = false;
 
   MeditationAnalyticsStore({
     Future<SharedPreferences> Function()? preferencesProvider,
@@ -98,7 +99,7 @@ class MeditationAnalyticsStore extends ChangeNotifier {
     _prune(DateTime.now());
     _sortNewestFirst();
     _isLoading = false;
-    notifyListeners();
+    _notifyListenersIfMounted();
   }
 
   Future<void> recordSession(MeditationSessionRecord record) async {
@@ -111,7 +112,7 @@ class MeditationAnalyticsStore extends ChangeNotifier {
     } catch (_) {
       // Keep the in-memory result even if local persistence is unavailable.
     }
-    notifyListeners();
+    _notifyListenersIfMounted();
   }
 
   List<MeditationSessionRecord> recordsForWeek(DateTime dateInWeek) {
@@ -147,5 +148,16 @@ class MeditationAnalyticsStore extends ChangeNotifier {
 
   void _sortNewestFirst() {
     _records.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+  }
+
+  void _notifyListenersIfMounted() {
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    super.dispose();
   }
 }

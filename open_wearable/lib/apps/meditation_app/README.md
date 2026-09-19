@@ -221,6 +221,11 @@ Requested stream rates are 200 Hz for PPG and 100 Hz for accelerometer and
 gyroscope. When sensor metadata is unavailable, the configured fallbacks are
 100 Hz for all three streams.
 
+Named optical axes are resolved before positional fallbacks are used. Red and
+infrared matching is deliberately disambiguated, so an `infrared` label cannot
+also be selected as the red channel. Cartesian motion axes use token/exact-name
+matching rather than arbitrary substring matches.
+
 The low-level filters, quality scoring, artifact rejection, adaptive channel
 selection, and estimator coefficients live next to the implementation in
 `model/hr_hrv_processor.dart`. They are intentionally not duplicated in the
@@ -314,6 +319,11 @@ The TTS route is selected once when a meditation object is created.
 - After those failures, the meditation stops and shows a voice-service failure
   card. It does not switch voices in the middle of a meditation.
 
+Other unexpected playback/session failures also stop both narration and
+ambience and show a dismissible interruption card. Failure handling belongs to
+the shared meditation session, so timed and both demo/regular meditation paths
+behave consistently.
+
 Background ambience loops at volume `0.3`. Cloud narration requests transient
 audio ducking so the ambience is lowered rather than stopped during speech.
 
@@ -343,6 +353,11 @@ At startup, non-empty credentials loaded from this asset are marked usable so
 the controlled demo can start without a separate verification step. Editing a
 credential, Tencent region, or Tencent voice in the API Keys page marks the
 affected service unverified until its live service check succeeds.
+
+Connection checks are revisioned: a response from an older check is ignored if
+the credentials or region changed while it was in flight. Verifying a different
+ElevenLabs account also clears a selected voice ID when that voice is not
+available to the newly verified account.
 
 For a Mainland China Tencent setup, use:
 
@@ -379,6 +394,10 @@ The in-app drawer contains:
 Voice/provider settings exist only on API Keys. Speaking speed remains a
 meditation-delivery preference.
 
+When no sensor baseline exists, profile-derived HR/RMSSD estimates can provide
+context outside the live baseline workflow. These estimates are calculated on
+demand and are not stored in the measured-baseline fields.
+
 ## Completion and analytics
 
 Completed sessions show a success card and the single-line mood choices
@@ -410,6 +429,15 @@ High-level parameters are centralized in `configs/`:
 `model/bio_adaptive_session_config.dart` maps the regular and conference-demo
 configuration into the same measurement/session pipeline.
 
+The shared session lifecycle and mode-specific meditation subclasses live in
+`model/meditation.dart`; cloud/device narration is isolated in
+`model/tts_service.dart`. Credential verification is similarly kept in
+`model/service_connection_manager.dart`, while `widgets/status_field.dart`
+only renders its state. Sensor-name interpretation is isolated in
+`model/sensor_axis_mapping.dart`. Labels, icons, and colors for monitoring,
+stress, and activity states remain in the bio-adaptive view rather than the
+domain models.
+
 ## Directory structure
 
 ```text
@@ -429,6 +457,7 @@ meditation_app/
 |   |-- activity_tracker.dart
 |   |-- bio_adaptive_session_config.dart
 |   |-- biometric_source.dart
+|   |-- elevenlabs_api.dart
 |   |-- hr_hrv_processor.dart
 |   |-- measurement.dart
 |   |-- measurement_phase.dart
@@ -437,8 +466,11 @@ meditation_app/
 |   |-- meditation_prompt_policy.dart
 |   |-- meditation_session_generator.dart
 |   |-- monitoring_meditation_deadline.dart
+|   |-- sensor_axis_mapping.dart
+|   |-- service_connection_manager.dart
 |   |-- stress_detector.dart
 |   |-- tencent_tts_client.dart
+|   |-- tts_service.dart
 |   `-- user_account.dart
 |-- views/
 |   |-- meditation_modes/
@@ -464,7 +496,8 @@ flutter run
 The focused test suite covers configuration alignment, calibration isolation,
 demo deadline estimates, provider/region parsing, voice selection, demo privacy,
 stress playback, HR-only recovery, one-segment demo behavior, presentation,
-weekly analytics, and Tencent signing/chunking.
+weekly analytics, Tencent signing/chunking, sensor-axis disambiguation, stale
+credential checks, prompt formatting, and demographic-baseline isolation.
 
 ## Current limitations
 

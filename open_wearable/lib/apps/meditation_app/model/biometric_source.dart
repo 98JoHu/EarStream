@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_processor.dart';
+import 'sensor_axis_mapping.dart';
 import 'activity_tracker.dart';
 
 class PpgOpticalSample {
@@ -348,16 +349,6 @@ class SensorBiometricSource implements BiometricSource {
       return null;
     }
 
-    int? findAxisIndex(List<String> keywords) {
-      for (var i = 0; i < sensor.axisNames.length; i++) {
-        final axis = sensor.axisNames[i].toLowerCase();
-        if (keywords.any(axis.contains)) {
-          return i;
-        }
-      }
-      return null;
-    }
-
     double valueAt(int? index, double fallback) {
       if (index != null && index >= 0 && index < values.length) {
         return values[index];
@@ -372,10 +363,34 @@ class SensorBiometricSource implements BiometricSource {
 
     // Usually channels are [red, ir, green, ambient], but we prefer axis-name
     // matching when available to avoid firmware-order mismatches.
-    final red = valueAt(findAxisIndex(['red']), fallbackRed);
-    final ir = valueAt(findAxisIndex(['ir', 'infrared']), fallbackIr);
-    final green = valueAt(findAxisIndex(['green']), fallbackGreen);
-    final ambient = valueAt(findAxisIndex(['ambient']), fallbackAmbient);
+    final red = valueAt(
+      findOpticalSensorAxisIndex(
+        sensor.axisNames,
+        OpticalSensorChannel.red,
+      ),
+      fallbackRed,
+    );
+    final ir = valueAt(
+      findOpticalSensorAxisIndex(
+        sensor.axisNames,
+        OpticalSensorChannel.infrared,
+      ),
+      fallbackIr,
+    );
+    final green = valueAt(
+      findOpticalSensorAxisIndex(
+        sensor.axisNames,
+        OpticalSensorChannel.green,
+      ),
+      fallbackGreen,
+    );
+    final ambient = valueAt(
+      findOpticalSensorAxisIndex(
+        sensor.axisNames,
+        OpticalSensorChannel.ambient,
+      ),
+      fallbackAmbient,
+    );
 
     return PpgOpticalSample(
       timestamp: data.timestamp,
@@ -391,16 +406,6 @@ class SensorBiometricSource implements BiometricSource {
     SensorValue data,
     List<double> values,
   ) {
-    int? findAxisIndex(List<String> keywords) {
-      for (var i = 0; i < sensor.axisNames.length; i++) {
-        final axis = sensor.axisNames[i].toLowerCase();
-        if (keywords.any(axis.contains)) {
-          return i;
-        }
-      }
-      return null;
-    }
-
     double valueAt(int? index, double fallback) {
       if (index != null && index >= 0 && index < values.length) {
         return values[index];
@@ -412,9 +417,18 @@ class SensorBiometricSource implements BiometricSource {
     final fallbackY = values.length > 1 ? values[1] : 0.0;
     final fallbackZ = values.length > 2 ? values[2] : 0.0;
 
-    final x = valueAt(findAxisIndex(['x']), fallbackX);
-    final y = valueAt(findAxisIndex(['y']), fallbackY);
-    final z = valueAt(findAxisIndex(['z']), fallbackZ);
+    final x = valueAt(
+      findCartesianSensorAxisIndex(sensor.axisNames, 'x'),
+      fallbackX,
+    );
+    final y = valueAt(
+      findCartesianSensorAxisIndex(sensor.axisNames, 'y'),
+      fallbackY,
+    );
+    final z = valueAt(
+      findCartesianSensorAxisIndex(sensor.axisNames, 'z'),
+      fallbackZ,
+    );
 
     return PpgMotionSample(
       timestamp: data.timestamp,

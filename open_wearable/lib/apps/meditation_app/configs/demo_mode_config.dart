@@ -30,9 +30,9 @@ abstract final class DemoModeConfig {
   // Mainland China deployment checklist:
   // 1. Use Tencent rather than ElevenLabs for TTS.
   // 2. Select the Mainland China Tencent endpoint/region below.
-  // 3. Supply a SecretId/SecretKey belonging to a Tencent Cloud account where
-  //    Mainland China TTS is activated. International credentials/service
-  //    activation are not assumed to carry over.
+  // 3. Supply TENCENT_SECRET_ID and TENCENT_SECRET_KEY belonging to a Tencent
+  //    Cloud account where Mainland China TTS is activated. International
+  //    credentials/service activation are not assumed to carry over.
   // 4. DeepSeek needs no endpoint change; keep its existing API key and global
   //    base URL. No profile or physiological values are added to its prompts.
   //
@@ -46,23 +46,7 @@ abstract final class DemoModeConfig {
   };
   static const String chinaTencentApiHost =
       OverallMeditationConfig.tencentChinaHost;
-  static const String chinaTencentSecretIdEnvironmentKey =
-      OverallMeditationConfig.tencentSecretIdEnvironmentKey;
-  static const String chinaTencentSecretKeyEnvironmentKey =
-      OverallMeditationConfig.tencentSecretKeyEnvironmentKey;
-  static const String chinaTencentLegacySecretKeyEnvironmentKey =
-      OverallMeditationConfig.tencentLegacySecretKeyEnvironmentKey;
   static const bool chinaRequiresDeepseekEndpointOverride = false;
   static const String chinaDeepseekApiBaseUrl =
       OverallMeditationConfig.deepseekApiBaseUrl;
-
-  // Current EU/international Tencent counterpart for comparison.
-  static const Map<String, String> internationalEnvironmentOverrides = {
-    OverallMeditationConfig.ttsProviderEnvironmentKey:
-        OverallMeditationConfig.tencentProviderEnvironmentValue,
-    OverallMeditationConfig.tencentRegionEnvironmentKey:
-        OverallMeditationConfig.tencentInternationalRegion,
-  };
-  static const String internationalTencentApiHost =
-      OverallMeditationConfig.tencentInternationalHost;
 }

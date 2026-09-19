@@ -160,12 +160,7 @@ class _DemoViewState extends State<DemoView> {
       promptPolicy: MeditationPromptPolicy.conferenceDemo,
     );
     _personalizedMeditation.value = meditation;
-    unawaited(
-      meditation.start().catchError((Object error, StackTrace stackTrace) {
-        debugPrint('Error starting personalized demo meditation: $error');
-        debugPrint('$stackTrace');
-      }),
-    );
+    unawaited(meditation.start());
   }
 
   void _discardPersonalizedMeditation() {

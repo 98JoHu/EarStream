@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../configs/bio_adaptive_mode_config.dart';
 import 'biometric_source.dart';
@@ -21,10 +21,6 @@ class PhaseContext {
 }
 
 sealed class MonitoringPhase {
-  String get label;
-  IconData get icon;
-  Color get color;
-
   Duration? get duration;
 
   /// Timed phases may hold at 100% until the required sensor data is valid.
@@ -45,12 +41,6 @@ class CalibrationPhase extends MonitoringPhase {
     this.duration = BioAdaptiveModeConfig.calibrationDuration,
   });
 
-  @override
-  String get label => "Calibration (${duration.inSeconds}s)";
-  @override
-  IconData get icon => Icons.settings_outlined;
-  @override
-  Color get color => Colors.orange;
   @override
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
@@ -92,13 +82,6 @@ class BaselinePhase extends MonitoringPhase {
   bool get hasValidRmssd => _rmssdCount > 0;
 
   @override
-  String get label => "Monitoring \u00b7 Baseline Adjustment";
-  @override
-  IconData get icon => Icons.straighten_outlined;
-  @override
-  Color get color => Colors.blue;
-
-  @override
   StreamSubscription<HeartRateSample> activate(
     PhaseContext ctx,
   ) {
@@ -132,12 +115,6 @@ class BaselinePhase extends MonitoringPhase {
 }
 
 class StressMonitoringPhase extends MonitoringPhase {
-  @override
-  String get label => "Monitoring";
-  @override
-  IconData get icon => Icons.monitor_heart;
-  @override
-  Color get color => const Color(0xFF4ECDC4);
   @override
   Duration? get duration => null;
 

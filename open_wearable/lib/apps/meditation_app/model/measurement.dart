@@ -140,7 +140,6 @@ class Measurement {
 
   // Publish the stress level
   ValueListenable<StressLevel> get stressLevel => _detector.stressLevel;
-  StressLevel get currentStressLevel => _detector.stressLevel.value;
 
   // Publish the monitoring phase and progress
   ValueListenable<MonitoringPhase> get monitoringPhase =>
@@ -175,6 +174,12 @@ class Measurement {
   }
 
   void dispose() {
+    final currentMeditation = meditation.value;
+    if (currentMeditation != null) {
+      unawaited(
+        currentMeditation.stop().whenComplete(currentMeditation.dispose),
+      );
+    }
     _latestBiometricsSubscription?.cancel();
     _source.dispose();
     _detector.stressLevel.removeListener(_onStressLevelChanged);
@@ -182,7 +187,6 @@ class Measurement {
     _meditationDeadline.dispose();
     _detector.dispose();
     _phaseController.dispose();
-    meditation.value?.dispose();
     meditation.dispose();
   }
 
@@ -224,16 +228,7 @@ class Measurement {
     );
     meditation.value = session;
 
-    unawaited(
-      session.start().catchError((Object error, StackTrace stackTrace) {
-        debugPrint('Error starting meditation: $error');
-        debugPrint('$stackTrace');
-        if (meditation.value == session) {
-          meditation.value = null;
-        }
-        session.dispose();
-      }),
-    );
+    unawaited(session.start());
   }
 
   void _stopMeditation() {

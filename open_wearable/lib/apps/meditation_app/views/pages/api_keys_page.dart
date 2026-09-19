@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../model/user_account.dart';
+import '../../model/service_connection_manager.dart';
 import 'drawer_page.dart';
 import '../../widgets/status_field.dart';
 import '../../widgets/secret_field.dart';
@@ -33,9 +34,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
     _deepseekManager = DeepseekManager(userAccount: widget.userAccount);
     _elevenLabsManager = ElevenLabsManager(userAccount: widget.userAccount);
     _tencentManager = TencentTtsManager(userAccount: widget.userAccount);
-    _deepseekManager.addListener(_refreshFromServiceState);
     _elevenLabsManager.addListener(_refreshFromServiceState);
-    _tencentManager.addListener(_refreshFromServiceState);
   }
 
   void _refreshFromServiceState() {
@@ -44,9 +43,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
 
   @override
   void dispose() {
-    _deepseekManager.removeListener(_refreshFromServiceState);
     _elevenLabsManager.removeListener(_refreshFromServiceState);
-    _tencentManager.removeListener(_refreshFromServiceState);
     _deepseekManager.dispose();
     _elevenLabsManager.dispose();
     _tencentManager.dispose();
@@ -105,7 +102,6 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 onSelected: (value) {
                   if (value == null) return;
                   setState(() => widget.userAccount.voiceGender = value);
-                  widget.userAccount.hasValidTencentKey = false;
                   _tencentManager.markUnverified();
                 },
               ),
@@ -140,7 +136,6 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                       "Provide a Deepseek API key to enable personalized session generation. Changes apply to the current app session.",
                   onChanged: (value) {
                     widget.userAccount.deepseekApiKey = value;
-                    widget.userAccount.hasValidDeepseekKey = false;
                     _deepseekManager.markUnverified();
                   },
                   initialValue: widget.userAccount.deepseekApiKey ?? '',
@@ -155,7 +150,6 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                       "Provide an ElevenLabs API key to enable voice synthesis. Changes apply to the current app session.",
                   onChanged: (value) {
                     widget.userAccount.elevenLabsApiKey = value;
-                    widget.userAccount.hasValidElevenLabsKey = false;
                     _elevenLabsManager.markUnverified();
                   },
                   initialValue: widget.userAccount.elevenLabsApiKey ?? '',
@@ -174,7 +168,6 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                   if (value == null) return;
                   setState(() {
                     widget.userAccount.tencentTtsRegion = value;
-                    widget.userAccount.hasValidTencentKey = false;
                   });
                   _tencentManager.markUnverified();
                 },
@@ -194,7 +187,6 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                     'Enter the SecretId from the Tencent Cloud API key pair.',
                 onChanged: (value) {
                   widget.userAccount.tencentSecretId = value;
-                  widget.userAccount.hasValidTencentKey = false;
                   _tencentManager.markUnverified();
                 },
                 initialValue: widget.userAccount.tencentSecretId ?? '',
@@ -208,7 +200,6 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                       'Enter the SecretKey paired with the Tencent SecretId.',
                   onChanged: (value) {
                     widget.userAccount.tencentSecretKey = value;
-                    widget.userAccount.hasValidTencentKey = false;
                     _tencentManager.markUnverified();
                   },
                   initialValue: widget.userAccount.tencentSecretKey ?? '',

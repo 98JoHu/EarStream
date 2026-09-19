@@ -83,6 +83,8 @@ enum TtsProviderOption {
       'tencentcloud' ||
       'tencent_cloud' =>
         TtsProviderOption.tencent,
+      OverallMeditationConfig.elevenLabsProviderEnvironmentValue =>
+        TtsProviderOption.elevenLabs,
       _ => TtsProviderOption.elevenLabs,
     };
   }
@@ -211,7 +213,7 @@ class UserAccount {
   bool hasValidDeepseekKey = false;
   String? elevenLabsApiKey;
   bool hasValidElevenLabsKey = false;
-  // Populated by ElevenLabsManager.updateUser() once the key is verified.
+  // Populated by the ElevenLabs connection manager once the key is verified.
   String? elevenLabsVoiceId;
   List<({String voice, String id})>? availableElevenLabsVoices;
   TtsProviderOption ttsProvider;
@@ -415,10 +417,14 @@ class UserAccount {
       OverallMeditationConfig.minimumProfileBaselineRmssd,
     );
 
-    baselineHeartRate = defaultHeartRate;
-    baselineRMSSD = defaultRMSSD;
-
-    return (defaultHeartRate, defaultRMSSD);
+    // Demographic defaults are estimates for contexts that have no measured
+    // baseline (for example a timed session). Do not persist them as if they
+    // were sensor measurements; doing so would also make later profile edits
+    // return stale estimates.
+    return (
+      baselineHeartRate ?? defaultHeartRate,
+      baselineRMSSD ?? defaultRMSSD,
+    );
   }
 
   /// Thresholds derived from the baseline biometrics and a sensitivity

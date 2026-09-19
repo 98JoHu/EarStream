@@ -21,8 +21,11 @@ import 'package:open_wearable/apps/meditation_app/model/meditation_analytics.dar
 import 'package:open_wearable/apps/meditation_app/model/meditation.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_session_generator.dart';
 import 'package:open_wearable/apps/meditation_app/model/monitoring_meditation_deadline.dart';
+import 'package:open_wearable/apps/meditation_app/model/sensor_axis_mapping.dart';
+import 'package:open_wearable/apps/meditation_app/model/service_connection_manager.dart';
 import 'package:open_wearable/apps/meditation_app/model/stress_detector.dart';
 import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart';
+import 'package:open_wearable/apps/meditation_app/model/tts_service.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:open_wearable/apps/meditation_app/views/meditation_modes/bio_adaptive_view.dart';
 import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_view.dart';
@@ -205,6 +208,34 @@ void main() {
         ),
         StressLevel.stressed,
       );
+    });
+  });
+
+  group('sensor axis mapping', () {
+    test('keeps infrared and red optical channels distinct', () {
+      const axes = ['Infrared', 'Red', 'Green', 'Ambient'];
+
+      expect(
+        findOpticalSensorAxisIndex(axes, OpticalSensorChannel.red),
+        1,
+      );
+      expect(
+        findOpticalSensorAxisIndex(axes, OpticalSensorChannel.infrared),
+        0,
+      );
+    });
+
+    test('supports common prefixed optical and Cartesian axis names', () {
+      const opticalAxes = ['ppg_ir', 'ppg_red', 'ppg_green', 'ambient_light'];
+      const motionAxes = ['Acceleration X', 'acc_y', 'gyro_z'];
+
+      expect(
+        findOpticalSensorAxisIndex(opticalAxes, OpticalSensorChannel.red),
+        1,
+      );
+      expect(findCartesianSensorAxisIndex(motionAxes, 'x'), 0);
+      expect(findCartesianSensorAxisIndex(motionAxes, 'y'), 1);
+      expect(findCartesianSensorAxisIndex(motionAxes, 'z'), 2);
     });
   });
 
@@ -527,6 +558,53 @@ void main() {
     });
   });
 
+  group('service connection state', () {
+    test('ignores verification results after credentials change', () async {
+      final manager = _DeferredConnectionManager(userAccount: UserAccount());
+      addTearDown(manager.dispose);
+
+      final check = manager.checkConnection();
+      expect(manager.status, ConnectionStatus.checking);
+
+      manager.markUnverified();
+      manager.completer.complete(const {'accepted': true});
+      await check;
+
+      expect(manager.status, ConnectionStatus.missing);
+      expect(manager.updateCount, 0);
+      expect(manager.invalidationCount, 1);
+    });
+
+    test('ignores verification results after the manager is disposed',
+        () async {
+      final manager = _DeferredConnectionManager(userAccount: UserAccount());
+
+      final check = manager.checkConnection();
+      manager.dispose();
+      manager.completer.complete(const {'accepted': true});
+      await check;
+
+      expect(manager.updateCount, 0);
+      expect(manager.invalidationCount, 0);
+    });
+
+    test('clears a selected voice absent from newly verified credentials', () {
+      final account = UserAccount()..elevenLabsVoiceId = 'old-account-voice';
+      final manager = _TestElevenLabsManager(userAccount: account);
+      addTearDown(manager.dispose);
+
+      manager.applyVoices({
+        'voices': [
+          {'name': 'Available Voice', 'voice_id': 'available-voice'},
+        ],
+      });
+
+      expect(account.hasValidElevenLabsKey, isTrue);
+      expect(account.elevenLabsVoiceId, isNull);
+      expect(account.availableElevenLabsVoices, hasLength(1));
+    });
+  });
+
   group('conference demo configuration', () {
     test('applies the paper parameters without changing standard defaults', () {
       const demo = BioAdaptiveSessionConfig.conferenceDemo;
@@ -753,6 +831,17 @@ void main() {
   });
 
   group('physiological-only baseline', () {
+    test('profile estimates are not cached as measured baselines', () {
+      final account = UserAccount(age: 20);
+
+      expect(account.baselineBiometrics, (68, 50.0));
+      expect(account.baselineHeartRate, isNull);
+      expect(account.baselineRMSSD, isNull);
+
+      account.age = 70;
+      expect(account.baselineBiometrics, (78, 18.0));
+    });
+
     test('calibration activates filtering without subscribing to metrics', () {
       final source = _TestBiometricSource();
       final detector = StressDetector(
@@ -966,7 +1055,8 @@ void main() {
     testWidgets('failed voice sessions explain why they stopped',
         (tester) async {
       final meditation = Meditation(userAccount: UserAccount());
-      meditation.failureMessage.value =
+      meditation.failureTitle = 'Voice service interrupted';
+      meditation.failureMessage =
           'The session stopped rather than switching voices.';
       meditation.phase.value = MeditationPhase.failed;
       final notifier = ValueNotifier<Meditation?>(meditation);
@@ -1077,6 +1167,7 @@ void main() {
       });
       final account = UserAccount(
         firstName: 'Regular User',
+        meditationType: MeditationType.bodyScan,
         deepseekApiKey: 'service-key',
       );
       final script = AdaptiveMeditationScript(
@@ -1090,8 +1181,57 @@ void main() {
       final opening = await script.begin();
 
       expect(requestBody, contains('Approximately 280 words per segment.'));
+      expect(requestBody, contains('MEDITATION TYPE: Body Scan'));
+      expect(requestBody, isNot(contains('MeditationType.bodyScan')));
       expect(requestBody, isNot(contains('approximately 30 seconds')));
       expect(opening.firstSegment.durationSeconds, 0);
+    });
+
+    test('describes unavailable RMSSD without serializing null as a value',
+        () async {
+      final requestBodies = <String>[];
+      var call = 0;
+      final client = MockClient((request) async {
+        requestBodies.add(request.body);
+        call++;
+        final content = call == 1
+            ? jsonEncode({
+                'welcomeMessage': 'Welcome.',
+                'completionMessage': 'Well done.',
+                'segment': {
+                  'segmentId': 1,
+                  'instruction': 'First segment.',
+                },
+              })
+            : jsonEncode({
+                'segmentId': 2,
+                'instruction': 'Second segment.',
+              });
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'content': content},
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final script = AdaptiveMeditationScript(
+        account: UserAccount(deepseekApiKey: 'service-key'),
+        maxSegments: 2,
+        client: client,
+      );
+      addTearDown(script.dispose);
+
+      await script.begin();
+      await script.nextSegment(
+        const HeartRateSample(heartRate: 72, rmssd: null),
+      );
+
+      expect(requestBodies.last, contains('RMSSD) is currently unavailable'));
+      expect(requestBodies.last, isNot(contains('null ms')));
     });
 
     test('biosignal-adaptive demo has one generated segment between messages',
@@ -1452,4 +1592,31 @@ class _TestBiometricSource implements BiometricSource {
     _controller.close();
     _activity.dispose();
   }
+}
+
+class _DeferredConnectionManager extends ConnectionManager {
+  final Completer<Object?> completer = Completer<Object?>();
+  int updateCount = 0;
+  int invalidationCount = 0;
+
+  _DeferredConnectionManager({required super.userAccount});
+
+  @override
+  Future<Object?> verifyCredentials() => completer.future;
+
+  @override
+  void updateUser(Object? result) {
+    updateCount++;
+  }
+
+  @override
+  void invalidateUserCredentials() {
+    invalidationCount++;
+  }
+}
+
+class _TestElevenLabsManager extends ElevenLabsManager {
+  _TestElevenLabsManager({required super.userAccount});
+
+  void applyVoices(Map<String, dynamic> response) => updateUser(response);
 }

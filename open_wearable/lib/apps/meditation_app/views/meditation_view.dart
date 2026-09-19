@@ -65,6 +65,12 @@ class _MeditationViewState extends State<MeditationView> {
       ];
 
   @override
+  void dispose() {
+    _analyticsStore.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pages = _pages;
 

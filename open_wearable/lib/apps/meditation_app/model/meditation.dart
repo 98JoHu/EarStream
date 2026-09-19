@@ -1,8 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'dart:convert';
 import 'dart:async';
 import '../configs/bio_adaptive_mode_config.dart';
 import '../configs/overall_config.dart';
@@ -13,8 +10,7 @@ import 'meditation_session_generator.dart';
 import 'meditation_prompt_policy.dart';
 import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
-import 'tencent_tts_client.dart';
-import 'elevenlabs_api.dart';
+import 'tts_service.dart';
 
 enum MeditationPhase {
   preparing,
@@ -36,9 +32,11 @@ class Meditation {
   final MeditationAnalyticsMode? analyticsMode;
 
   late final ValueNotifier<MeditationPhase> phase;
-  final ValueNotifier<String?> failureMessage = ValueNotifier<String?>(null);
+  String? failureTitle;
+  String? failureMessage;
 
   bool isStopped = false;
+  bool _isDisposed = false;
   final ValueNotifier<bool> isPaused = ValueNotifier<bool>(false);
   Completer<void>? _resumeCompleter;
 
@@ -67,35 +65,38 @@ class Meditation {
   HeartRateSample? readCurrentBiometrics() => null;
 
   Future<void> start() async {
+    if (_isDisposed) return;
     isStopped = false;
-    failureMessage.value = null;
+    phase.value = MeditationPhase.preparing;
+    failureTitle = null;
+    failureMessage = null;
     _analyticsStartedAt = DateTime.now();
     _analyticsRecorded = false;
 
     try {
       await _run();
     } on TtsSessionException catch (error) {
-      print('Meditation stopped after voice service failure: $error');
-      isStopped = true;
-      failureMessage.value =
-          'The selected voice service became unavailable. The session was '
-          'stopped rather than switching to a different voice. Check the '
-          'network connection and try again.';
-      phase.value = MeditationPhase.failed;
-      await musicPlayer.stop();
-      await ttsService.stop();
-      _endRun();
-      await _recordAnalytics(completed: false);
-    } catch (_) {
-      _endRun();
-      await _recordAnalytics(completed: false);
-      rethrow;
+      debugPrint('Meditation stopped after voice service failure: $error');
+      await _fail(
+        title: 'Voice service interrupted',
+        message: 'The selected voice service became unavailable. The session '
+            'was stopped rather than switching to a different voice. Check '
+            'the network connection and try again.',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Meditation stopped after an unexpected failure: $error');
+      debugPrint('$stackTrace');
+      await _fail(
+        title: 'Meditation interrupted',
+        message: 'The meditation could not continue. Please try again.',
+      );
     }
   }
 
   Future<void> _run() async {
     // Start background music
     await _startBackgroundMusic();
+    if (isStopped) return _endRun();
 
     // build meditation script
     _script = createMeditationScript(
@@ -109,7 +110,11 @@ class Meditation {
     try {
       opening = await _script!.begin();
     } catch (e) {
-      print("Error generating meditation opening: $e");
+      if (isStopped) {
+        _endRun();
+        return;
+      }
+      debugPrint('Error generating meditation opening: $e');
       _script!.dispose();
       _script = StaticMeditationScript.fallback(
         segmentCount: maxSegments,
@@ -140,39 +145,63 @@ class Meditation {
   }
 
   Future<void> stop() async {
+    if (_isDisposed) return;
     isStopped = true;
     _resumeCompleter?.complete();
     _resumeCompleter = null;
 
-    await musicPlayer.stop();
-    await ttsService.stop();
+    await _stopPlayback();
+    _endRun();
     await _recordAnalytics(completed: false);
   }
 
   void pause() {
+    if (_isDisposed) return;
     isPaused.value = true;
     _resumeCompleter ??= Completer<void>();
-    musicPlayer.pause();
-    ttsService.stop();
+    unawaited(_pausePlayback());
   }
 
   void resume() {
+    if (_isDisposed) return;
     isPaused.value = false;
-    musicPlayer.resume();
+    unawaited(
+      musicPlayer.resume().catchError(
+        (Object error, StackTrace stackTrace) {
+          _logPlaybackError(
+            'resuming background music',
+            error,
+            stackTrace,
+          );
+        },
+      ),
+    );
     _resumeCompleter?.complete();
     _resumeCompleter = null;
   }
 
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
     isStopped = true;
     _resumeCompleter?.complete();
     _resumeCompleter = null;
 
-    musicPlayer.dispose();
+    _endRun();
+    unawaited(
+      musicPlayer.dispose().catchError(
+        (Object error, StackTrace stackTrace) {
+          _logPlaybackError(
+            'disposing background music',
+            error,
+            stackTrace,
+          );
+        },
+      ),
+    );
     ttsService.dispose();
     isPaused.dispose();
     phase.dispose();
-    failureMessage.dispose();
     unawaited(_recordAnalytics(completed: false));
   }
 
@@ -264,8 +293,59 @@ class Meditation {
   }
 
   void _endRun() {
-    _script?.dispose();
+    final script = _script;
     _script = null;
+    script?.dispose();
+  }
+
+  Future<void> _fail({
+    required String title,
+    required String message,
+  }) async {
+    isStopped = true;
+    if (!_isDisposed) {
+      failureTitle = title;
+      failureMessage = message;
+      phase.value = MeditationPhase.failed;
+    }
+    await _stopPlayback();
+    _endRun();
+    await _recordAnalytics(completed: false);
+  }
+
+  Future<void> _pausePlayback() async {
+    try {
+      await musicPlayer.pause();
+    } catch (error, stackTrace) {
+      _logPlaybackError('pausing background music', error, stackTrace);
+    }
+    try {
+      await ttsService.stop();
+    } catch (error, stackTrace) {
+      _logPlaybackError('pausing narration', error, stackTrace);
+    }
+  }
+
+  Future<void> _stopPlayback() async {
+    try {
+      await musicPlayer.stop();
+    } catch (error, stackTrace) {
+      _logPlaybackError('stopping background music', error, stackTrace);
+    }
+    try {
+      await ttsService.stop();
+    } catch (error, stackTrace) {
+      _logPlaybackError('stopping narration', error, stackTrace);
+    }
+  }
+
+  static void _logPlaybackError(
+    String operation,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    debugPrint('Error $operation: $error');
+    debugPrint('$stackTrace');
   }
 
   Future<void> _recordAnalytics({required bool completed}) {
@@ -288,276 +368,6 @@ class Meditation {
         completed: completed,
       ),
     );
-  }
-}
-
-abstract interface class TtsProvider {
-  bool get isAvailable;
-  Future<List<Source>> synthesize(String text);
-
-  void dispose();
-}
-
-class TencentTtsProvider implements TtsProvider {
-  final String? _secretId;
-  final String? _secretKey;
-  final bool _isAvailable;
-  final TencentTtsRegion _region;
-  final int _voiceType;
-  final double _speed;
-  final TencentTtsClient _client;
-
-  TencentTtsProvider(UserAccount account, {TencentTtsClient? client})
-      : _secretId = account.tencentSecretId,
-        _secretKey = account.tencentSecretKey,
-        _isAvailable = account.hasValidTencentKey,
-        _region = account.tencentTtsRegion,
-        _voiceType = account.voiceGender == Gender.male
-            ? OverallMeditationConfig.tencentPremiumMaleVoiceType
-            : OverallMeditationConfig.tencentPremiumFemaleVoiceType,
-        _speed = _tencentSpeed(account.speakingSpeed),
-        _client = client ?? TencentTtsClient();
-
-  @override
-  bool get isAvailable =>
-      _isAvailable &&
-      _secretId?.trim().isNotEmpty == true &&
-      _secretKey?.trim().isNotEmpty == true;
-
-  @override
-  Future<List<Source>> synthesize(String text) async {
-    final chunks = splitTencentTtsText(text);
-    final sources = <Source>[];
-    for (final chunk in chunks) {
-      final bytes = await _client.synthesize(
-        text: chunk,
-        secretId: _secretId!,
-        secretKey: _secretKey!,
-        region: _region,
-        voiceType: _voiceType,
-        speed: _speed,
-      );
-      sources.add(BytesSource(bytes, mimeType: 'audio/mpeg'));
-    }
-    return sources;
-  }
-
-  static double _tencentSpeed(SpeakingSpeed? speed) {
-    return switch (speed ?? SpeakingSpeed.slow) {
-      SpeakingSpeed.verySlow =>
-        OverallMeditationConfig.tencentVerySlowSpeechRate,
-      SpeakingSpeed.slow => OverallMeditationConfig.tencentSlowSpeechRate,
-      SpeakingSpeed.medium => OverallMeditationConfig.tencentMediumSpeechRate,
-      SpeakingSpeed.fast => OverallMeditationConfig.tencentFastSpeechRate,
-    };
-  }
-
-  @override
-  void dispose() => _client.dispose();
-}
-
-class ElevenLabsTtsProvider implements TtsProvider {
-  static const maleVoiceId = OverallMeditationConfig.elevenLabsMaleVoiceId;
-  static const femaleVoiceId = OverallMeditationConfig.elevenLabsFemaleVoiceId;
-
-  final String? _apiKey;
-  final bool _isAvailable;
-  final String voiceId;
-
-  ElevenLabsTtsProvider(UserAccount account)
-      : _apiKey = account.elevenLabsApiKey,
-        _isAvailable = account.hasValidElevenLabsKey,
-        voiceId = resolveVoiceId(account);
-
-  static String resolveVoiceId(UserAccount account) {
-    final selected = account.elevenLabsVoiceId?.trim();
-    if (selected?.isNotEmpty == true) return selected!;
-    return account.voiceGender == Gender.male ? maleVoiceId : femaleVoiceId;
-  }
-
-  @override
-  bool get isAvailable => _isAvailable && _apiKey?.trim().isNotEmpty == true;
-
-  @override
-  Future<List<Source>> synthesize(String text) async {
-    final endpoint = Uri.parse(
-      '${OverallMeditationConfig.elevenLabsApiBaseUrl}'
-      '/v1/text-to-speech/$voiceId',
-    );
-    final res = await http
-        .post(
-          endpoint,
-          headers: {
-            'xi-api-key': _apiKey!,
-            'Content-Type': 'application/json',
-            'Accept': 'audio/mpeg',
-          },
-          body: jsonEncode({
-            'text': text,
-            'model_id': OverallMeditationConfig.elevenLabsModel,
-          }),
-        )
-        .timeout(OverallMeditationConfig.elevenLabsRequestTimeout);
-    if (res.statusCode != 200) {
-      throw ElevenLabsApiException.fromResponse(res);
-    }
-    return [BytesSource(res.bodyBytes, mimeType: 'audio/mpeg')];
-  }
-
-  @override
-  void dispose() {}
-}
-
-class TtsSessionException implements Exception {
-  final String providerName;
-  final Object cause;
-
-  const TtsSessionException({
-    required this.providerName,
-    required this.cause,
-  });
-
-  @override
-  String toString() => '$providerName failed after retries: $cause';
-}
-
-class TtsService {
-  final UserAccount _userAccount;
-  final TtsProvider _provider;
-  final FlutterTts _fallbackTts;
-  final AudioPlayer _player = AudioPlayer();
-  late final bool _usesDeviceFallback;
-  Future<void>? _fallbackInitialization;
-  int _playbackGeneration = 0;
-
-  TtsService({required UserAccount userAccount})
-      : _userAccount = userAccount,
-        _provider = switch (userAccount.ttsProvider) {
-          TtsProviderOption.elevenLabs => ElevenLabsTtsProvider(userAccount),
-          TtsProviderOption.tencent => TencentTtsProvider(userAccount),
-        },
-        _fallbackTts = FlutterTts() {
-    // The route is selected once for the whole meditation. If a configured
-    // cloud provider succeeds initially and later loses connectivity, the
-    // session must not silently change to an unrelated device voice.
-    _usesDeviceFallback = !_provider.isAvailable;
-  }
-
-  // Picked from this device's `getVoices()` output (Android's Google TTS
-  // engine doesn't expose a gender field, unlike iOS/macOS/Windows) — swap
-  // these if either doesn't actually sound right.
-  static const _femaleVoice = OverallMeditationConfig.fallbackFemaleVoice;
-  static const _maleVoice = OverallMeditationConfig.fallbackMaleVoice;
-
-  Future<void> _initializeFallbackTts(UserAccount userAccount) async {
-    await _fallbackTts.awaitSpeakCompletion(true);
-    await _fallbackTts.setLanguage(OverallMeditationConfig.fallbackLanguage);
-    await _fallbackTts.setSpeechRate(
-      userAccount.speakingSpeed?.speed ??
-          OverallMeditationConfig.fallbackSpeechRate,
-    );
-    await _fallbackTts.setVolume(OverallMeditationConfig.fallbackVolume);
-
-    if (userAccount.voiceGender == Gender.male) {
-      await _fallbackTts.setVoice(_maleVoice);
-    } else if (userAccount.voiceGender == Gender.female) {
-      await _fallbackTts.setVoice(_femaleVoice);
-    }
-  }
-
-  // audioplayers defaults every player to an exclusive ("gain") Android audio
-  // focus request, which pauses musicPlayer the instant this player starts —
-  // gainTransientMayDuck just lowers the music's volume instead, letting it
-  // keep playing under the narration.
-  static final _premiumTtsAudioContext = AudioContext(
-    android: AudioContextAndroid(
-      audioFocus: AndroidAudioFocus.gainTransientMayDuck,
-    ),
-  );
-
-  Future<void> speak(String text) async {
-    final playbackGeneration = ++_playbackGeneration;
-    if (_usesDeviceFallback) {
-      try {
-        await (_fallbackInitialization ??=
-            _initializeFallbackTts(_userAccount));
-        if (playbackGeneration != _playbackGeneration) return;
-        await _fallbackTts.speak(text);
-        return;
-      } catch (error) {
-        throw TtsSessionException(
-          providerName: 'DeviceTtsProvider',
-          cause: error,
-        );
-      }
-    }
-
-    Object? lastError;
-    const retryDelays = OverallMeditationConfig.cloudTtsRetryDelays;
-    for (var attempt = 0; attempt < retryDelays.length; attempt++) {
-      if (playbackGeneration != _playbackGeneration) return;
-      final delay = retryDelays[attempt];
-      if (delay > Duration.zero) await Future<void>.delayed(delay);
-      if (playbackGeneration != _playbackGeneration) return;
-
-      try {
-        await _speakWithProvider(text, playbackGeneration);
-        return;
-      } catch (error) {
-        lastError = error;
-        print(
-          'Error using ${_provider.runtimeType} '
-          '(attempt ${attempt + 1}/${retryDelays.length}): $error',
-        );
-        await _player.stop();
-      }
-    }
-
-    throw TtsSessionException(
-      providerName: _provider.runtimeType.toString(),
-      cause: lastError ?? StateError('Unknown voice service error'),
-    );
-  }
-
-  Future<void> _speakWithProvider(
-    String text,
-    int playbackGeneration,
-  ) async {
-    final sources = await _provider.synthesize(text);
-    if (sources.isEmpty) {
-      throw StateError('The voice service returned no audio.');
-    }
-    if (playbackGeneration != _playbackGeneration) return;
-
-    await _player.setAudioContext(_premiumTtsAudioContext);
-    for (final source in sources) {
-      if (playbackGeneration != _playbackGeneration) return;
-      final playbackEnded = Future.any([
-        _player.onPlayerComplete.first,
-        _player.onPlayerStateChanged
-            .firstWhere((state) => state == PlayerState.stopped),
-      ]);
-      await _player.play(source);
-      await playbackEnded;
-      if (playbackGeneration != _playbackGeneration) return;
-    }
-  }
-
-  Future<void> stop() async {
-    _playbackGeneration++;
-    await _player.stop();
-    if (_fallbackInitialization != null) {
-      await _fallbackTts.stop();
-    }
-  }
-
-  void dispose() {
-    _playbackGeneration++;
-    _provider.dispose();
-    _player.dispose();
-    if (_fallbackInitialization != null) {
-      _fallbackTts.stop();
-    }
   }
 }
 

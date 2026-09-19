@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -6,45 +6,31 @@ import '../configs/bio_adaptive_mode_config.dart';
 
 enum ActivityLevel {
   resting(
-    label: "Resting",
-    icon: Icons.airline_seat_individual_suite,
-    accelarationThreshold: BioAdaptiveModeConfig.restingAccelerationThreshold,
+    accelerationThreshold: BioAdaptiveModeConfig.restingAccelerationThreshold,
     gyroscopeThreshold: BioAdaptiveModeConfig.restingGyroscopeThreshold,
   ),
   light(
-    label: "Light",
-    icon: Icons.directions_walk,
-    accelarationThreshold: BioAdaptiveModeConfig.lightAccelerationThreshold,
+    accelerationThreshold: BioAdaptiveModeConfig.lightAccelerationThreshold,
     gyroscopeThreshold: BioAdaptiveModeConfig.lightGyroscopeThreshold,
   ),
   moderate(
-    label: "Moderate",
-    icon: Icons.directions_run,
-    accelarationThreshold: BioAdaptiveModeConfig.moderateAccelerationThreshold,
+    accelerationThreshold: BioAdaptiveModeConfig.moderateAccelerationThreshold,
     gyroscopeThreshold: BioAdaptiveModeConfig.moderateGyroscopeThreshold,
   ),
   vigorous(
-    label: "Vigorous",
-    icon: Icons.fitness_center,
-    accelarationThreshold: BioAdaptiveModeConfig.vigorousAccelerationThreshold,
+    accelerationThreshold: BioAdaptiveModeConfig.vigorousAccelerationThreshold,
     gyroscopeThreshold: BioAdaptiveModeConfig.vigorousGyroscopeThreshold,
   ),
   intense(
-    label: "Intense",
-    icon: Icons.local_fire_department,
-    accelarationThreshold: double.infinity, // not needed
+    accelerationThreshold: double.infinity, // not needed
     gyroscopeThreshold: double.infinity, // not needed
   );
 
-  final String label;
-  final IconData icon;
-  final double accelarationThreshold;
+  final double accelerationThreshold;
   final double gyroscopeThreshold;
 
   const ActivityLevel({
-    required this.label,
-    required this.icon,
-    required this.accelarationThreshold,
+    required this.accelerationThreshold,
     required this.gyroscopeThreshold,
   });
 }
@@ -72,7 +58,7 @@ class ActivityTracker {
 
   final ValueNotifier<ActivityLevel> _activityLevel =
       ValueNotifier<ActivityLevel>(ActivityLevel.resting);
-  ValueNotifier<ActivityLevel> get activityLevel => _activityLevel;
+  ValueListenable<ActivityLevel> get activityLevel => _activityLevel;
   final Stream<PpgMotionSample> accelerometerStream;
   final Stream<PpgMotionSample> gyroscopeStream;
   final int timestampExponentAccelerometer;
@@ -279,22 +265,22 @@ class ActivityTracker {
     required double accelerationDeviationG,
     required double gyroscopeMagnitudeDegreesPerSecond,
   }) {
-    if (accelerationDeviationG < ActivityLevel.resting.accelarationThreshold &&
+    if (accelerationDeviationG < ActivityLevel.resting.accelerationThreshold &&
         gyroscopeMagnitudeDegreesPerSecond <
             ActivityLevel.resting.gyroscopeThreshold) {
       return ActivityLevel.resting;
     } else if (accelerationDeviationG <
-            ActivityLevel.light.accelarationThreshold &&
+            ActivityLevel.light.accelerationThreshold &&
         gyroscopeMagnitudeDegreesPerSecond <
             ActivityLevel.light.gyroscopeThreshold) {
       return ActivityLevel.light;
     } else if (accelerationDeviationG <
-            ActivityLevel.moderate.accelarationThreshold &&
+            ActivityLevel.moderate.accelerationThreshold &&
         gyroscopeMagnitudeDegreesPerSecond <
             ActivityLevel.moderate.gyroscopeThreshold) {
       return ActivityLevel.moderate;
     } else if (accelerationDeviationG <
-            ActivityLevel.vigorous.accelarationThreshold &&
+            ActivityLevel.vigorous.accelerationThreshold &&
         gyroscopeMagnitudeDegreesPerSecond <
             ActivityLevel.vigorous.gyroscopeThreshold) {
       return ActivityLevel.vigorous;

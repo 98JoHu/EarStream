@@ -212,7 +212,7 @@ class AdaptiveMeditationScript implements MeditationScript {
   }
 
   /// Posts the system prompt + full history, returns the assistant's raw
-  /// content string. Throws [MeditationGenerationException] on any failure.
+  /// content string. Throws when the request or response is invalid.
   Future<String> _send() async {
     final key = _account.deepseekApiKey;
     if (key == null) {
@@ -265,7 +265,8 @@ class AdaptiveMeditationScript implements MeditationScript {
       return _conferenceDemoSystemPrompt();
     }
 
-    final meditationType = _account.meditationType ?? 'mindfulness';
+    final meditationType =
+        _account.meditationType?.label ?? MeditationType.mindfulness.label;
     final userContext = _account.getContextSummary();
 
     return '''
@@ -382,9 +383,11 @@ Create a calming and safe experience while respecting the privacy requirements.'
           'continuing the calming progression.';
     }
     final hr = b.heartRate.toStringAsFixed(0);
-    final rmssd = b.rmssd?.toStringAsFixed(0);
+    final rmssdDescription = b.rmssd == null
+        ? 'HRV (RMSSD) is currently unavailable'
+        : 'HRV (RMSSD) is ${b.rmssd!.toStringAsFixed(0)} ms';
     return 'The user has finished segment $_emitted. Their current heart rate '
-        'is $hr bpm and their HRV (RMSSD) is $rmssd ms. Adapt accordingly and '
+        'is $hr bpm and their $rmssdDescription. Adapt accordingly and '
         'generate segment $next as a single segment JSON object.';
   }
 }

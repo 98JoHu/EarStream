@@ -1,12 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../configs/overall_config.dart';
-import '../model/user_account.dart';
-import '../model/tencent_tts_client.dart';
-import '../model/elevenlabs_api.dart';
-
-enum Status { missing, checking, error, ok }
+import '../model/service_connection_manager.dart';
 
 class StatusField extends StatelessWidget {
   final Widget? neighbourWidget;
@@ -19,40 +12,40 @@ class StatusField extends StatelessWidget {
 
   Color get color {
     switch (connectionManager.status) {
-      case Status.missing:
+      case ConnectionStatus.missing:
         return Colors.grey;
-      case Status.checking:
+      case ConnectionStatus.checking:
         return Colors.blue;
-      case Status.error:
+      case ConnectionStatus.error:
         return Colors.red;
-      case Status.ok:
+      case ConnectionStatus.ok:
         return Colors.green;
     }
   }
 
   String get statusText {
     switch (connectionManager.status) {
-      case Status.missing:
+      case ConnectionStatus.missing:
         return "Not verified";
-      case Status.checking:
+      case ConnectionStatus.checking:
         return "Checking...";
-      case Status.error:
+      case ConnectionStatus.error:
         return "Error";
-      case Status.ok:
+      case ConnectionStatus.ok:
         return "OK";
     }
   }
 
   String get description {
     switch (connectionManager.status) {
-      case Status.missing:
+      case ConnectionStatus.missing:
         return "Credentials have not been verified for the current settings.";
-      case Status.checking:
+      case ConnectionStatus.checking:
         return "Checking the service connection. This may take a few seconds.";
-      case Status.error:
+      case ConnectionStatus.error:
         return connectionManager.lastError ??
             "The service check failed. Please review the credentials and region, then try again.";
-      case Status.ok:
+      case ConnectionStatus.ok:
         return "The current credentials and settings were accepted.";
     }
   }
@@ -107,7 +100,10 @@ class StatusField extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton(
-                    onPressed: connectionManager.checkConnection,
+                    onPressed:
+                        connectionManager.status == ConnectionStatus.checking
+                            ? null
+                            : connectionManager.checkConnection,
                     child: const Text("Check Connection"),
                   ),
                 ],
@@ -117,155 +113,5 @@ class StatusField extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-abstract class ConnectionManager extends ChangeNotifier {
-  @protected
-  final UserAccount userAccount;
-  ConnectionManager({required this.userAccount});
-  Status _status = Status.missing;
-  Status get status => _status;
-  String? _lastError;
-  String? get lastError => _lastError;
-
-  void markUnverified() {
-    _status = Status.missing;
-    _lastError = null;
-    notifyListeners();
-  }
-
-  Future<void> checkConnection() async {
-    _status = Status.checking;
-    _lastError = null;
-    notifyListeners();
-
-    try {
-      final dynamic result = await verifyCredentials();
-      await updateUser(result);
-      _status = Status.ok;
-      notifyListeners();
-    } catch (e) {
-      print("Connection check failed: $e");
-      _status = Status.error;
-      _lastError = e.toString();
-      notifyListeners();
-    }
-  }
-
-  @protected
-  Future<dynamic> verifyCredentials();
-
-  @protected
-  Future<void> updateUser(dynamic result);
-}
-
-class DeepseekManager extends ConnectionManager {
-  DeepseekManager({required super.userAccount});
-
-  @override
-  Future<dynamic> verifyCredentials() async {
-    userAccount.hasValidDeepseekKey = false;
-    if (userAccount.deepseekApiKey?.isEmpty ?? true) {
-      throw Exception('Deepseek API key cannot be empty.');
-    }
-
-    final response = await http.get(
-      Uri.parse(
-        '${OverallMeditationConfig.deepseekApiBaseUrl}'
-        '${OverallMeditationConfig.deepseekBalancePath}',
-      ),
-      headers: {
-        'Authorization': 'Bearer ${userAccount.deepseekApiKey}',
-      },
-    ).timeout(OverallMeditationConfig.credentialCheckTimeout);
-
-    if (response.statusCode != 200) {
-      userAccount.hasValidDeepseekKey = false; // Mark the key as invalid
-      throw Exception(
-        'Deepseek API rejected key (Code: ${response.statusCode})',
-      );
-    }
-
-    return json.decode(response.body);
-  }
-
-  @override
-  Future<void> updateUser(dynamic result) async {
-    // Flag current API key as valid
-    userAccount.hasValidDeepseekKey = true;
-  }
-}
-
-class ElevenLabsManager extends ConnectionManager {
-  ElevenLabsManager({required super.userAccount});
-
-  @override
-  Future<dynamic> verifyCredentials() async {
-    userAccount.hasValidElevenLabsKey = false;
-    if (userAccount.elevenLabsApiKey?.isEmpty ?? true) {
-      throw Exception('ElevenLabs API key cannot be empty.');
-    }
-
-    final response = await http.get(
-      Uri.parse('${OverallMeditationConfig.elevenLabsApiBaseUrl}/v1/voices'),
-      headers: {
-        'xi-api-key': '${userAccount.elevenLabsApiKey}',
-      },
-    ).timeout(OverallMeditationConfig.credentialCheckTimeout);
-    if (response.statusCode != 200) {
-      userAccount.hasValidElevenLabsKey = false; // Mark the key as invalid
-      throw ElevenLabsApiException.fromResponse(response);
-    }
-
-    return json.decode(response.body);
-  }
-
-  @override
-  Future<void> updateUser(dynamic result) async {
-    final voices = result["voices"] as List;
-    userAccount.hasValidElevenLabsKey = true; // Mark the key as valid
-    userAccount.availableElevenLabsVoices = voices
-        .map(
-          (voice) =>
-              (voice: voice["name"] as String, id: voice["voice_id"] as String),
-        )
-        .toList();
-  }
-}
-
-class TencentTtsManager extends ConnectionManager {
-  TencentTtsManager({required super.userAccount});
-
-  @override
-  Future<dynamic> verifyCredentials() async {
-    userAccount.hasValidTencentKey = false;
-    if (userAccount.tencentSecretId?.trim().isEmpty ?? true) {
-      throw Exception('Tencent SecretId cannot be empty.');
-    }
-    if (userAccount.tencentSecretKey?.trim().isEmpty ?? true) {
-      throw Exception('Tencent SecretKey cannot be empty.');
-    }
-
-    final client = TencentTtsClient();
-    try {
-      return await client.synthesize(
-        text: 'Connection test.',
-        secretId: userAccount.tencentSecretId!,
-        secretKey: userAccount.tencentSecretKey!,
-        region: userAccount.tencentTtsRegion,
-        voiceType: userAccount.voiceGender == Gender.male
-            ? OverallMeditationConfig.tencentPremiumMaleVoiceType
-            : OverallMeditationConfig.tencentPremiumFemaleVoiceType,
-        speed: OverallMeditationConfig.tencentCredentialCheckSpeechRate,
-      );
-    } finally {
-      client.dispose();
-    }
-  }
-
-  @override
-  Future<void> updateUser(dynamic _) async {
-    userAccount.hasValidTencentKey = true;
   }
 }
