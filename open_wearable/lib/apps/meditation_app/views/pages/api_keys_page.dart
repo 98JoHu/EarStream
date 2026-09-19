@@ -137,7 +137,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 neighbourWidget: SecretField(
                   title: "Deepseek API Key",
                   description:
-                      "Provide a Deepseek API key to enable personal stress-adaptive session generation. Keys are stored only on this device.",
+                      "Provide a Deepseek API key to enable personalized session generation. Changes apply to the current app session.",
                   onChanged: (value) {
                     widget.userAccount.deepseekApiKey = value;
                     widget.userAccount.hasValidDeepseekKey = false;
@@ -152,7 +152,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 neighbourWidget: SecretField(
                   title: "ElevenLabs API Key",
                   description:
-                      "Provide an ElevenLabs API key to enable voice synthesis features. Keys are stored only on this device.",
+                      "Provide an ElevenLabs API key to enable voice synthesis. Changes apply to the current app session.",
                   onChanged: (value) {
                     widget.userAccount.elevenLabsApiKey = value;
                     widget.userAccount.hasValidElevenLabsKey = false;

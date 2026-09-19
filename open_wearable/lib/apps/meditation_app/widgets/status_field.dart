@@ -33,7 +33,7 @@ class StatusField extends StatelessWidget {
   String get statusText {
     switch (connectionManager.status) {
       case Status.missing:
-        return "Not set";
+        return "Not verified";
       case Status.checking:
         return "Checking...";
       case Status.error:

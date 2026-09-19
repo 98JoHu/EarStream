@@ -37,8 +37,9 @@ At launch, the integration searches the selected wearable's sensor list for:
 - a gyroscope.
 
 Those sensors and the shared `SensorConfigurationProvider` are passed to
-`MeditationView`. The current launcher assumes all three sensors are found;
-explicit missing-sensor validation is still a TODO in `apps_page.dart`.
+`MeditationView`. If the sensor manager or any required sensor is unavailable,
+the launcher now shows a specific compatibility message instead of attempting
+to start with a null sensor.
 
 `lib/main.dart` optionally loads
 `lib/apps/meditation_app/assets/.env` before the Flutter application starts.
@@ -122,9 +123,9 @@ Activity handling below.
 
 ### Recorded stress control
 
-The regular mode exposes a **Simulate Stress** control for development and
-demonstration. It uses `RecordedStressBiometricSource`, not randomly generated
-sensor values and not the live sensor stream.
+The regular mode exposes a **Play Recorded Stress** control for development
+and demonstration. It uses `RecordedStressBiometricSource`, not randomly
+generated sensor values and not the live sensor stream.
 
 The recording-derived trajectory is configured as:
 
@@ -193,7 +194,9 @@ Timed mode supports:
 - start at a selected clock time (the next day if today's time has passed).
 
 Scheduled meditations are held in memory and checked once per second. They are
-not operating-system alarms and do not persist across app restarts.
+not operating-system alarms and do not persist across app restarts. A late
+poll still starts an overdue session, and only one timed meditation runs at a
+time.
 
 Each timed meditation contains three generated segments. Like the regular
 biosignal-adaptive mode, each segment requests approximately 280 words and is
@@ -483,8 +486,7 @@ weekly analytics, and Tencent signing/chunking.
   operating-system suspension or loss of connectivity can interrupt cloud
   requests.
 - Mood choices are UI-only and are not included in analytics.
-- The current launcher still force-unwraps the three required sensor matches.
 
 ---
 
-Last reviewed against the implementation: September 18, 2026.
+Last reviewed against the implementation: September 19, 2026.

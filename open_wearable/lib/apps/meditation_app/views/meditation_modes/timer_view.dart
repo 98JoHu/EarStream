@@ -38,30 +38,34 @@ class _TimerViewState extends State<TimerView> {
   @override
   void dispose() {
     _timer?.cancel();
-    if (_currentMeditation.value != null) {
-      _currentMeditation.value!.stop();
+    for (final meditation in _scheduledMeditations) {
+      meditation.dispose();
+    }
+    final current = _currentMeditation.value;
+    if (current != null) {
+      unawaited(current.stop().whenComplete(current.dispose));
     }
     _currentMeditation.dispose();
     super.dispose();
   }
 
   void _checkMeditations() {
-    final dueMeditations = _scheduledMeditations
-        .where((meditation) => meditation.isDue())
-        .toList();
-    if (dueMeditations.isEmpty) return;
-
-    for (final meditation in dueMeditations) {
-      setState(() {
-        _scheduledMeditations.remove(meditation);
-        _currentMeditation.value = meditation;
-      });
-      _currentMeditation.value!.start();
+    if (_currentMeditation.value != null) return;
+    ScheduledMeditation? dueMeditation;
+    for (final meditation in _scheduledMeditations) {
+      if (meditation.isDue()) {
+        dueMeditation = meditation;
+        break;
+      }
     }
+    if (dueMeditation == null) return;
+
+    setState(() => _scheduledMeditations.remove(dueMeditation));
+    _startMeditation(dueMeditation);
   }
 
   void _scheduleMeditation(UserAccount userAccount, DateTime time) {
-    ScheduledMeditation scheduledMeditation = ScheduledMeditation(
+    final scheduledMeditation = ScheduledMeditation(
       userAccount: userAccount,
       scheduledTime: time,
       analyticsStore: widget.analyticsStore,
@@ -71,6 +75,29 @@ class _TimerViewState extends State<TimerView> {
       _scheduledMeditations
           .sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
     });
+  }
+
+  void _startMeditation(ScheduledMeditation meditation) {
+    _currentMeditation.value = meditation;
+    unawaited(
+      meditation
+          .start()
+          .catchError((Object error, StackTrace stackTrace) async {
+        debugPrint('Error starting scheduled meditation: $error');
+        debugPrint('$stackTrace');
+        if (mounted && _currentMeditation.value == meditation) {
+          _currentMeditation.value = null;
+          setState(() {});
+        }
+        try {
+          await meditation.stop();
+        } catch (stopError) {
+          debugPrint('Error stopping failed meditation: $stopError');
+        } finally {
+          meditation.dispose();
+        }
+      }),
+    );
   }
 
   void _completeMeditation(Meditation meditation) {
@@ -132,16 +159,12 @@ class _TimerViewState extends State<TimerView> {
                             icon: const Icon(Icons.play_arrow),
                             label: const Text('Start Now'),
                             onPressed: () {
-                              ScheduledMeditation scheduledMeditation =
-                                  ScheduledMeditation(
+                              final scheduledMeditation = ScheduledMeditation(
                                 userAccount: userAccount,
                                 scheduledTime: DateTime.now(),
                                 analyticsStore: widget.analyticsStore,
                               );
-                              setState(() {
-                                _currentMeditation.value = scheduledMeditation;
-                              });
-                              scheduledMeditation.start();
+                              _startMeditation(scheduledMeditation);
                             },
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -154,35 +177,35 @@ class _TimerViewState extends State<TimerView> {
                           runSpacing: 8,
                           children: [
                             OutlinedButton(
-                              onPressed: () => {
+                              onPressed: () {
                                 _scheduleMeditation(
                                   userAccount,
                                   DateTime.now().add(
                                     TimedModeConfig.scheduleAfterFiveMinutes,
                                   ),
-                                ),
+                                );
                               },
                               child: const Text('After 5 min'),
                             ),
                             OutlinedButton(
-                              onPressed: () => {
+                              onPressed: () {
                                 _scheduleMeditation(
                                   userAccount,
                                   DateTime.now().add(
                                     TimedModeConfig.scheduleAfterTenMinutes,
                                   ),
-                                ),
+                                );
                               },
                               child: const Text('After 10 min'),
                             ),
                             OutlinedButton(
-                              onPressed: () => {
+                              onPressed: () {
                                 _scheduleMeditation(
                                   userAccount,
                                   DateTime.now().add(
                                     TimedModeConfig.scheduleAfterThirtyMinutes,
                                   ),
-                                ),
+                                );
                               },
                               child: const Text('After 30 min'),
                             ),
@@ -229,6 +252,7 @@ class _TimerViewState extends State<TimerView> {
                       setState(() {
                         _scheduledMeditations.remove(meditation);
                       });
+                      meditation.dispose();
                     },
                   ),
               ],

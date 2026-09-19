@@ -22,7 +22,7 @@ enum MeditationMode {
     label: "Timed",
     icon: Icons.alarm,
     build: _timerView,
-    description: 'Meditation with a fixed time duration.',
+    description: 'Start now or schedule a guided meditation.',
   ),
   demo(
     label: "Demo",

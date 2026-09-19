@@ -8,8 +8,6 @@ import 'stress_detector.dart';
 import 'user_account.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 
-typedef PhaseElapsed = Duration Function();
-
 class PhaseContext {
   final BiometricSource source;
   final StressDetector detector;
@@ -34,7 +32,6 @@ sealed class MonitoringPhase {
 
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
-    PhaseElapsed elapsed,
   );
 
   void complete(PhaseContext ctx) {}
@@ -57,7 +54,6 @@ class CalibrationPhase extends MonitoringPhase {
   @override
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
-    PhaseElapsed elapsed,
   ) {
     ctx.source.beginCalibration();
     return null;
@@ -66,7 +62,6 @@ class CalibrationPhase extends MonitoringPhase {
 
 class BaselinePhase extends MonitoringPhase {
   final UserAccount userAccount;
-  final BaselineComputationMode computationMode;
   final bool useBestEffortAtDeadline;
   @override
   final Duration duration;
@@ -81,13 +76,11 @@ class BaselinePhase extends MonitoringPhase {
   BaselinePhase({
     required this.userAccount,
     Duration? duration,
-    this.computationMode = BaselineComputationMode.profileBlended,
     this.useBestEffortAtDeadline = false,
   }) : duration = duration ?? BioAdaptiveModeConfig.baselineDuration;
 
   @override
   bool get canAdvance {
-    if (computationMode == BaselineComputationMode.profileBlended) return true;
     if (useBestEffortAtDeadline) {
       _deadlineEstimate ??= _source?.finalizeBaselineEstimate();
       return _deadlineEstimate?.rmssd != null;
@@ -108,52 +101,26 @@ class BaselinePhase extends MonitoringPhase {
   @override
   StreamSubscription<HeartRateSample> activate(
     PhaseContext ctx,
-    PhaseElapsed elapsed,
   ) {
     _source = ctx.source;
     ctx.source.beginMeasurement();
-    if (computationMode == BaselineComputationMode.physiologicalOnly) {
-      return ctx.source.biometrics.listen((data) {
-        _heartRateTotal += data.heartRate;
-        _heartRateCount++;
-        userAccount.baselineHeartRate =
-            (_heartRateTotal / _heartRateCount).round();
-
-        if (data.rmssd != null) {
-          _rmssdTotal += data.rmssd!;
-          _rmssdCount++;
-          userAccount.baselineRMSSD = _rmssdTotal / _rmssdCount;
-        }
-      });
-    }
-
-    final (baselineHeartRate, baselineRmssd) = userAccount.baselineBiometrics;
-
     return ctx.source.biometrics.listen((data) {
-      final timeRatio =
-          (elapsed().inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-
-      final studyWeight = timeRatio * 0.3;
-      final measuredWeight = 1.0 - studyWeight;
-
-      final dynamicHeartRate =
-          (studyWeight * baselineHeartRate + measuredWeight * data.heartRate)
-              .round();
-      userAccount.baselineHeartRate = dynamicHeartRate;
+      _heartRateTotal += data.heartRate;
+      _heartRateCount++;
+      userAccount.baselineHeartRate =
+          (_heartRateTotal / _heartRateCount).round();
 
       if (data.rmssd != null) {
-        userAccount.baselineRMSSD =
-            studyWeight * baselineRmssd + measuredWeight * data.rmssd!;
+        _rmssdTotal += data.rmssd!;
+        _rmssdCount++;
+        userAccount.baselineRMSSD = _rmssdTotal / _rmssdCount;
       }
     });
   }
 
   @override
   void complete(PhaseContext ctx) {
-    if (computationMode != BaselineComputationMode.physiologicalOnly ||
-        !useBestEffortAtDeadline) {
-      return;
-    }
+    if (!useBestEffortAtDeadline) return;
     final estimate = _deadlineEstimate ?? ctx.source.finalizeBaselineEstimate();
     final rmssd = estimate?.rmssd;
     if (estimate == null || rmssd == null) return;
@@ -177,7 +144,6 @@ class StressMonitoringPhase extends MonitoringPhase {
   @override
   StreamSubscription<HeartRateSample> activate(
     PhaseContext ctx,
-    PhaseElapsed elapsed,
   ) {
     ctx.source.beginMeasurement();
     return ctx.source.biometrics.listen((sample) {
@@ -234,17 +200,6 @@ class MonitoringPhaseController {
     if (current.duration != null) _startTicker();
   }
 
-  void reset() {
-    _ticker?.cancel();
-    _phaseSub?.cancel();
-    _stopwatch
-      ..stop()
-      ..reset();
-    _index = 0;
-    phase.value = current;
-    progress.value = null;
-  }
-
   void dispose() {
     _ticker?.cancel();
     _phaseSub?.cancel();
@@ -294,6 +249,6 @@ class MonitoringPhaseController {
 
   void _activate() {
     _phaseSub?.cancel();
-    _phaseSub = current.activate(_ctx, () => _stopwatch.elapsed);
+    _phaseSub = current.activate(_ctx);
   }
 }

@@ -22,7 +22,7 @@ class ProfilePage extends StatefulWidget implements DrawerPage {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _usernameController;
+  late final TextEditingController _nameController;
   late final TextEditingController _ageController;
   late Gender _selectedGender;
   late FitnessLevel _fitnessLevel;
@@ -30,8 +30,8 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _usernameController =
-        TextEditingController(text: widget.userAccount.username ?? '');
+    _nameController =
+        TextEditingController(text: widget.userAccount.firstName ?? '');
     _ageController =
         TextEditingController(text: widget.userAccount.age?.toString() ?? '');
     _selectedGender = widget.userAccount.gender ?? Gender.unspecified;
@@ -40,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _nameController.dispose();
     _ageController.dispose();
     super.dispose();
   }
@@ -48,7 +48,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _saveProfile() {
     if (_formKey.currentState!.validate()) {
       setState(() {
-        widget.userAccount.username = _usernameController.text.trim();
+        widget.userAccount.firstName = _nameController.text.trim();
         widget.userAccount.age = int.tryParse(_ageController.text.trim());
         widget.userAccount.gender = _selectedGender;
         widget.userAccount.fitnessLevel = _fitnessLevel;
@@ -89,12 +89,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    'These values feed the personalized baseline and stress-threshold logic before a meditation session starts.',
+                    'These values personalize meditation guidance and provide sensible defaults when no measured baseline is available.',
                     style: TextStyle(color: Colors.grey[700], height: 1.4),
                   ),
                   const SizedBox(height: 24),
                   TextFormField(
-                    controller: _usernameController,
+                    controller: _nameController,
                     decoration: InputDecoration(
                       labelText: 'Name',
                       hintText: 'Enter the participant name',

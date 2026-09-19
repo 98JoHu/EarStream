@@ -120,7 +120,6 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // TODO: write this more clean
         if (_earstreamState == EarstreamState.running && measurement != null)
           BioAdaptiveContent(measurement: measurement),
         if (_earstreamState == EarstreamState.running &&
@@ -205,7 +204,7 @@ class BioAdaptiveControls extends StatelessWidget {
             isIdle
                 ? "Start EarStreAM"
                 : isRunning
-                    ? "Stop EarStreAM"
+                    ? "Pause EarStreAM"
                     : "Resume EarStreAM",
           ),
         ),
@@ -219,7 +218,7 @@ class BioAdaptiveControls extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: isRunning ? onSimulateStress : null,
                     icon: const Icon(Icons.psychology),
-                    label: const Text("Simulate Stress"),
+                    label: const Text("Play Recorded Stress"),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -319,6 +318,7 @@ class BioAdaptiveContent extends StatelessWidget {
                           border: Border.all(color: Colors.grey.shade200),
                         ),
                         child: HeartRateChart(
+                          key: ObjectKey(measurement),
                           heartRateStream: measurement.heartRate,
                           visibleWindow:
                               BioAdaptiveModeConfig.chartVisibleWindow,
@@ -677,6 +677,7 @@ class _HeartRateChartState extends State<HeartRateChart> {
   void _subscribeToStream() {
     _subscription?.cancel();
     _subscription = widget.heartRateStream.listen((heartRate) {
+      if (!mounted) return;
       // Guard against zero/unwarmed data points
       if (heartRate <= 0) return;
 

@@ -26,32 +26,38 @@ class _SealCheckState extends State<SealCheck> {
   Map<String, dynamic>? _measurementResult;
 
   Future<void> _startMeasurement() async {
-    if (!widget.wearable!.hasCapability<AudioResponseManager>()) {
+    final wearable = widget.wearable;
+    if (wearable == null) return;
+    if (!wearable.hasCapability<AudioResponseManager>()) {
       _showSnackBar(
         "This wearable doesn't support the seal check.",
         isError: true,
       );
       return;
     }
-    final capability =
-        widget.wearable!.requireCapability<AudioResponseManager>();
+    final capability = wearable.requireCapability<AudioResponseManager>();
     setState(() {
       _isMeasuring = true;
     });
 
     try {
       final result = await capability.measureAudioResponse({});
+      if (!mounted) return;
       setState(() {
         _measurementResult = result;
       });
       widget.onSealCheckCompleted?.call();
       _showSnackBar("Seal check completed successfully.");
     } catch (e) {
-      _showSnackBar("Seal check failed: $e", isError: true);
+      if (mounted) {
+        _showSnackBar("Seal check failed: $e", isError: true);
+      }
     } finally {
-      setState(() {
-        _isMeasuring = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isMeasuring = false;
+        });
+      }
     }
   }
 
@@ -72,18 +78,24 @@ class _SealCheckState extends State<SealCheck> {
       return;
     }
 
-    final tempDir = await getTemporaryDirectory();
-    final file = File(
-      '${tempDir.path}/seal_check_${DateTime.now().millisecondsSinceEpoch}.json',
-    );
-    await file.writeAsString(jsonEncode(result));
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = File(
+        '${tempDir.path}/seal_check_${DateTime.now().millisecondsSinceEpoch}.json',
+      );
+      await file.writeAsString(jsonEncode(result));
 
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: 'Seal Check Result',
-      ),
-    );
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: 'Seal Check Result',
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar("Could not share the seal check: $e", isError: true);
+      }
+    }
   }
 
   @override

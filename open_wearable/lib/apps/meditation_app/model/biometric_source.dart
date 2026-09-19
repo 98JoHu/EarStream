@@ -35,8 +35,6 @@ abstract interface class BiometricSource {
   // Whether stress detection should be suppressed (e.g. due to high activity)
   bool get suppressStressDetection;
 
-  HeartRateSample? get bestEffortEstimate;
-
   /// Resolves the strongest baseline estimate available at the end of a
   /// time-constrained measurement. Sensor implementations may use retained
   /// conditioned signal that is intentionally not part of the live stream.
@@ -47,7 +45,6 @@ abstract interface class BiometricSource {
   void start();
   void pause();
   void resume();
-  void reset();
   void dispose();
 }
 
@@ -93,9 +90,6 @@ class SensorBiometricSource implements BiometricSource {
   @override
   bool get suppressStressDetection =>
       _activityTracker.shouldSuppressStressDetection();
-
-  @override
-  HeartRateSample? get bestEffortEstimate => _processor.bestEffortEstimate;
 
   @override
   HeartRateSample? finalizeBaselineEstimate() =>
@@ -216,15 +210,6 @@ class SensorBiometricSource implements BiometricSource {
     if (!_started) return;
     _subscribe();
     _activityTracker.start();
-  }
-
-  @override
-  void reset() {
-    if (!_started) return;
-    _ppgSubscription?.cancel();
-    _accelSubscription?.cancel();
-    _activityTracker.reset();
-    _processor.reset();
   }
 
   @override
@@ -501,9 +486,6 @@ class RecordedStressBiometricSource implements BiometricSource {
   bool get suppressStressDetection => false;
 
   @override
-  HeartRateSample? get bestEffortEstimate => _latestEstimate;
-
-  @override
   HeartRateSample? finalizeBaselineEstimate() => _latestEstimate;
 
   @override
@@ -561,16 +543,6 @@ class RecordedStressBiometricSource implements BiometricSource {
   void resume() {
     _clock.start();
     _startTimer();
-  }
-
-  @override
-  void reset() {
-    _timer?.cancel();
-    _clock
-      ..stop()
-      ..reset();
-    _resetScenarioState();
-    _latestEstimate = null;
   }
 
   @override

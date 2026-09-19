@@ -16,18 +16,6 @@ import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'tencent_tts_client.dart';
 import 'elevenlabs_api.dart';
 
-class SessionProgress {
-  final int currentSegment;
-  final int totalSegments;
-  final Duration segmentElapsed;
-
-  const SessionProgress({
-    required this.currentSegment,
-    required this.totalSegments,
-    required this.segmentElapsed,
-  });
-}
-
 enum MeditationPhase {
   preparing,
   welcome,
@@ -47,8 +35,6 @@ class Meditation {
   final MeditationAnalyticsStore? analyticsStore;
   final MeditationAnalyticsMode? analyticsMode;
 
-  final ValueNotifier<SessionProgress?> progress =
-      ValueNotifier<SessionProgress?>(null);
   late final ValueNotifier<MeditationPhase> phase;
   final ValueNotifier<String?> failureMessage = ValueNotifier<String?>(null);
 
@@ -80,12 +66,6 @@ class Meditation {
 
   HeartRateSample? readCurrentBiometrics() => null;
 
-  void initializeAudioPlayers() async {
-    // Initialize the music player
-    await musicPlayer.setReleaseMode(ReleaseMode.loop);
-    await musicPlayer.setVolume(OverallMeditationConfig.backgroundMusicVolume);
-  }
-
   Future<void> start() async {
     isStopped = false;
     failureMessage.value = null;
@@ -97,7 +77,6 @@ class Meditation {
     } on TtsSessionException catch (error) {
       print('Meditation stopped after voice service failure: $error');
       isStopped = true;
-      progress.value = null;
       failureMessage.value =
           'The selected voice service became unavailable. The session was '
           'stopped rather than switching to a different voice. Check the '
@@ -162,7 +141,6 @@ class Meditation {
 
   Future<void> stop() async {
     isStopped = true;
-    progress.value = null;
     _resumeCompleter?.complete();
     _resumeCompleter = null;
 
@@ -193,6 +171,7 @@ class Meditation {
     musicPlayer.dispose();
     ttsService.dispose();
     isPaused.dispose();
+    phase.dispose();
     failureMessage.dispose();
     unawaited(_recordAnalytics(completed: false));
   }
@@ -228,10 +207,7 @@ class Meditation {
 
   Future<void> _runSegments(MeditationSegment first) async {
     MeditationSegment? segment = first;
-    int index = 0;
-
     while (segment != null && !isStopped) {
-      index++;
       final current = segment;
       final segmentStart = DateTime.now();
       final segmentDuration = Duration(seconds: current.durationSeconds);
@@ -239,7 +215,15 @@ class Meditation {
       var speaking = true;
 
       final speakFuture = _speakRespectingPause(current.instruction);
-      speakFuture.whenComplete(() => speaking = false);
+      // Observe completion without creating an unhandled derived Future when
+      // speech fails. The original Future is still awaited below so its error
+      // follows the meditation's normal failure path.
+      unawaited(
+        speakFuture.then<void>(
+          (_) => speaking = false,
+          onError: (Object _, StackTrace __) => speaking = false,
+        ),
+      );
 
       // Prefetch of the next segment, started when speaking finishes.
       Future<MeditationSegment?>? nextFuture;
@@ -261,12 +245,6 @@ class Meditation {
         final elapsed =
             DateTime.now().difference(segmentStart) - pausedDuration;
         if (!speaking && elapsed >= segmentDuration) break;
-
-        progress.value = SessionProgress(
-          currentSegment: index,
-          totalSegments: maxSegments,
-          segmentElapsed: elapsed,
-        );
 
         await Future.delayed(
           OverallMeditationConfig.progressUpdateInterval,
@@ -444,14 +422,17 @@ class TtsSessionException implements Exception {
 }
 
 class TtsService {
+  final UserAccount _userAccount;
   final TtsProvider _provider;
   final FlutterTts _fallbackTts;
   final AudioPlayer _player = AudioPlayer();
   late final bool _usesDeviceFallback;
+  Future<void>? _fallbackInitialization;
   int _playbackGeneration = 0;
 
   TtsService({required UserAccount userAccount})
-      : _provider = switch (userAccount.ttsProvider) {
+      : _userAccount = userAccount,
+        _provider = switch (userAccount.ttsProvider) {
           TtsProviderOption.elevenLabs => ElevenLabsTtsProvider(userAccount),
           TtsProviderOption.tencent => TencentTtsProvider(userAccount),
         },
@@ -460,7 +441,6 @@ class TtsService {
     // cloud provider succeeds initially and later loses connectivity, the
     // session must not silently change to an unrelated device voice.
     _usesDeviceFallback = !_provider.isAvailable;
-    _initializeFallbackTts(userAccount);
   }
 
   // Picked from this device's `getVoices()` output (Android's Google TTS
@@ -469,7 +449,7 @@ class TtsService {
   static const _femaleVoice = OverallMeditationConfig.fallbackFemaleVoice;
   static const _maleVoice = OverallMeditationConfig.fallbackMaleVoice;
 
-  void _initializeFallbackTts(UserAccount userAccount) async {
+  Future<void> _initializeFallbackTts(UserAccount userAccount) async {
     await _fallbackTts.awaitSpeakCompletion(true);
     await _fallbackTts.setLanguage(OverallMeditationConfig.fallbackLanguage);
     await _fallbackTts.setSpeechRate(
@@ -498,8 +478,18 @@ class TtsService {
   Future<void> speak(String text) async {
     final playbackGeneration = ++_playbackGeneration;
     if (_usesDeviceFallback) {
-      await _fallbackTts.speak(text);
-      return;
+      try {
+        await (_fallbackInitialization ??=
+            _initializeFallbackTts(_userAccount));
+        if (playbackGeneration != _playbackGeneration) return;
+        await _fallbackTts.speak(text);
+        return;
+      } catch (error) {
+        throw TtsSessionException(
+          providerName: 'DeviceTtsProvider',
+          cause: error,
+        );
+      }
     }
 
     Object? lastError;
@@ -556,14 +546,18 @@ class TtsService {
   Future<void> stop() async {
     _playbackGeneration++;
     await _player.stop();
-    await _fallbackTts.stop();
+    if (_fallbackInitialization != null) {
+      await _fallbackTts.stop();
+    }
   }
 
   void dispose() {
     _playbackGeneration++;
     _provider.dispose();
     _player.dispose();
-    _fallbackTts.stop();
+    if (_fallbackInitialization != null) {
+      _fallbackTts.stop();
+    }
   }
 }
 
@@ -606,12 +600,16 @@ class ScheduledMeditation extends Meditation {
           analyticsMode: MeditationAnalyticsMode.timed,
         );
 
-  bool isDue() {
-    final now = DateTime.now();
-    return now.year == scheduledTime.year &&
-        now.month == scheduledTime.month &&
-        now.day == scheduledTime.day &&
-        now.hour == scheduledTime.hour &&
-        now.minute == scheduledTime.minute;
-  }
+  /// A delayed timer tick must not permanently miss a meditation just because
+  /// it did not run during the exact scheduled minute.
+  bool isDue([DateTime? now]) => isScheduledTimeDue(
+        scheduledTime: scheduledTime,
+        now: now ?? DateTime.now(),
+      );
+
+  static bool isScheduledTimeDue({
+    required DateTime scheduledTime,
+    required DateTime now,
+  }) =>
+      !now.isBefore(scheduledTime);
 }

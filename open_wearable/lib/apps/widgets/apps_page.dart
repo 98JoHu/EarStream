@@ -215,7 +215,26 @@ final List<AppInfo> _apps = [
             }
           }
 
-          // TODO: add validation that sensors are not null and show error message if they are
+          final missingSensors = <String>[
+            if (ppgSensor == null) 'PPG/pulse',
+            if (accelerometerSensor == null) 'accelerometer',
+            if (gyroscopeSensor == null) 'gyroscope',
+          ];
+          if (missingSensors.isNotEmpty) {
+            return PlatformScaffold(
+              appBar: PlatformAppBar(title: PlatformText('EarStreAM')),
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: PlatformText(
+                    'EarStreAM cannot start because this wearable does not '
+                    'expose the required ${missingSensors.join(', ')} '
+                    'sensor${missingSensors.length == 1 ? '' : 's'}.',
+                  ),
+                ),
+              ),
+            );
+          }
 
           return MeditationView(
             ppgSensor: ppgSensor!,
@@ -225,13 +244,16 @@ final List<AppInfo> _apps = [
             wearable: wearable,
           );
         }
-        // Fallback if meditation view fails to load
+        // The selected wearable cannot provide the sensor inventory needed by
+        // the meditation app.
         return PlatformScaffold(
           appBar: PlatformAppBar(
             title: PlatformText("EarStreAM"),
           ),
           body: Center(
-            child: PlatformText("EarStreAM is loading..."),
+            child: PlatformText(
+              "This wearable does not expose the required sensor manager.",
+            ),
           ),
         );
       },

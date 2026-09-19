@@ -2,13 +2,10 @@ import '../configs/bio_adaptive_mode_config.dart';
 import '../configs/demo_mode_config.dart';
 import 'meditation_prompt_policy.dart';
 
-export '../configs/bio_adaptive_mode_config.dart' show BaselineComputationMode;
-
 class BioAdaptiveSessionConfig {
   final bool includeCalibration;
   final Duration calibrationDuration;
   final Duration baselineDuration;
-  final BaselineComputationMode baselineComputationMode;
   final double? stressThresholdOverride;
   final Duration? meditationSegmentDuration;
   final Duration? hrvMinimumWindow;
@@ -28,7 +25,6 @@ class BioAdaptiveSessionConfig {
     required this.includeCalibration,
     required this.calibrationDuration,
     required this.baselineDuration,
-    required this.baselineComputationMode,
     required this.stressThresholdOverride,
     required this.meditationSegmentDuration,
     required this.hrvMinimumWindow,
@@ -48,7 +44,6 @@ class BioAdaptiveSessionConfig {
     includeCalibration: BioAdaptiveModeConfig.includeCalibration,
     calibrationDuration: BioAdaptiveModeConfig.calibrationDuration,
     baselineDuration: BioAdaptiveModeConfig.baselineDuration,
-    baselineComputationMode: BioAdaptiveModeConfig.baselineComputationMode,
     stressThresholdOverride: BioAdaptiveModeConfig.stressThresholdOverride,
     meditationSegmentDuration:
         BioAdaptiveModeConfig.meditationSegmentDurationOverride,
@@ -68,7 +63,6 @@ class BioAdaptiveSessionConfig {
     includeCalibration: DemoModeConfig.includeCalibration,
     calibrationDuration: DemoModeConfig.calibrationDuration,
     baselineDuration: DemoModeConfig.baselineDuration,
-    baselineComputationMode: BaselineComputationMode.physiologicalOnly,
     stressThresholdOverride: DemoModeConfig.stressThreshold,
     meditationSegmentDuration: DemoModeConfig.meditationSegmentDuration,
     hrvMinimumWindow: DemoModeConfig.hrvMinimumWindow,

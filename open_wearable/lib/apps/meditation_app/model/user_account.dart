@@ -193,9 +193,7 @@ enum MeditationType {
 
 class UserAccount {
   // Basic user information
-  String? username;
   String? firstName;
-  String? lastName;
   Gender? gender;
   int? age;
   FitnessLevel? fitnessLevel;
@@ -227,9 +225,7 @@ class UserAccount {
   double? baselineRMSSD;
 
   UserAccount({
-    this.username,
     this.firstName,
-    this.lastName,
     this.gender,
     this.age,
     this.fitnessLevel,
@@ -256,9 +252,7 @@ class UserAccount {
 
   factory UserAccount.fromEnvironment(
     Map<String, String> environment, {
-    String username = 'johndoe',
     String firstName = 'John',
-    String lastName = 'Doe',
     Gender gender = Gender.unspecified,
     int age = 30,
     FitnessLevel fitnessLevel = FitnessLevel.moderate,
@@ -285,9 +279,7 @@ class UserAccount {
         );
 
     final account = UserAccount(
-      username: username,
       firstName: firstName,
-      lastName: lastName,
       gender: gender,
       age: age,
       fitnessLevel: fitnessLevel,
@@ -429,9 +421,6 @@ class UserAccount {
     return (defaultHeartRate, defaultRMSSD);
   }
 
-  /// Lowest baseline RMSSD the profile defaults may produce. Roughly the
-  /// bottom of the adult resting range; below this the stress thresholds stop
-  /// being meaningful.
   /// Thresholds derived from the baseline biometrics and a sensitivity
   /// fraction. Pass [stressThreshold] to override the account's saved
   /// sensitivity for a single call (e.g. a demo session) without persisting
@@ -439,13 +428,11 @@ class UserAccount {
   (int, double) stressThresholds({double? stressThreshold}) {
     final (baselineHeartRate, baselineRMSSD) = baselineBiometrics;
 
-    // if a treshold is provided, use it; otherwise, use the user's stored threshold or default to 10%
+    // A one-session override (for example, the conference demo's 3%) must not
+    // mutate the permanent account preference.
     final threshold = stressThreshold ??
-        this.stressThreshold ??
-        OverallMeditationConfig.defaultStressSensitivity;
-
-    // If the user's stored threshold is null, set it to 10% for future reference
-    this.stressThreshold ??= OverallMeditationConfig.defaultStressSensitivity;
+        (this.stressThreshold ??=
+            OverallMeditationConfig.defaultStressSensitivity);
 
     final heartRateThreshold = (baselineHeartRate * (1 + threshold)).round();
     final rmssdThreshold = baselineRMSSD * (1 - threshold);
@@ -453,15 +440,24 @@ class UserAccount {
   }
 
   String getContextSummary() {
+    final name = firstName?.trim();
+    final ageDescription = age == null ? 'Not provided' : '$age years old';
     return '''User Profile:
-- Name: ${firstName != null ? '$firstName' : 'the person you are guiding'}
-- Age: $age years old
-- Gender: $gender
-- Fitness Level: $fitnessLevel
-- Meditation Type: $meditationType
-- Meditation Environment: $meditationEnvironment
+- Name: ${name?.isNotEmpty == true ? name : 'the person you are guiding'}
+- Age: $ageDescription
+- Gender: ${gender?.label ?? 'Not provided'}
+- Fitness Level: ${fitnessLevel == null ? 'Not provided' : _fitnessLevelLabel(fitnessLevel!)}
+- Meditation Type: ${meditationType?.label ?? 'Not provided'}
+- Meditation Environment: ${meditationEnvironment?.label ?? 'Not provided'}
 - Additional Preferences: ${additionalPreferences ?? 'None'}
 - Resting Heart Rate: ${baselineBiometrics.$1.toStringAsFixed(0)} BPM
 - Baseline HRV (RMSSD): ${baselineBiometrics.$2.toStringAsFixed(0)} ms''';
   }
+
+  static String _fitnessLevelLabel(FitnessLevel level) => switch (level) {
+        FitnessLevel.sedentary => 'Sedentary',
+        FitnessLevel.moderate => 'Moderate',
+        FitnessLevel.active => 'Active',
+        FitnessLevel.athlete => 'Athlete',
+      };
 }

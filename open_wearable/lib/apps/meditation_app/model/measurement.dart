@@ -87,7 +87,6 @@ class Measurement {
         BaselinePhase(
           userAccount: userAccount,
           duration: sessionConfig.baselineDuration,
-          computationMode: sessionConfig.baselineComputationMode,
           useBestEffortAtDeadline: sessionConfig.useBestEffortEstimates,
         ),
         StressMonitoringPhase(),

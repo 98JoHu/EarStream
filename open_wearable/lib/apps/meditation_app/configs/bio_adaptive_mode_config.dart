@@ -1,11 +1,5 @@
 import 'overall_config.dart';
 
-/// Baseline calculation strategies supported by biosignal-adaptive sessions.
-enum BaselineComputationMode {
-  profileBlended,
-  physiologicalOnly,
-}
-
 /// Parameters used by the regular biosignal-adaptive mode.
 abstract final class BioAdaptiveModeConfig {
   // Session phases and intervention.
@@ -13,8 +7,6 @@ abstract final class BioAdaptiveModeConfig {
   static const bool includeCalibration = true;
   static const Duration calibrationDuration = Duration(seconds: 30);
   static const Duration baselineDuration = Duration(minutes: 5);
-  static const BaselineComputationMode baselineComputationMode =
-      BaselineComputationMode.physiologicalOnly;
   static const double? stressThresholdOverride = null;
   // Null keeps regular segments narration-driven instead of applying the
   // demo's 30-second target.

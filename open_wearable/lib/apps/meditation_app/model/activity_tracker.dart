@@ -125,33 +125,10 @@ class ActivityTracker {
     _gyroscopeSubscription?.cancel();
   }
 
-  void reset() {
-    _accelWindow.clear();
-    _gyroWindow.clear();
-    _activityHistory.clear();
-    _lastEmitTime = null;
-    _activityLevel.value = ActivityLevel.resting;
-  }
-
   void dispose() {
     _accelerometerSubscription?.cancel();
     _gyroscopeSubscription?.cancel();
     _activityLevel.dispose();
-  }
-
-  void simulateStress() {
-    // Cancel subscriptions to stop processing real data
-    _accelerometerSubscription?.cancel();
-    _gyroscopeSubscription?.cancel();
-
-    // Real movement from just before the button press stays in the history for
-    // five minutes and would keep shouldSupressStressDetection() true, blocking
-    // the scripted episode from ever firing. The simulation claims the user is
-    // resting, so its history has to say so too.
-    _activityHistory.clear();
-
-    // Pretend that the user is resting for the stress period
-    _activityLevel.value = ActivityLevel.resting;
   }
 
   bool shouldSuppressStressDetection() {

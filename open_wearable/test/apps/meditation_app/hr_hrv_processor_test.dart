@@ -180,7 +180,6 @@ void main() {
             detector: detector,
             suppressStressDetectionDuringActivity: applyActivityGate,
           ),
-          () => Duration.zero,
         );
 
         source.add(const HeartRateSample(heartRate: 90, rmssd: 20));
@@ -536,10 +535,6 @@ void main() {
       expect(demo.includeCalibration, isTrue);
       expect(demo.calibrationDuration, const Duration(seconds: 30));
       expect(demo.baselineDuration, const Duration(seconds: 30));
-      expect(
-        demo.baselineComputationMode,
-        BaselineComputationMode.physiologicalOnly,
-      );
       expect(demo.stressThresholdOverride, 0.03);
       expect(demo.hrvMinimumWindow, const Duration(seconds: 30));
       expect(demo.metricWindowDuration, const Duration(seconds: 30));
@@ -553,10 +548,6 @@ void main() {
       expect(standard.includeCalibration, isTrue);
       expect(standard.calibrationDuration, const Duration(seconds: 30));
       expect(standard.baselineDuration, const Duration(minutes: 5));
-      expect(
-        standard.baselineComputationMode,
-        BaselineComputationMode.physiologicalOnly,
-      );
       expect(standard.stressThresholdOverride, isNull);
       expect(standard.hrvMinimumWindow, isNull);
       expect(standard.metricWindowDuration, isNull);
@@ -634,7 +625,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Simulate Stress'), findsOneWidget);
+      expect(find.text('Play Recorded Stress'), findsOneWidget);
       expect(find.text('Play Stress'), findsNothing);
     });
   });
@@ -680,9 +671,7 @@ void main() {
   group('demo profile isolation', () {
     test('copies service configuration but no permanent profile data', () {
       final permanent = UserAccount(
-        username: 'permanent-user',
         firstName: 'ProfileSecretName',
-        lastName: 'ProfileSecretSurname',
         gender: Gender.female,
         age: 93,
         fitnessLevel: FitnessLevel.athlete,
@@ -715,9 +704,7 @@ void main() {
       expect(demo.ttsProvider, TtsProviderOption.tencent);
       expect(demo.hasValidDeepseekKey, isTrue);
       expect(demo.hasValidTencentKey, isTrue);
-      expect(demo.username, isNull);
       expect(demo.firstName, isNull);
-      expect(demo.lastName, isNull);
       expect(demo.gender, isNull);
       expect(demo.age, isNull);
       expect(demo.fitnessLevel, isNull);
@@ -735,6 +722,34 @@ void main() {
       expect(permanent.meditationType, MeditationType.bodyScan);
       expect(permanent.baselineHeartRate, 111);
     });
+
+    test('a demo sensitivity override does not change the saved preference',
+        () {
+      final account = UserAccount(
+        baselineHeartRate: 70,
+        baselineRMSSD: 40,
+      );
+
+      expect(account.stressThresholds(stressThreshold: 0.03), (72, 38.8));
+      expect(account.stressThreshold, isNull);
+
+      account.stressThresholds();
+      expect(
+        account.stressThreshold,
+        OverallMeditationConfig.defaultStressSensitivity,
+      );
+    });
+
+    test('the editable first name is the name used in prompt context', () {
+      final account = UserAccount(
+        firstName: 'Avery',
+        baselineHeartRate: 70,
+        baselineRMSSD: 40,
+      );
+
+      expect(account.getContextSummary(), contains('- Name: Avery'));
+      expect(account.getContextSummary(), contains('- Gender: Not provided'));
+    });
   });
 
   group('physiological-only baseline', () {
@@ -748,7 +763,6 @@ void main() {
 
       final subscription = phase.activate(
         PhaseContext(source: source, detector: detector),
-        () => Duration.zero,
       );
 
       expect(subscription, isNull);
@@ -774,11 +788,9 @@ void main() {
       final phase = BaselinePhase(
         userAccount: account,
         duration: const Duration(seconds: 30),
-        computationMode: BaselineComputationMode.physiologicalOnly,
       );
       final subscription = phase.activate(
         PhaseContext(source: source, detector: detector),
-        () => const Duration(seconds: 10),
       );
       expect(source.measurementStarts, 1);
 
@@ -806,10 +818,9 @@ void main() {
       final phase = BaselinePhase(
         userAccount: account,
         duration: const Duration(seconds: 30),
-        computationMode: BaselineComputationMode.physiologicalOnly,
       );
       final context = PhaseContext(source: source, detector: detector);
-      final subscription = phase.activate(context, () => Duration.zero);
+      final subscription = phase.activate(context);
 
       source.add(const HeartRateSample(heartRate: 64, rmssd: null));
       await Future<void>.delayed(Duration.zero);
@@ -840,11 +851,10 @@ void main() {
       final phase = BaselinePhase(
         userAccount: account,
         duration: const Duration(seconds: 30),
-        computationMode: BaselineComputationMode.physiologicalOnly,
         useBestEffortAtDeadline: true,
       );
       final context = PhaseContext(source: source, detector: detector);
-      phase.activate(context, () => Duration.zero);
+      phase.activate(context);
 
       expect(phase.canAdvance, isFalse);
       phase.complete(context);
@@ -872,12 +882,9 @@ void main() {
       final phase = BaselinePhase(
         userAccount: account,
         duration: BioAdaptiveSessionConfig.standard.baselineDuration,
-        computationMode:
-            BioAdaptiveSessionConfig.standard.baselineComputationMode,
       );
       final subscription = phase.activate(
         PhaseContext(source: source, detector: detector),
-        () => Duration.zero,
       );
 
       expect(phase.duration, const Duration(minutes: 5));
@@ -901,6 +908,18 @@ void main() {
   group('meditation session presentation', () {
     test('timed meditations use three segments', () {
       expect(ScheduledMeditation.segmentCount, 3);
+    });
+
+    test('a delayed poll still recognizes an overdue scheduled meditation', () {
+      final scheduledTime = DateTime(2026, 1, 1, 10, 30);
+      bool isDue(DateTime now) => ScheduledMeditation.isScheduledTimeDue(
+            scheduledTime: scheduledTime,
+            now: now,
+          );
+
+      expect(isDue(DateTime(2026, 1, 1, 10, 29, 59)), isFalse);
+      expect(isDue(scheduledTime), isTrue);
+      expect(isDue(DateTime(2026, 1, 1, 10, 35)), isTrue);
     });
 
     testWidgets('active sessions show controls without a segment status box',
@@ -1157,7 +1176,6 @@ void main() {
       });
       final account = UserAccount(
         firstName: 'ProfileSecretName',
-        lastName: 'ProfileSecretSurname',
         age: 93,
         gender: Gender.female,
         fitnessLevel: FitnessLevel.athlete,
@@ -1186,7 +1204,6 @@ void main() {
       expect(cloudPayload, contains('Body Scan'));
       expect(cloudPayload, contains('Garden'));
       expect(cloudPayload, isNot(contains('ProfileSecretName')));
-      expect(cloudPayload, isNot(contains('ProfileSecretSurname')));
       expect(cloudPayload, isNot(contains('ProfileSecretPreference')));
       expect(cloudPayload, isNot(contains('93 years')));
       expect(cloudPayload, isNot(contains('111 BPM')));
@@ -1413,9 +1430,6 @@ class _TestBiometricSource implements BiometricSource {
   ValueListenable<ActivityLevel> get activityLevel => _activity;
 
   @override
-  HeartRateSample? get bestEffortEstimate => bestEstimate;
-
-  @override
   HeartRateSample? finalizeBaselineEstimate() => bestEstimate;
 
   @override
@@ -1432,9 +1446,6 @@ class _TestBiometricSource implements BiometricSource {
 
   @override
   void resume() {}
-
-  @override
-  void reset() {}
 
   @override
   void dispose() {

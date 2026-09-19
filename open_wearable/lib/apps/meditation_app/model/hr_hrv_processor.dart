@@ -584,32 +584,15 @@ class HrHrvProcessor {
     _emit(HeartRateSample(heartRate: heartRate.round(), rmssd: rmssd));
   }
 
-  void reset() {
-    _measurementEnabled = true;
-    _deadlineEvidence.clear();
-    _deadlineEstimate = null;
-    _baselineEvidenceStartIndex = 0;
-    _lastDeadlineEvaluationCount = -1;
-    _collectDeadlineEvidence = publishBestEffortEstimates;
-    _clearEstimatorState();
-    _channelSelector.reset();
-    _ambientCanceler.reset();
-    _motionSuppressor.reset();
-    _imuCanceler.reset();
-    _dcBlockFilter.reset();
-    _bandPassFilter.reset();
-    _normalizer.reset();
-  }
-
   void _clearEstimatorState() {
     _firstSampleTime = null;
     _lastEmitTime = null;
     _lastEvaluationTick = double.negativeInfinity;
     _buffer.clear();
     // RR history outlives `_buffer` (5-minute window vs 10s), so it must be
-    // cleared explicitly — otherwise a reset session inherits the previous
-    // one's intervals, immediately satisfies the minimum-span gate, and
-    // reports RMSSD computed from pre-reset beats.
+    // cleared explicitly — otherwise a new measurement window inherits the
+    // previous one's intervals, immediately satisfies the minimum-span gate,
+    // and reports RMSSD computed from earlier beats.
     _rrHistory.clear();
     _lastRecordedPeakTimestamp = null;
     _latestSample = null;
@@ -898,11 +881,6 @@ class _HighPassFilter {
     alpha = rc / (rc + dt);
   }
 
-  void reset() {
-    _lastInput = null;
-    _lastOutput = null;
-  }
-
   double filter(double x) {
     if (_lastInput == null) {
       _lastInput = x;
@@ -947,14 +925,6 @@ class _BandPassFilter {
     a2 = -alpha / norm;
     b1 = -2 * cosOmega / norm;
     b2 = (1 - alpha) / norm;
-  }
-
-  void reset() {
-    x1 = 0;
-    x2 = 0;
-    y1 = 0;
-    y2 = 0;
-    _isFirstSample = true;
   }
 
   double filter(double x) {
@@ -1036,16 +1006,6 @@ class _AdaptiveOpticalChannelSelector {
     return 0;
   }
 
-  void reset() {
-    _isInitialized = false;
-    _meanGreen = 0;
-    _meanRed = 0;
-    _meanIr = 0;
-    _energyGreen = 0;
-    _energyRed = 0;
-    _energyIr = 0;
-  }
-
   double _ema(double state, double value, double alpha) {
     return (state * (1.0 - alpha)) + (value * alpha);
   }
@@ -1093,15 +1053,6 @@ class _AmbientLightCanceler {
 
     final cleaned = centeredGreen - (_ambientGain * centeredAmbient);
     return -cleaned;
-  }
-
-  void reset() {
-    _isInitialized = false;
-    _meanGreen = 0;
-    _meanAmbient = 0;
-    _ambientVariance = 1.0;
-    _greenAmbientCovariance = 0.0;
-    _ambientGain = 0.65;
   }
 }
 
@@ -1170,20 +1121,6 @@ class _MultiReferenceMotionCanceler {
         (_dynamicZ * (1.0 - dynamicAlpha)) + (normalizedHpZ * dynamicAlpha);
   }
 
-  void reset() {
-    _isInitialized = false;
-    _gravityX = 0;
-    _gravityY = 0;
-    _gravityZ = 0;
-    _dynamicX = 0;
-    _dynamicY = 0;
-    _dynamicZ = 0;
-    _referenceScaleX = 0.2;
-    _referenceScaleY = 0.2;
-    _referenceScaleZ = 0.2;
-    _canceler.reset();
-  }
-
   double filter(
     double value, {
     required double motionLevel,
@@ -1235,22 +1172,6 @@ class _PadasipStyleMultiInputNlmsCanceler {
     _historyY = List<double>.filled(tapsPerAxis, 0, growable: false);
     _historyZ = List<double>.filled(tapsPerAxis, 0, growable: false);
     _featureVector = List<double>.filled(length, 0, growable: false);
-  }
-
-  void reset() {
-    _isInitialized = false;
-    for (var i = 0; i < _weights.length; i++) {
-      _weights[i] = 0;
-    }
-    for (var i = 0; i < tapsPerAxis; i++) {
-      _historyX[i] = 0;
-      _historyY[i] = 0;
-      _historyZ[i] = 0;
-    }
-    for (var i = 0; i < _featureVector.length; i++) {
-      _featureVector[i] = 0;
-    }
-    _smoothedError = 0;
   }
 
   double filter({
@@ -1369,14 +1290,6 @@ class _MotionNoiseSuppressor {
     );
   }
 
-  void reset() {
-    _isInitialized = false;
-    _lastOutput = 0;
-    _gravityMagnitude = 9.81;
-    _motionLevel = 0;
-    _history.clear();
-  }
-
   double filter(double rawValue) {
     if (!_isInitialized) {
       _isInitialized = true;
@@ -1432,13 +1345,6 @@ class _BoundedSignalNormalizer {
   double _center = 0;
   double _envelope = 0.25;
   double _lastOutput = 0;
-
-  void reset() {
-    _isInitialized = false;
-    _center = 0;
-    _envelope = 0.25;
-    _lastOutput = 0;
-  }
 
   double filter(
     double value, {
