@@ -64,6 +64,9 @@ dependencies:
   google_generative_ai: ^0.4.7
   flutter_dotenv: ^6.0.0
   flutter_tts: ^4.2.5
+  # Local, offline narration (Kokoro-82M). Only loaded when the Kokoro TTS
+  # provider is selected; see lib/apps/meditation_app/model/kokoro_tts_engine.dart.
+  sherpa_onnx: ^1.13.8
   intl: ^0.20.2
 
 dev_dependencies:

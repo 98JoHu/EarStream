@@ -2,27 +2,29 @@
 // the previous one is still speaking, instead of in the silence after it.
 //
 // These tests drive a real [Meditation] end to end, so they stand in for the
-// Android audio stack. [_FakeAudioPlatform] answers the audioplayers method
+// Android audio stack. [FakeAudioPlatform] answers the audioplayers method
 // channel and pushes the `prepared` and `complete` events the plugin normally
 // receives from the native player; the narration voice is a fake [TtsProvider]
 // that records when each synthesis starts.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:open_wearable/apps/meditation_app/configs/overall_config.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation.dart';
 import 'package:open_wearable/apps/meditation_app/model/tts_service.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 
+import 'fake_audio_platform.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // Installed for the whole file: an AudioPlayer disposes itself off the test's
   // own timeline, so tearing the channel down per test only produces noise.
-  final audio = _FakeAudioPlatform();
+  final audio = FakeAudioPlatform();
   setUpAll(audio.install);
   tearDownAll(audio.uninstall);
 
@@ -346,105 +348,5 @@ class _TaggedSource extends Source {
       player.onPlayerComplete.first.then((_) => owner._onPlaybackFinished(tag)),
     );
     await delegate.setOnPlayer(player);
-  }
-}
-
-/// Stands in for the native audioplayers implementation.
-///
-/// The plugin waits for a `prepared` event before it will resume, and the
-/// narration player waits for `complete` before moving on, so both have to be
-/// pushed back through the event channel the way the platform would.
-class _FakeAudioPlatform {
-  static const _playbackDuration = Duration(milliseconds: 60);
-  static const _methodChannel = MethodChannel('xyz.luan/audioplayers');
-  static const _globalChannel = MethodChannel('xyz.luan/audioplayers.global');
-  static const _pathProvider =
-      MethodChannel('plugins.flutter.io/path_provider');
-  static const _codec = StandardMethodCodec();
-
-  final _messenger =
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-  final Set<String> _players = {};
-  final Set<String> _stopped = {};
-
-  void install() {
-    _messenger.setMockMethodCallHandler(_methodChannel, _handle);
-    _messenger.setMockMethodCallHandler(_globalChannel, (_) async => null);
-    _messenger.setMockMethodCallHandler(
-      _pathProvider,
-      (_) async => Directory.systemTemp.path,
-    );
-    // The background-music asset is 200+ MB of WAV on disk; the player never
-    // decodes it here, so a stub of a few bytes is enough.
-    _messenger.setMockMessageHandler(
-      'flutter/assets',
-      (_) async => ByteData.view(Uint8List.fromList(const [0, 0, 0, 0]).buffer),
-    );
-  }
-
-  void uninstall() {
-    _messenger.setMockMethodCallHandler(_methodChannel, null);
-    _messenger.setMockMethodCallHandler(_globalChannel, null);
-    _messenger.setMockMethodCallHandler(_pathProvider, null);
-    _messenger.setMockMessageHandler('flutter/assets', null);
-    for (final playerId in _players) {
-      _messenger.setMockMethodCallHandler(
-        MethodChannel(_eventChannelName(playerId)),
-        null,
-      );
-    }
-    _players.clear();
-  }
-
-  static String _eventChannelName(String playerId) =>
-      'xyz.luan/audioplayers/events/$playerId';
-
-  Future<Object?> _handle(MethodCall call) async {
-    final arguments = call.arguments as Map<Object?, Object?>?;
-    final playerId = arguments?['playerId'] as String?;
-
-    switch (call.method) {
-      case 'create':
-        _players.add(playerId!);
-        _messenger.setMockMethodCallHandler(
-          MethodChannel(_eventChannelName(playerId)),
-          (_) async => null,
-        );
-      case 'setSourceUrl':
-      case 'setSourceBytes':
-        _stopped.remove(playerId);
-        _emit(playerId!, const {'event': 'audio.onPrepared', 'value': true});
-      case 'resume':
-        _resumeAndComplete(playerId!);
-      case 'stop':
-      case 'pause':
-      case 'release':
-        _stopped.add(playerId!);
-      case 'dispose':
-        _stopped.add(playerId!);
-        _players.remove(playerId);
-      case 'getCurrentPosition':
-        return 0;
-    }
-    return null;
-  }
-
-  void _resumeAndComplete(String playerId) {
-    Future<void>.delayed(_playbackDuration, () {
-      if (_stopped.contains(playerId) || !_players.contains(playerId)) return;
-      _emit(playerId, const {'event': 'audio.onComplete'});
-    });
-  }
-
-  /// Delivered on a later turn so the plugin's stream subscription is in place.
-  void _emit(String playerId, Map<String, Object?> event) {
-    Future<void>.delayed(Duration.zero, () {
-      if (!_players.contains(playerId)) return;
-      _messenger.handlePlatformMessage(
-        _eventChannelName(playerId),
-        _codec.encodeSuccessEnvelope(event),
-        (_) {},
-      );
-    });
   }
 }

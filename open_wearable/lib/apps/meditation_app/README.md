@@ -2,8 +2,8 @@
 
 EarStreAM is the meditation in-app integrated into `open_wearable`. It combines
 OpenEarable PPG and motion streams with local HR/RMSSD processing, stress
-detection, DeepSeek-generated guidance, and either ElevenLabs or Tencent Cloud
-text-to-speech (TTS).
+detection, DeepSeek-generated guidance, and ElevenLabs, Tencent Cloud, or local
+Kokoro-82M text-to-speech (TTS).
 
 This document describes the implementation in this directory. It intentionally
 does not describe the older `lib/apps/meditation` prototype.
@@ -20,7 +20,7 @@ does not describe the older `lib/apps/meditation` prototype.
 - Stress onset based jointly on elevated HR and reduced RMSSD.
 - Meditation recovery based only on HR returning to baseline or below.
 - DeepSeek segment generation with a static local-script fallback.
-- ElevenLabs, Tencent Cloud, or on-device Flutter TTS playback.
+- ElevenLabs, Tencent Cloud, local Kokoro-82M, or on-device Flutter TTS.
 - Local weekly analytics for regular biosignal-adaptive and timed sessions.
 - Demo isolation from the permanent profile and from analytics.
 
@@ -641,16 +641,86 @@ Supported endpoint choices:
 International and Mainland China service activation/credentials are not
 assumed to be interchangeable.
 
+### Kokoro (on-device)
+
+A third provider that synthesizes narration on the phone, selectable exactly
+like the two cloud voices: `TTS_PROVIDER=kokoro` in the environment asset, or
+the TTS Provider dropdown on the **API Keys** page. It needs no API key, no
+account, and no network request, which is what makes it usable where the cloud
+endpoints are unreachable.
+
+- Model: `kokoro-en-v0_19` (Kokoro-82M) run through `sherpa_onnx`.
+- Voices: `bf_isabella` (speaker 8) and `bm_lewis` (speaker 10), chosen by the
+  **Default Voice** setting. The speaker ids are positions in that model's own
+  voice list and move if the model is swapped for another build.
+- Speaking speed maps onto Kokoro's own multiplier, where 1.0 is the model's
+  natural pace. This is not the normalized 0.0-1.0 scale `flutter_tts` uses.
+- Synthesis runs in a worker isolate: the native engine handle never leaves it
+  and only finished audio comes back, so a segment that takes tens of seconds
+  does not freeze the UI. The narration pipeline above overlaps that cost with
+  playback of the previous segment.
+- One engine is shared for as long as the in-app is open, because loading the
+  model costs seconds and several hundred MB. It is released in
+  `MeditationView.dispose`.
+- Output is 16-bit PCM WAV played from memory, like the cloud providers' MP3.
+
+#### Adding the model to a build
+
+The model is not in the repository: it is about 340 MB and is gitignored. A
+build without it simply reports the local voice as unavailable, and sessions
+fall back to the device voice exactly as they do for an unverified API key.
+
+```powershell
+# From the repository root. Requires the tar bundled with Windows 11.
+curl.exe -L -o kokoro.tar.bz2 `
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2
+tar -xf kokoro.tar.bz2 -C open_wearable/android/app/src/main/assets/
+```
+
+That leaves `android/app/src/main/assets/kokoro-en-v0_19/` containing
+`model.onnx`, `voices.bin`, `tokens.txt`, and `espeak-ng-data/`. Rebuild the
+APK, then press **Prepare On-Device Voice** on the API Keys page once per
+phone.
+
+It lives under `src/main/assets/` rather than in the Flutter `assets:` list on
+purpose. Flutter's asset declarations do not recurse into sub-directories, and
+espeak-ng's phoneme data is several hundred nested files; `rootBundle.load`
+would also have to hold the 330 MB ONNX graph in memory in one piece. Android's
+`AssetManager` can walk the tree and stream each file, so `KokoroModelInstaller`
+copies it out in constant memory. ONNX Runtime needs real filesystem paths, so
+that one-time copy cannot be avoided: expect roughly 340 MB of app storage on
+top of the APK, and up to a minute the first time.
+
+The copy is resumable. Each file is written under a `.partial` name and renamed
+into place, so a file that exists is complete; a `.installed` marker written at
+the end lets later launches skip the walk entirely.
+
+#### Build size
+
+The debug APK is already around 500 MB before the model, mostly the bundled WAV
+ambience plus native libraries for four ABIs. With the model it approaches
+850 MB, which makes `flutter install` slow. Building only for the demo phones'
+architecture avoids shipping three unused copies of the ONNX Runtime and
+sherpa-onnx libraries:
+
+```powershell
+flutter build apk --release --target-platform android-arm64
+```
+
 ### Provider consistency and device fallback
 
 The TTS route is selected once when a meditation object is created.
 
-- If the selected cloud provider is not marked valid at session start, the
-  whole meditation uses on-device Flutter TTS.
-- If a selected cloud provider is initially available but later fails, the app
+- If the selected provider is not marked valid at session start, the whole
+  meditation uses on-device Flutter TTS. For Kokoro "valid" means the model is
+  bundled in this build, which is probed when the in-app opens rather than
+  entered by the user.
+- If a selected provider is initially available but later fails, the app
   retries it three times (immediately, after one second, and after two seconds).
 - After those failures, the meditation stops and shows a voice-service failure
-  card. It does not switch voices in the middle of a meditation.
+  card. It does not switch voices in the middle of a meditation. Kokoro is a
+  selectable provider, not an automatic fallback for a failing cloud voice;
+  swapping the narrator mid-session is what this rule exists to prevent.
 
 Other unexpected playback/session failures also stop both narration and
 ambience and show a dismissible interruption card. Failure handling belongs to
@@ -761,7 +831,7 @@ High-level parameters are centralized in `configs/`:
 
 | File | Responsibility |
 | --- | --- |
-| `overall_config.dart` | Shared generation, TTS, playback, environment, sensitivity, and analytics values |
+| `overall_config.dart` | Shared generation, cloud and local TTS, playback, environment, sensitivity, and analytics values |
 | `timed_mode_config.dart` | Timed segment count and scheduling intervals |
 | `bio_adaptive_mode_config.dart` | Regular phases, processing windows, sensors, activity thresholds, recorded stress, and HR recovery |
 | `demo_mode_config.dart` | Condensed demo timing, segment counts, privacy, guaranteed trigger, and China deployment values |
@@ -770,8 +840,9 @@ High-level parameters are centralized in `configs/`:
 configuration into the same measurement/session pipeline.
 
 The shared session lifecycle and mode-specific meditation subclasses live in
-`model/meditation.dart`; cloud/device narration is isolated in
-`model/tts_service.dart`. Credential verification is similarly kept in
+`model/meditation.dart`; narration routing is isolated in
+`model/tts_service.dart`, with the local Kokoro engine and its model unpacking
+in `model/kokoro_tts_engine.dart` and `model/kokoro_model_installer.dart`. Credential verification is similarly kept in
 `model/service_connection_manager.dart`, while `widgets/status_field.dart`
 only renders its state. Sensor-name interpretation is isolated in
 `model/sensor_axis_mapping.dart`. Labels, icons, and colors for monitoring,
@@ -800,6 +871,8 @@ meditation_app/
 |   |-- elevenlabs_api.dart
 |   |-- hr_hrv_diagnostics.dart
 |   |-- hr_hrv_processor.dart
+|   |-- kokoro_model_installer.dart
+|   |-- kokoro_tts_engine.dart
 |   |-- measurement.dart
 |   |-- measurement_phase.dart
 |   |-- meditation.dart
@@ -847,6 +920,12 @@ audioplayers platform and a fake `TtsProvider`, and covers the narration
 pipeline: overlap of synthesis with playback, the lookahead bound, discarding a
 segment prefetched ahead of an early exit, stopping the producer on stop, and
 voice-outage handling.
+
+`kokoro_tts_test.dart` covers the on-device voice: provider selection from the
+environment, speaker and speed mapping, engine sharing, WAV encoding, and every
+way the local route can be absent. The native library and the model are not
+available to the test VM, so the engine and the platform channel are replaced;
+everything built on top of them runs for real.
 
 ## Current limitations
 

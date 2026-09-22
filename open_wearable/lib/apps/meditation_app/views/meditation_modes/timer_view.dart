@@ -104,7 +104,10 @@ class _TimerViewState extends State<TimerView> {
                 const SizedBox(height: 16),
               ],
               if (!userAccount.hasValidSelectedTtsProvider) ...[
-                APIWarning(serviceName: userAccount.ttsProvider.label),
+                APIWarning(
+                  serviceName: userAccount.ttsProvider.label,
+                  isLocalModel: userAccount.ttsProvider.isLocal,
+                ),
                 const SizedBox(height: 16),
               ],
               MeditationTile(

@@ -4,10 +4,16 @@ import '../model/service_connection_manager.dart';
 class StatusField extends StatelessWidget {
   final Widget? neighbourWidget;
   final ConnectionManager connectionManager;
+
+  /// The button's wording. A local model is prepared rather than connected to,
+  /// so not every service this field reports on is reached over the network.
+  final String actionLabel;
+
   const StatusField({
     super.key,
     this.neighbourWidget,
     required this.connectionManager,
+    this.actionLabel = 'Check Connection',
   });
 
   Color get color {
@@ -104,7 +110,7 @@ class StatusField extends StatelessWidget {
                         connectionManager.status == ConnectionStatus.checking
                             ? null
                             : connectionManager.checkConnection,
-                    child: const Text("Check Connection"),
+                    child: Text(actionLabel),
                   ),
                 ],
               ),

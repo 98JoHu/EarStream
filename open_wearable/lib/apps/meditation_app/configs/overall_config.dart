@@ -67,6 +67,37 @@ abstract final class OverallMeditationConfig {
   static const String tencentCodec = 'mp3';
   static const bool tencentEnableSubtitle = false;
 
+  // Kokoro-82M, run locally through sherpa-onnx. Unlike the two cloud voices
+  // this needs no network and no account, which is what makes it usable where
+  // the cloud endpoints are unreachable. The model is a bundled Android asset
+  // that is copied to app storage once; see the in-app README.
+  static const String kokoroModelDirectoryName = 'kokoro-en-v0_19';
+  static const String kokoroModelFileName = 'model.onnx';
+  static const String kokoroVoicesFileName = 'voices.bin';
+  static const String kokoroTokensFileName = 'tokens.txt';
+  static const String kokoroEspeakDataDirectoryName = 'espeak-ng-data';
+  // Speaker ids within kokoro-en-v0_19. The order is the model's own voice
+  // list, so these move if the model directory is swapped for another build.
+  static const String kokoroFemaleVoiceName = 'bf_isabella';
+  static const int kokoroFemaleSpeakerId = 8;
+  static const String kokoroMaleVoiceName = 'bm_lewis';
+  static const int kokoroMaleSpeakerId = 10;
+  static const int kokoroThreadCount = 4;
+  // Kokoro synthesizes one sentence at a time internally; batching a couple of
+  // them cuts the per-call overhead without a large latency step.
+  static const int kokoroMaxSentencesPerBatch = 2;
+  // Kokoro's own speed factor, where 1.0 is the model's natural pace. It is a
+  // multiplier, not the normalized 0-1 scale flutter_tts uses.
+  static const double kokoroVerySlowSpeechRate = 0.70;
+  static const double kokoroSlowSpeechRate = 0.85;
+  static const double kokoroMediumSpeechRate = 1.0;
+  static const double kokoroFastSpeechRate = 1.15;
+  static const Duration kokoroModelInstallTimeout = Duration(minutes: 10);
+  static const Duration kokoroEngineStartTimeout = Duration(minutes: 2);
+  static const Duration kokoroSynthesisTimeout = Duration(minutes: 5);
+  static const String kokoroCredentialCheckText =
+      'The local voice is ready for this session.';
+
   // A cloud provider is selected once per meditation. These retries happen
   // before the session stops; it never changes to another voice mid-session.
   static const List<Duration> cloudTtsRetryDelays = [
@@ -106,6 +137,7 @@ abstract final class OverallMeditationConfig {
   static const String ttsProviderEnvironmentKey = 'TTS_PROVIDER';
   static const String elevenLabsProviderEnvironmentValue = 'elevenlabs';
   static const String tencentProviderEnvironmentValue = 'tencent';
+  static const String kokoroProviderEnvironmentValue = 'kokoro';
   static const String tencentSecretIdEnvironmentKey = 'TENCENT_SECRET_ID';
   static const String tencentSecretKeyEnvironmentKey = 'TENCENT_SECRET_KEY';
   static const String tencentLegacySecretKeyEnvironmentKey =

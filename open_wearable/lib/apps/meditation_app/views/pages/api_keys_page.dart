@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../model/user_account.dart';
 import '../../model/service_connection_manager.dart';
+import '../../model/tts_service.dart';
 import 'drawer_page.dart';
 import '../../widgets/status_field.dart';
 import '../../widgets/secret_field.dart';
@@ -27,6 +28,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
   late final DeepseekManager _deepseekManager;
   late final ElevenLabsManager _elevenLabsManager;
   late final TencentTtsManager _tencentManager;
+  late final KokoroTtsManager _kokoroManager;
 
   @override
   void initState() {
@@ -34,6 +36,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
     _deepseekManager = DeepseekManager(userAccount: widget.userAccount);
     _elevenLabsManager = ElevenLabsManager(userAccount: widget.userAccount);
     _tencentManager = TencentTtsManager(userAccount: widget.userAccount);
+    _kokoroManager = KokoroTtsManager(userAccount: widget.userAccount);
     _elevenLabsManager.addListener(_refreshFromServiceState);
   }
 
@@ -47,6 +50,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
     _deepseekManager.dispose();
     _elevenLabsManager.dispose();
     _tencentManager.dispose();
+    _kokoroManager.dispose();
     super.dispose();
   }
 
@@ -103,6 +107,8 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                   if (value == null) return;
                   setState(() => widget.userAccount.voiceGender = value);
                   _tencentManager.markUnverified();
+                  // Kokoro picks its speaker from the same setting.
+                  _kokoroManager.markUnverified();
                 },
               ),
               if (widget.userAccount.ttsProvider ==
@@ -203,6 +209,36 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                     _tencentManager.markUnverified();
                   },
                   initialValue: widget.userAccount.tencentSecretKey ?? '',
+                ),
+              ),
+              const SizedBox(height: 24),
+              StatusField(
+                connectionManager: _kokoroManager,
+                actionLabel: 'Prepare On-Device Voice',
+                neighbourWidget: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'On-Device Voice (Kokoro-82M)',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Runs entirely on this phone: no API key, no account, and '
+                      'no network request. Select "${TtsProviderOption.kokoro.label}" '
+                      'above to use it for a session. The current setting speaks '
+                      'with ${KokoroTtsProvider.voiceNameFor(widget.userAccount)}; '
+                      'switch the default voice to change that.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Preparing it the first time unpacks roughly 340 MB from '
+                      'the app package and can take a minute. Later sessions '
+                      'reuse it.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ),
             ],

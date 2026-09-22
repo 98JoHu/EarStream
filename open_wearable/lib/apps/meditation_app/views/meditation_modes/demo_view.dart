@@ -231,7 +231,10 @@ class _DemoViewState extends State<DemoView> {
               ],
               if (!_demoAccount.hasValidSelectedTtsProvider) ...[
                 const SizedBox(height: 16),
-                APIWarning(serviceName: _demoAccount.ttsProvider.label),
+                APIWarning(
+                  serviceName: _demoAccount.ttsProvider.label,
+                  isLocalModel: _demoAccount.ttsProvider.isLocal,
+                ),
               ],
             ],
           );

@@ -25,6 +25,13 @@ android {
         jvmTarget = JavaVersion.VERSION_1_8
     }
 
+    // The bundled Kokoro voice model is a ~330 MB ONNX graph plus a voice
+    // table. Both are already dense binary data, so compressing them buys
+    // almost nothing while making every build repack them.
+    androidResources {
+        noCompress += ["onnx"]
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "edu.kit.teco.openWearable"

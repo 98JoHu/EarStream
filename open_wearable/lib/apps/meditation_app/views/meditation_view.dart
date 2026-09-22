@@ -6,7 +6,9 @@ import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
 import '../model/meditation_analytics.dart';
+import '../model/kokoro_tts_engine.dart';
 import '../model/screen_wakelock.dart';
+import '../model/service_connection_manager.dart';
 import 'pages/drawer_page.dart';
 import 'pages/meditation_page.dart';
 import 'pages/profile_page.dart';
@@ -49,6 +51,9 @@ class _MeditationViewState extends State<MeditationView> {
     // A session waits minutes on DeepSeek and text-to-speech with no touch
     // input; Android suspends those requests once the screen turns off.
     unawaited(ScreenWakelock.acquire());
+    // Cheap check for the bundled local voice, so it can be selected without
+    // first opening the API Keys page. It does not unpack anything.
+    unawaited(KokoroTtsManager.probe(_userAccount));
   }
 
   List<DrawerPage> get _pages => [
@@ -73,6 +78,10 @@ class _MeditationViewState extends State<MeditationView> {
   @override
   void dispose() {
     unawaited(ScreenWakelock.release());
+    // The local voice model costs several hundred MB of memory and is shared
+    // across sessions, so it is kept warm while the in-app is open and
+    // released only on the way out. A no-op when it was never started.
+    unawaited(KokoroTtsEngine.shutdownShared());
     _analyticsStore.dispose();
     super.dispose();
   }

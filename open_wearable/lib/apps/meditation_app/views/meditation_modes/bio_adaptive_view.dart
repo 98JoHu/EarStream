@@ -245,7 +245,10 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
         if (isRunning &&
             !completed &&
             !userAccount.hasValidSelectedTtsProvider) ...[
-          APIWarning(serviceName: userAccount.ttsProvider.label),
+          APIWarning(
+            serviceName: userAccount.ttsProvider.label,
+            isLocalModel: userAccount.ttsProvider.isLocal,
+          ),
           const SizedBox(height: 16),
         ],
         if (isRunning && measurement != null)

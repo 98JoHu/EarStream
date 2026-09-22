@@ -70,12 +70,17 @@ enum SpeakingSpeed {
 enum FitnessLevel { sedentary, moderate, active, athlete }
 
 enum TtsProviderOption {
-  elevenLabs(label: 'ElevenLabs'),
-  tencent(label: 'Tencent Cloud');
+  elevenLabs(label: 'ElevenLabs', isLocal: false),
+  tencent(label: 'Tencent Cloud', isLocal: false),
+  kokoro(label: 'Kokoro (on device)', isLocal: true);
 
   final String label;
 
-  const TtsProviderOption({required this.label});
+  /// Whether the voice runs on the phone. Local voices need no credentials and
+  /// cannot fail because a service is unreachable.
+  final bool isLocal;
+
+  const TtsProviderOption({required this.label, required this.isLocal});
 
   static TtsProviderOption fromConfig(String? value) {
     return switch (value?.trim().toLowerCase()) {
@@ -83,6 +88,10 @@ enum TtsProviderOption {
       'tencentcloud' ||
       'tencent_cloud' =>
         TtsProviderOption.tencent,
+      OverallMeditationConfig.kokoroProviderEnvironmentValue ||
+      'kokoro_tts' ||
+      'local' =>
+        TtsProviderOption.kokoro,
       OverallMeditationConfig.elevenLabsProviderEnvironmentValue =>
         TtsProviderOption.elevenLabs,
       _ => TtsProviderOption.elevenLabs,
@@ -222,6 +231,11 @@ class UserAccount {
   bool hasValidTencentKey = false;
   TencentTtsRegion tencentTtsRegion;
 
+  /// Whether the bundled on-device Kokoro model is present and usable. It has
+  /// no credentials, so this stands in for "verified" and is set by probing
+  /// the build rather than by anything the user enters.
+  bool hasValidKokoroModel = false;
+
   // Bio-adaptive meditation settings
   int? baselineHeartRate;
   double? baselineRMSSD;
@@ -250,6 +264,7 @@ class UserAccount {
   bool get hasValidSelectedTtsProvider => switch (ttsProvider) {
         TtsProviderOption.elevenLabs => hasValidElevenLabsKey,
         TtsProviderOption.tencent => hasValidTencentKey,
+        TtsProviderOption.kokoro => hasValidKokoroModel,
       };
 
   factory UserAccount.fromEnvironment(

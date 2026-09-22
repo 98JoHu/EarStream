@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../configs/overall_config.dart';
 import 'elevenlabs_api.dart';
+import 'kokoro_tts_engine.dart';
 import 'tencent_tts_client.dart';
 import 'user_account.dart';
 
@@ -74,6 +75,64 @@ class TencentTtsProvider implements TtsProvider {
 
   @override
   void dispose() => _client.dispose();
+}
+
+/// Narration synthesized on the phone, with no network and no account.
+///
+/// Unlike the two cloud providers this one cannot fail because a service is
+/// unreachable, which is the reason it exists. It can still be unavailable: a
+/// build without the bundled model, or a platform without the native library,
+/// reports [isAvailable] false and the session falls back to the device voice
+/// exactly as it does for an unverified API key.
+class KokoroTtsProvider implements TtsProvider {
+  final bool _isAvailable;
+  final int _speakerId;
+  final double _speed;
+
+  KokoroTtsProvider(UserAccount account)
+      : _isAvailable = account.hasValidKokoroModel,
+        _speakerId = account.voiceGender == Gender.male
+            ? OverallMeditationConfig.kokoroMaleSpeakerId
+            : OverallMeditationConfig.kokoroFemaleSpeakerId,
+        _speed = _kokoroSpeed(account.speakingSpeed);
+
+  /// The voice name behind the speaker id, for the settings UI.
+  static String voiceNameFor(UserAccount account) =>
+      account.voiceGender == Gender.male
+          ? OverallMeditationConfig.kokoroMaleVoiceName
+          : OverallMeditationConfig.kokoroFemaleVoiceName;
+
+  @override
+  bool get isAvailable => _isAvailable;
+
+  @override
+  Future<List<Source>> synthesize(String text) async {
+    final engine = await KokoroTtsEngine.shared();
+    if (engine == null) {
+      throw const KokoroTtsException('the local voice model is not installed');
+    }
+    final wav = await engine.synthesize(
+      text: text,
+      speakerId: _speakerId,
+      speed: _speed,
+    );
+    return [BytesSource(wav, mimeType: 'audio/wav')];
+  }
+
+  static double _kokoroSpeed(SpeakingSpeed? speed) {
+    return switch (speed ?? SpeakingSpeed.slow) {
+      SpeakingSpeed.verySlow =>
+        OverallMeditationConfig.kokoroVerySlowSpeechRate,
+      SpeakingSpeed.slow => OverallMeditationConfig.kokoroSlowSpeechRate,
+      SpeakingSpeed.medium => OverallMeditationConfig.kokoroMediumSpeechRate,
+      SpeakingSpeed.fast => OverallMeditationConfig.kokoroFastSpeechRate,
+    };
+  }
+
+  /// The shared engine outlives any one session, so nothing is released here.
+  /// [KokoroTtsEngine.shutdownShared] does that when the in-app is closed.
+  @override
+  void dispose() {}
 }
 
 class ElevenLabsTtsProvider implements TtsProvider {
@@ -177,6 +236,7 @@ class TtsService {
               TtsProviderOption.elevenLabs =>
                 ElevenLabsTtsProvider(userAccount),
               TtsProviderOption.tencent => TencentTtsProvider(userAccount),
+              TtsProviderOption.kokoro => KokoroTtsProvider(userAccount),
             },
         _fallbackTts = FlutterTts() {
     // A cloud outage must not silently change the voice mid-meditation.
