@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../configs/bio_adaptive_mode_config.dart';
@@ -10,6 +11,7 @@ import 'meditation_session_generator.dart';
 import 'meditation_prompt_policy.dart';
 import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
+import 'audio_route_diagnostics.dart';
 import 'tts_service.dart';
 
 enum MeditationPhase {
@@ -30,6 +32,7 @@ class Meditation {
   final MeditationPromptPolicy promptPolicy;
   final MeditationAnalyticsStore? analyticsStore;
   final MeditationAnalyticsMode? analyticsMode;
+  final void Function(String, Map<String, Object?>)? diagnosticEventSink;
 
   late final ValueNotifier<MeditationPhase> phase;
   String? failureTitle;
@@ -51,6 +54,7 @@ class Meditation {
     this.promptPolicy = MeditationPromptPolicy.standard,
     this.analyticsStore,
     this.analyticsMode,
+    this.diagnosticEventSink,
   }) : assert(
           (analyticsStore == null) == (analyticsMode == null),
           'Analytics store and mode must either both be set or both be null.',
@@ -210,28 +214,75 @@ class Meditation {
     return _resumeCompleter!.future;
   }
 
+  /// Records where Android is actually sending audio. Only does anything while
+  /// the biosignal trace is enabled, and never propagates a failure.
+  Future<void> _recordAudioRoute(String event) async {
+    final sink = diagnosticEventSink;
+    if (sink == null || !AudioRouteDiagnostics.isAvailable) return;
+    final route = await AudioRouteDiagnostics.describe();
+    if (route.isNotEmpty) sink(event, route);
+  }
+
   Future<void> _speakRespectingPause(String text) async {
     while (true) {
       if (isPaused.value) await _waitForResume();
       if (isStopped) return;
 
-      await ttsService.speak(text);
+      diagnosticEventSink?.call('narration_requested', const {});
+      await _recordAudioRoute('audio_route_at_narration');
+      try {
+        await ttsService.speak(text);
+        diagnosticEventSink?.call('narration_finished', const {});
+      } catch (error) {
+        diagnosticEventSink?.call('narration_failed', {
+          'error_type': error.runtimeType.toString(),
+        });
+        rethrow;
+      }
       if (!isPaused.value) return;
     }
   }
 
   Future<void> _startBackgroundMusic() async {
-    musicPlayer.audioCache = AudioCache(
-      prefix: OverallMeditationConfig.audioAssetPrefix,
-    );
-    await musicPlayer.setReleaseMode(ReleaseMode.loop);
-    await musicPlayer.setVolume(OverallMeditationConfig.backgroundMusicVolume);
-    await musicPlayer.play(
-      AssetSource(
-        userAccount.meditationEnvironment?.assetPath ??
-            MeditationEnvironment.nature.assetPath,
-      ),
-    );
+    // A debug-only A/B test for earbud audio/PPG transport contention. The
+    // production meditation always retains its background music.
+    if (kDebugMode &&
+        const bool.fromEnvironment('MEDITATION_SKIP_BACKGROUND_MUSIC')) {
+      diagnosticEventSink?.call('audio_skipped_for_diagnostics', const {});
+      return;
+    }
+    diagnosticEventSink?.call('audio_start_requested', const {});
+    try {
+      musicPlayer.audioCache = AudioCache(
+        prefix: OverallMeditationConfig.audioAssetPrefix,
+      );
+      await musicPlayer.setReleaseMode(ReleaseMode.loop);
+      await musicPlayer
+          .setVolume(OverallMeditationConfig.backgroundMusicVolume);
+      await musicPlayer.play(
+        AssetSource(
+          userAccount.meditationEnvironment?.assetPath ??
+              MeditationEnvironment.nature.assetPath,
+        ),
+      );
+      diagnosticEventSink?.call('audio_started', const {});
+      await _recordAudioRoute('audio_route_at_audio_start');
+      // The collapse lands 7-8 seconds after this point in the sessions that
+      // degrade, and never in the ones that do not. Sampling on both sides of
+      // that window is what separates "the route changed" from "the route was
+      // always the earbud and something else gave way".
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 12), () async {
+          if (_isDisposed || isStopped) return;
+          await _recordAudioRoute('audio_route_after_settling');
+        }),
+      );
+    } catch (error) {
+      diagnosticEventSink?.call('audio_start_failed', {
+        'error_type': error.runtimeType.toString(),
+      });
+      rethrow;
+    }
   }
 
   Future<void> _runSegments(MeditationSegment first) async {
@@ -381,6 +432,7 @@ class BiometricMeditation extends Meditation {
     super.promptPolicy,
     super.analyticsStore,
     super.analyticsMode,
+    super.diagnosticEventSink,
     required this.measurement,
   });
 

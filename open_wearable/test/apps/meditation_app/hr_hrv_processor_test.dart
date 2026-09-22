@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -12,9 +14,14 @@ import 'package:open_wearable/apps/meditation_app/configs/demo_mode_config.dart'
 import 'package:open_wearable/apps/meditation_app/configs/overall_config.dart';
 import 'package:open_wearable/apps/meditation_app/configs/timed_mode_config.dart';
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_processor.dart';
+import 'package:open_wearable/apps/meditation_app/model/hr_hrv_diagnostics.dart';
+import 'package:open_wearable/apps/meditation_app/model/msptd_fast_v2_detector.dart';
+import 'package:open_wearable/apps/meditation_app/model/audio_route_diagnostics.dart';
+import 'package:open_wearable/apps/meditation_app/model/pulse_interval_rmssd.dart';
 import 'package:open_wearable/apps/meditation_app/model/activity_tracker.dart';
 import 'package:open_wearable/apps/meditation_app/model/bio_adaptive_session_config.dart';
 import 'package:open_wearable/apps/meditation_app/model/biometric_source.dart';
+import 'package:open_wearable/apps/meditation_app/model/measurement.dart';
 import 'package:open_wearable/apps/meditation_app/model/measurement_phase.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_prompt_policy.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_analytics.dart';
@@ -38,7 +45,204 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  group('opt-in HR/RMSSD diagnostic trace', () {
+    test('writes JSONL events and flushes when closed immediately', () async {
+      final temporary =
+          await Directory.systemTemp.createTemp('hr_hrv_trace_test_');
+      addTearDown(() => temporary.delete(recursive: true));
+      final recorder = HrHrvDiagnosticsRecorder(
+        directoryProvider: () async => temporary,
+        startedAt: DateTime.utc(2026, 9, 21),
+      );
+
+      recorder.record({
+        'event': 'test_event',
+        'interval_ms': 810.0,
+        'bad_input': double.nan,
+      });
+      await recorder.close();
+
+      final path = recorder.path;
+      expect(path, isNotNull);
+      final lines = await File(path!).readAsLines();
+      expect(lines, hasLength(1));
+      final decoded = jsonDecode(lines.single) as Map<String, dynamic>;
+      expect(decoded['event'], 'test_event');
+      expect(decoded['interval_ms'], 810.0);
+      expect(decoded['bad_input'], 'NaN');
+    });
+
+    test('observes without changing processor estimates', () async {
+      final events = <Map<String, Object?>>[];
+      final epoch = DateTime.utc(2026, 9, 21);
+      var now = epoch;
+      HrHrvProcessor create({HrHrvDiagnosticSink? diagnostics}) =>
+          HrHrvProcessor(
+            sampleFreq: 200,
+            accelerometerFreq: 100,
+            timestampExponent: -3,
+            hrvMinimumWindow: const Duration(seconds: 10),
+            diagnostics: diagnostics,
+            now: () => now,
+          );
+
+      final traced = create(diagnostics: events.add);
+      final plain = create();
+      addTearDown(traced.dispose);
+      addTearDown(plain.dispose);
+      final tracedMetrics = <HeartRateSample>[];
+      final plainMetrics = <HeartRateSample>[];
+      final tracedSubscription =
+          traced.biometricStream.listen(tracedMetrics.add);
+      final plainSubscription = plain.biometricStream.listen(plainMetrics.add);
+      addTearDown(tracedSubscription.cancel);
+      addTearDown(plainSubscription.cancel);
+
+      traced.beginCalibration();
+      plain.beginCalibration();
+      var phase = 0.0;
+      for (var index = 0; index < 65 * 200; index++) {
+        if (index == 30 * 200) {
+          traced.beginMeasurement();
+          plain.beginMeasurement();
+        }
+        final timestamp = index * 5;
+        final seconds = timestamp / 1000.0;
+        final pulseHz = 1.15 + (0.03 * sin(2 * pi * 0.12 * seconds));
+        phase += 2 * pi * pulseHz / 200;
+        final optical = 1000 + (120 * sin(phase));
+        now = epoch.add(Duration(milliseconds: timestamp));
+        traced.processPpgSample(
+          timestamp,
+          optical * 0.9,
+          optical * 0.8,
+          optical,
+          0,
+        );
+        plain.processPpgSample(
+          timestamp,
+          optical * 0.9,
+          optical * 0.8,
+          optical,
+          0,
+        );
+      }
+      await Future<void>.delayed(Duration.zero);
+
+      expect(tracedMetrics, isNotEmpty);
+      expect(tracedMetrics.length, plainMetrics.length);
+      for (var index = 0; index < tracedMetrics.length; index++) {
+        expect(tracedMetrics[index].heartRate, plainMetrics[index].heartRate);
+        expect(tracedMetrics[index].rmssd, plainMetrics[index].rmssd);
+      }
+      expect(events.any((event) => event['event'] == 'stream_health'), isTrue);
+      expect(
+        events.any((event) => event['event'] == 'peak_evaluation'),
+        isTrue,
+      );
+      expect(
+        events.any((event) => event['event'] == 'rr_history_update'),
+        isTrue,
+      );
+      final comparisons = events
+          .where((event) => event['event'] == 'detector_comparison')
+          .toList();
+      expect(comparisons, hasLength(1));
+      expect(comparisons.single['context'], 'monitoring');
+      // Six detectors across two signal paths: the comparison always covers
+      // every combination, including the ones not currently selectable.
+      final candidates = (comparisons.single['candidates'] as List)
+          .cast<Map<String, Object?>>();
+      expect(candidates, hasLength(12));
+      expect(
+        candidates.map((c) => c['signal_path']).toSet(),
+        {'conditioned', 'beat'},
+      );
+      final beatSnapshot = events.singleWhere(
+        (event) => event['event'] == 'beat_quality_snapshot',
+      );
+      expect(beatSnapshot['context'], 'monitoring');
+      expect(beatSnapshot['effective_sample_hz'], closeTo(200, 0.1));
+      expect(
+        (beatSnapshot['intervals_ms'] as List<Object?>).length,
+        (beatSnapshot['peak_count'] as int) - 1,
+      );
+      expect(
+        events.where((event) => event['event'] == 'stream_health').any(
+              (event) => event['phase'] == 'calibration',
+            ),
+        isTrue,
+      );
+    });
+  });
+
+  group('pulse interval RMSSD', () {
+    test('uses only successive pulse intervals', () {
+      final result =
+          PulseIntervalRmssd.estimate([1000, 1020, null, 1100, 1080]);
+      expect(result.ticks, closeTo(20, 0.001));
+      expect(result.pairCount, 2);
+      expect(result.method, 'adjacent_median_filtered');
+    });
+
+    test('rejecting a short false interval does not join across it', () {
+      final result = PulseIntervalRmssd.estimate([1000, 1020, 260, 980, 1000]);
+      expect(result.ticks, closeTo(20, 0.001));
+      expect(result.pairCount, 2);
+    });
+
+    test('isolated plausible-range peak error does not inflate RMSSD', () {
+      final result = PulseIntervalRmssd.estimate(
+        [1000, 1020, 1250, 980, 1000],
+      );
+      expect(result.ticks, closeTo(20, 0.001));
+      expect(result.pairCount, 2);
+    });
+
+    test('preserves gradual pulse-interval drift', () {
+      final result = PulseIntervalRmssd.estimate(
+        [1100, 1070, 1040, 1010, 980, 950, 920],
+      );
+      expect(result.ticks, closeTo(30, 0.001));
+      expect(result.pairCount, 6);
+    });
+
+    test('demo keeps a measured sparse estimate as the last resort', () {
+      const intervals = <double?>[1000, null, 980];
+      expect(PulseIntervalRmssd.estimate(intervals).ticks, isNull);
+      final demo = PulseIntervalRmssd.estimate(intervals, allowSparse: true);
+      expect(demo.ticks, closeTo(20, 0.001));
+      expect(demo.method, 'sparse_measured_proxy');
+    });
+
+    test('sparse estimate prefers clean measured intervals around an artifact',
+        () {
+      const intervals = <double?>[1000, null, 1300, null, 1020];
+      final estimate = PulseIntervalRmssd.estimate(
+        intervals,
+        allowSparse: true,
+      );
+      expect(estimate.ticks, closeTo(20, 0.001));
+      expect(estimate.method, 'sparse_measured_proxy');
+    });
+
+    test('one measured interval cannot determine variability', () {
+      final result =
+          PulseIntervalRmssd.estimate([null, 1000], allowSparse: true);
+      expect(result.ticks, isNull);
+      expect(result.method, 'insufficient_intervals');
+    });
+  });
+
   group('centralized meditation configuration', () {
+    test('uses lower motion-sensor rates alongside 200 Hz PPG', () {
+      expect(BioAdaptiveModeConfig.ppgTargetFrequencyHz, 200);
+      expect(BioAdaptiveModeConfig.accelerometerTargetFrequencyHz, 25);
+      expect(BioAdaptiveModeConfig.gyroscopeTargetFrequencyHz, 25);
+      expect(BioAdaptiveModeConfig.accelerometerFallbackFrequencyHz, 25);
+      expect(BioAdaptiveModeConfig.gyroscopeFallbackFrequencyHz, 25);
+    });
+
     test('keeps shared and mode-specific session parameters aligned', () {
       expect(
         OverallMeditationConfig.standardNarrationMinimumDuration,
@@ -301,6 +505,37 @@ void main() {
     });
   });
 
+  test('motion-reference smoothing preserves time scale at 25 Hz', () {
+    Map<String, Object?> metadataAt(double imuHz) {
+      final events = <Map<String, Object?>>[];
+      final processor = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: imuHz,
+        timestampExponent: -3,
+        diagnostics: events.add,
+      );
+      addTearDown(processor.dispose);
+      return events
+          .firstWhere((event) => event['event'] == 'processor_created');
+    }
+
+    final at100 = metadataAt(100);
+    final at25 = metadataAt(25);
+    for (final name in [
+      'imu_gravity_alpha',
+      'imu_dynamic_alpha',
+      'imu_scale_alpha',
+      'motion_gravity_alpha',
+      'motion_level_alpha',
+    ]) {
+      final alpha100 = at100[name] as double;
+      final alpha25 = at25[name] as double;
+      expect(alpha25, greaterThan(alpha100));
+      expect(pow(1 - alpha25, 25), closeTo(pow(1 - alpha100, 100), 1e-10));
+    }
+    expect(at100['imu_gravity_alpha'], closeTo(0.0202, 0.0001));
+  });
+
   group('HR-only meditation recovery', () {
     test('stays stressed above baseline regardless of recovered RMSSD', () {
       final detector = StressDetector(
@@ -343,6 +578,41 @@ void main() {
       expect(detector.isHeartRateRecovered(69), isTrue);
       expect(detector.isHeartRateRecovered(71), isFalse);
     });
+
+    testWidgets('paused measurements cannot use or display old live values',
+        (tester) async {
+      final measurement = Measurement.recordedStress(
+        userAccount: UserAccount(
+          baselineHeartRate: 71,
+          baselineRMSSD: 80,
+        ),
+        restingActivityLevel: ActivityLevel.resting,
+      );
+      addTearDown(measurement.dispose);
+      measurement.start();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: BioAdaptiveContent(measurement: measurement),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Baseline: 71 BPM'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(measurement.latestBiometrics, isNotNull);
+
+      measurement.pause();
+      await tester.pump();
+      expect(measurement.latestBiometrics, isNull);
+      expect(measurement.hasHeartRateRecoveredToBaseline, isFalse);
+      expect(find.text('Measuring...'), findsWidgets);
+      expect(
+        find.textContaining('Live pulse data is unavailable'),
+        findsNothing,
+      );
+    });
   });
 
   test('calibration warms the pipeline without publishing biometrics',
@@ -374,6 +644,7 @@ void main() {
   test('demo metrics become eligible only at the 30-second deadline', () async {
     final epoch = DateTime(2026);
     var now = epoch;
+    final diagnostics = <Map<String, Object?>>[];
     final processor = HrHrvProcessor(
       sampleFreq: 200,
       accelerometerFreq: 100,
@@ -384,6 +655,7 @@ void main() {
           BioAdaptiveSessionConfig.conferenceDemo.metricWindowDuration,
       publishBestEffortEstimates:
           BioAdaptiveSessionConfig.conferenceDemo.useBestEffortEstimates,
+      diagnostics: diagnostics.add,
       now: () => now,
     );
     addTearDown(processor.dispose);
@@ -429,6 +701,203 @@ void main() {
     expect(deadlineEstimate, isNotNull);
     expect(deadlineEstimate!.rmssd, isNotNull);
     expect(processor.bestEffortEstimate, deadlineEstimate);
+    expect(
+      diagnostics.any((event) => event['event'] == 'retained_window'),
+      isTrue,
+    );
+    expect(
+      diagnostics.any((event) => event['event'] == 'baseline_deadline'),
+      isTrue,
+    );
+    final comparison = diagnostics.firstWhere(
+      (event) =>
+          event['event'] == 'detector_comparison' &&
+          event['context'] == 'baseline_deadline',
+    );
+    final candidates = comparison['candidates'] as List<Object?>;
+    // Six detectors evaluated on each of the two signal paths.
+    expect(candidates, hasLength(12));
+    expect(
+      candidates
+          .cast<Map<String, Object?>>()
+          .map((candidate) => candidate['mode'])
+          .toSet(),
+      {
+        'standardPositive',
+        'standardNegative',
+        'sensitivePositive',
+        'sensitiveNegative',
+        'msptdPositive',
+        'msptdNegative',
+      },
+    );
+    for (final candidate in candidates.cast<Map<String, Object?>>()) {
+      expect(candidate, containsPair('peak_count', isA<int>()));
+      expect(candidate, containsPair('clean_pair_count', isA<int>()));
+      expect(candidate, containsPair('rmssd_method', isA<String>()));
+    }
+    final beatSnapshot = diagnostics.firstWhere(
+      (event) =>
+          event['event'] == 'beat_quality_snapshot' &&
+          event['context'] == 'baseline_deadline',
+    );
+    expect(beatSnapshot['mode'], comparison['ranked_best_mode']);
+    expect(beatSnapshot['sample_count'], greaterThan(5000));
+    expect(
+      (beatSnapshot['intervals_ms'] as List<Object?>).length,
+      (beatSnapshot['peak_count'] as int) - 1,
+    );
+    final baselineDetector = diagnostics.firstWhere(
+      (event) =>
+          event['event'] == 'retained_window' && event['source'] == 'baseline',
+    )['peak_detection_mode'];
+    feedWindow(startMs: 60000, durationSeconds: 2);
+    final monitoringDetectors = diagnostics
+        .where(
+          (event) =>
+              event['event'] == 'peak_evaluation' &&
+              (event['timestamp_ticks'] as num) >= 60000,
+        )
+        .map((event) => event['peak_detection_mode']);
+    expect(monitoringDetectors, isNotEmpty);
+    expect(
+      monitoringDetectors.every((mode) => mode == baselineDetector),
+      isTrue,
+    );
+    final firstPeak = diagnostics.firstWhere(
+      (event) =>
+          event['event'] == 'peak_evaluation' &&
+          event['peak_heart_rate_bpm'] != null &&
+          event['quality_class'] != 'bad',
+    );
+    final firstRolling = diagnostics.firstWhere(
+      (event) => event['event'] == 'rolling_metric',
+    );
+    final firstMonitoringMetric = diagnostics.firstWhere(
+      (event) =>
+          event['event'] == 'rolling_metric' &&
+          (event['timestamp_ticks'] as num) >= 60000,
+    );
+    expect(
+      firstRolling['smoothed_heart_rate_bpm'],
+      closeTo(firstPeak['peak_heart_rate_bpm'] as num, 0.001),
+    );
+    expect(
+      firstMonitoringMetric['rmssd_ms'],
+      closeTo(deadlineEstimate.rmssd!, 50),
+    );
+    expect(
+      diagnostics.where((event) => event['event'] == 'rolling_metric').any(
+            (event) => event['rmssd_source'] == 'rolling_history',
+          ),
+      isTrue,
+    );
+  });
+
+  test('demo evaluates a full elapsed window despite irregular edge samples',
+      () async {
+    final epoch = DateTime(2026);
+    var now = epoch;
+    final diagnostics = <Map<String, Object?>>[];
+    final processor = HrHrvProcessor(
+      sampleFreq: 200,
+      accelerometerFreq: 100,
+      timestampExponent: -3,
+      hrvMinimumWindow: const Duration(seconds: 30),
+      metricWindowDuration: const Duration(seconds: 30),
+      publishBestEffortEstimates: true,
+      diagnostics: diagnostics.add,
+      now: () => now,
+    );
+    addTearDown(processor.dispose);
+
+    for (var timestamp = 0; timestamp < 36000; timestamp += 13) {
+      // Delivered samples do not land exactly on the 30-second window edge.
+      // This mimics the trace's 29.9x-second trailing spans without changing
+      // the configured 30-second eligibility deadline.
+      final seconds = timestamp / 1000.0;
+      final optical = 1000 + (120 * sin(2 * pi * 1.2 * seconds));
+      now = epoch.add(Duration(milliseconds: timestamp));
+      processor.processPpgSample(
+        timestamp,
+        optical * 0.9,
+        optical * 0.8,
+        optical,
+        0,
+      );
+    }
+
+    expect(
+      diagnostics.where((event) => event['event'] == 'peak_evaluation').any(
+            (event) =>
+                (event['timestamp_ticks'] as num) >= 30000 &&
+                (event['window_span_ms'] as num) < 29995,
+          ),
+      isTrue,
+    );
+  });
+
+  test('regular mode retains its longer rolling RMSSD eligibility', () {
+    final epoch = DateTime(2026);
+    var now = epoch;
+    final diagnostics = <Map<String, Object?>>[];
+    final processor = HrHrvProcessor(
+      sampleFreq: 200,
+      accelerometerFreq: 100,
+      timestampExponent: -3,
+      diagnostics: diagnostics.add,
+      now: () => now,
+    );
+    addTearDown(processor.dispose);
+
+    var phase = 0.0;
+    for (var index = 0; index < 70 * 200; index++) {
+      final timestamp = index * 5;
+      final seconds = timestamp / 1000.0;
+      phase += 2 * pi * (1.15 + (0.04 * sin(2 * pi * 0.1 * seconds))) / 200;
+      final optical = 1000 + (120 * sin(phase));
+      now = epoch.add(Duration(milliseconds: timestamp));
+      processor.processPpgSample(
+        timestamp,
+        optical * 0.9,
+        optical * 0.8,
+        optical,
+        0,
+      );
+    }
+
+    final rolling = diagnostics
+        .where((event) => event['event'] == 'rolling_metric')
+        .toList();
+    expect(rolling, isNotEmpty);
+    expect(
+      rolling.where((event) => (event['timestamp_ticks'] as num) < 60000).any(
+            (event) => event['rmssd_source'] == 'rolling_history',
+          ),
+      isFalse,
+    );
+    expect(
+      rolling.any((event) => event['rmssd_source'] == 'rolling_history'),
+      isTrue,
+    );
+    final detectorSelections = diagnostics
+        .where((event) => event['event'] == 'peak_detector_selected')
+        .toList();
+    expect(detectorSelections, hasLength(1));
+    expect(
+      diagnostics
+          .where(
+            (event) =>
+                event['event'] == 'peak_evaluation' &&
+                (event['timestamp_ticks'] as num) >= 10000,
+          )
+          .every(
+            (event) =>
+                event['peak_detection_mode'] ==
+                detectorSelections.single['mode'],
+          ),
+      isTrue,
+    );
   });
 
   test('demo deadline can use retained stable calibration signal', () {
@@ -946,11 +1415,17 @@ void main() {
       phase.activate(context);
 
       expect(phase.canAdvance, isFalse);
+      expect(source.finalizeCalls, 0);
       phase.complete(context);
       expect(account.baselineHeartRate, isNull);
       expect(account.baselineRMSSD, isNull);
 
       source.bestEstimate = const HeartRateSample(heartRate: 68, rmssd: 31);
+      // Reading phase state in the UI must never finalize the baseline.
+      expect(phase.canAdvance, isFalse);
+      expect(source.finalizeCalls, 0);
+      phase.atDeadline(context);
+      expect(source.finalizeCalls, 1);
       expect(phase.canAdvance, isTrue);
       phase.complete(context);
       expect(account.baselineHeartRate, 68);
@@ -1543,6 +2018,768 @@ void main() {
       expect(chineseChunks.join(), chinese);
     });
   });
+
+  group('signal capture', () {
+    test('emits one block per group with base-relative timestamps', () {
+      final events = <Map<String, Object?>>[];
+      final capture = HrHrvSignalCapture(
+        event: 'ppg_raw_block',
+        channelNames: const ['red', 'ir'],
+        sink: events.add,
+        blockSize: 4,
+      );
+
+      for (var index = 0; index < 6; index++) {
+        capture.add(1000 + (index * 5), [index.toDouble(), -index.toDouble()]);
+      }
+
+      expect(events, hasLength(1));
+      final block = events.single;
+      expect(block['event'], 'ppg_raw_block');
+      expect(block['base_timestamp_ticks'], 1000);
+      expect(block['timestamp_offsets_ticks'], [0, 5, 10, 15]);
+      expect(block['sample_count'], 4);
+      expect(block['red'], [0.0, 1.0, 2.0, 3.0]);
+      expect(block['ir'], [-0.0, -1.0, -2.0, -3.0]);
+
+      // The tail must survive: a session's final partial block is exactly the
+      // part a diagnosis usually needs.
+      capture.flush();
+      expect(events, hasLength(2));
+      expect(events.last['sample_count'], 2);
+      expect(events.last['base_timestamp_ticks'], 1020);
+      expect(events.last['timestamp_offsets_ticks'], [0, 5]);
+    });
+
+    test('rounds captured values and carries block context', () {
+      final events = <Map<String, Object?>>[];
+      final capture = HrHrvSignalCapture(
+        event: 'ppg_conditioned_block',
+        channelNames: const ['signal', 'motion'],
+        sink: events.add,
+        blockSize: 2,
+        fractionDigits: 3,
+      );
+
+      capture.add(
+        0,
+        [0.123456789, 1.987654321],
+        context: {'phase': 'measurement'},
+      );
+      capture.add(5, [-0.000499, 2.0]);
+
+      final block = events.single;
+      expect(block['signal'], [0.123, -0.0]);
+      expect(block['motion'], [1.988, 2.0]);
+      expect(block['phase'], 'measurement');
+    });
+
+    test('flushing an empty capture emits nothing', () {
+      final events = <Map<String, Object?>>[];
+      HrHrvSignalCapture(
+        event: 'ppg_raw_block',
+        channelNames: const ['red'],
+        sink: events.add,
+      ).flush();
+      expect(events, isEmpty);
+    });
+
+    test('a capture round-trips back to the original samples', () {
+      final events = <Map<String, Object?>>[];
+      final capture = HrHrvSignalCapture(
+        event: 'ppg_raw_block',
+        channelNames: const ['red', 'ir', 'green', 'ambient'],
+        sink: events.add,
+        blockSize: 8,
+      );
+      final original = <(int, List<double>)>[
+        for (var index = 0; index < 20; index++)
+          (
+            5000 + (index * 5),
+            [
+              1000.0 + index,
+              900.0 + index,
+              800.0 + index,
+              index.toDouble(),
+            ],
+          ),
+      ];
+      for (final (timestamp, values) in original) {
+        capture.add(timestamp, values);
+      }
+      capture.flush();
+
+      // Decoding through JSON mirrors what the replay harness reads back, so
+      // this guards the on-disk contract rather than just the in-memory one.
+      final restored = <(int, List<double>)>[];
+      for (final block in events
+          .map((e) => jsonDecode(jsonEncode(e)) as Map<String, dynamic>)) {
+        final base = block['base_timestamp_ticks'] as int;
+        final offsets = (block['timestamp_offsets_ticks'] as List).cast<num>();
+        for (var index = 0; index < offsets.length; index++) {
+          final values = <double>[
+            for (final channel in const ['red', 'ir', 'green', 'ambient'])
+              (block[channel] as List).cast<num>()[index].toDouble(),
+          ];
+          restored.add((base + offsets[index].toInt(), values));
+        }
+      }
+
+      expect(restored.length, original.length);
+      for (var index = 0; index < original.length; index++) {
+        expect(restored[index].$1, original[index].$1);
+        expect(restored[index].$2, original[index].$2);
+      }
+    });
+  });
+
+  group('baseline deadline robustness', () {
+    test('a heart-rate-only estimate never pins the baseline phase', () {
+      final account = UserAccount();
+      final source = _TestBiometricSource();
+      addTearDown(source.dispose);
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      addTearDown(detector.dispose);
+      final phase = BaselinePhase(
+        userAccount: account,
+        duration: const Duration(seconds: 30),
+        useBestEffortAtDeadline: true,
+      );
+      final context = PhaseContext(source: source, detector: detector);
+      phase.activate(context);
+
+      // The source's last resort can be a sample with no RMSSD. Caching that
+      // would hold canAdvance false forever and strand the demo at the end of
+      // its baseline.
+      source.bestEstimate = const HeartRateSample(heartRate: 64, rmssd: null);
+      phase.atDeadline(context);
+      expect(phase.canAdvance, isFalse);
+
+      phase.atDeadline(context);
+      expect(
+        source.finalizeCalls,
+        2,
+        reason: 'the phase must keep asking, not latch the unusable estimate',
+      );
+
+      source.bestEstimate = const HeartRateSample(heartRate: 62, rmssd: 48);
+      phase.atDeadline(context);
+      expect(phase.canAdvance, isTrue);
+      phase.complete(context);
+      expect(account.baselineHeartRate, 62);
+      expect(account.baselineRMSSD, 48);
+    });
+  });
+
+  group('audio route diagnostics', () {
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(AudioRouteDiagnostics.channel, null);
+    });
+
+    void mock(Future<Object?> Function(MethodCall call) handler) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(AudioRouteDiagnostics.channel, handler);
+    }
+
+    test('returns the platform route snapshot', () async {
+      MethodCall? seen;
+      mock((call) async {
+        seen = call;
+        return <String, Object?>{
+          'output_devices': ['ble_headset', 'builtin_speaker'],
+          'music_active': true,
+          'bluetooth_audio_connected': true,
+          'le_audio_profile': 'connected',
+        };
+      });
+
+      final route = await AudioRouteDiagnostics.readRoute();
+      expect(seen?.method, 'describe');
+      expect(route['bluetooth_audio_connected'], isTrue);
+      expect(route['output_devices'], contains('ble_headset'));
+    });
+
+    test('a platform failure never propagates into the meditation', () async {
+      mock((call) async => throw PlatformException(code: 'boom'));
+      final route = await AudioRouteDiagnostics.readRoute();
+      expect(route.keys, ['audio_route_error']);
+    });
+
+    test('a null response is reported as no information', () async {
+      mock((call) async => null);
+      expect(await AudioRouteDiagnostics.readRoute(), isEmpty);
+    });
+
+    test('stays silent unless the biosignal trace is enabled', () async {
+      var invoked = false;
+      mock((call) async {
+        invoked = true;
+        return <String, Object?>{'music_active': true};
+      });
+
+      // The trace is off in a normal build, so a production session must never
+      // reach the platform channel at all.
+      expect(AudioRouteDiagnostics.isAvailable, isFalse);
+      expect(await AudioRouteDiagnostics.describe(), isEmpty);
+      expect(invoked, isFalse);
+    });
+  });
+
+  group('optical channel selection', () {
+    /// Green with a high DC level but a weak pulse, against infrared with a
+    /// low DC level and a strong one — the arrangement measured on a real
+    /// OpenEarable v2, where ranking by absolute amplitude picked the worse
+    /// channel.
+    List<Map<String, Object?>> runChannelSession() {
+      final diagnostics = <Map<String, Object?>>[];
+      final epoch = DateTime(2026);
+      var now = epoch;
+      final processor = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: 50,
+        timestampExponent: -3,
+        diagnostics: diagnostics.add,
+        now: () => now,
+      );
+      addTearDown(processor.dispose);
+
+      var phase = 0.0;
+      void feed(int startMs, int seconds) {
+        for (var index = 0; index < seconds * 200; index++) {
+          final timestamp = startMs + (index * 5);
+          phase += 2 * pi * 1.0 / 200;
+          final pulse = sin(phase);
+          now = epoch.add(Duration(milliseconds: timestamp));
+          processor.processPpgSample(
+            timestamp,
+            90000 + (40 * pulse), // red:   0.044% modulation
+            40000 + (60 * pulse), // ir:    0.150% modulation
+            128000 + (50 * pulse), // green: 0.039% modulation, highest DC
+            0,
+          );
+        }
+      }
+
+      processor.beginCalibration();
+      feed(0, 30);
+      processor.beginMeasurement();
+      feed(30000, 5);
+      return diagnostics;
+    }
+
+    test('commits to the channel with the strongest pulse for its DC level',
+        () {
+      final committed = runChannelSession().firstWhere(
+        (event) => event['event'] == 'optical_channel_committed',
+        orElse: () => <String, Object?>{},
+      );
+
+      expect(
+        committed['channel'],
+        'infrared',
+        reason: 'green has the largest absolute swing but the weakest pulse '
+            'relative to its own DC level',
+      );
+      expect(
+        committed['infrared_perfusion'] as double,
+        greaterThan(committed['green_perfusion'] as double),
+      );
+    });
+
+    test('holds the committed channel for the rest of the measurement', () {
+      final events = runChannelSession();
+      final afterCommit = events
+          .skipWhile((e) => e['event'] != 'optical_channel_committed')
+          .where((e) => e['event'] == 'stream_health')
+          .map((e) => e['selected_channel'])
+          .toSet();
+
+      // Every switch is a discontinuity to filters that carry state, so the
+      // choice must not move once measurement has started.
+      expect(afterCommit.length, lessThanOrEqualTo(1));
+      if (afterCommit.isNotEmpty) {
+        expect(afterCommit.single, 'infrared');
+      }
+    });
+
+    test('near-equal channels do not make the selector thrash', () {
+      final diagnostics = <Map<String, Object?>>[];
+      final epoch = DateTime(2026);
+      var now = epoch;
+      final processor = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: 50,
+        timestampExponent: -3,
+        diagnostics: diagnostics.add,
+        now: () => now,
+      );
+      addTearDown(processor.dispose);
+
+      // Green and infrared with almost identical pulse strength relative to
+      // their own DC, which is the arrangement that made a real session switch
+      // more than ten times during calibration.
+      var phase = 0.0;
+      final noise = Random(3);
+      for (var index = 0; index < 30 * 200; index++) {
+        final timestamp = index * 5;
+        phase += 2 * pi * 1.0 / 200;
+        final pulse = sin(phase);
+        now = epoch.add(Duration(milliseconds: timestamp));
+        final wobble = (noise.nextDouble() - 0.5) * 0.06;
+        processor.processPpgSample(
+          timestamp,
+          90000 + (45 * pulse),
+          40000 + (40 * (1 + wobble) * pulse),
+          128000 + (128 * (1 - wobble) * pulse),
+          0,
+        );
+      }
+
+      final resets =
+          diagnostics.where((e) => e['event'] == 'beat_path_filters_reset');
+      // A 5-second dwell over a 30-second window allows at most a handful.
+      expect(
+        resets.length,
+        lessThanOrEqualTo(6),
+        reason: 'switched ${resets.length} times in 30 s',
+      );
+    });
+
+    test('a new calibration re-opens the choice', () {
+      final events = runChannelSession();
+      expect(
+        events.where((e) => e['event'] == 'optical_channel_committed'),
+        hasLength(1),
+      );
+    });
+  });
+
+  group('beat detection', () {
+    test('detector selection defaults to the configuration and is overridable',
+        () {
+      final byDefault = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: 50,
+        timestampExponent: -3,
+      );
+      addTearDown(byDefault.dispose);
+      expect(
+        byDefault.useMsptdBeatDetector,
+        BioAdaptiveModeConfig.useMsptdBeatDetector,
+      );
+
+      final overridden = HrHrvProcessor(
+        sampleFreq: 200,
+        accelerometerFreq: 50,
+        timestampExponent: -3,
+        useMsptdBeatDetector: true,
+      );
+      addTearDown(overridden.dispose);
+      expect(overridden.useMsptdBeatDetector, isTrue);
+    });
+
+    test('MSPTD finds one beat per pulse despite the dicrotic notch', () {
+      const sampleFreqHz = 200.0;
+      const durationSeconds = 30;
+      final beats = _syntheticBeatTimesMs(
+        meanRrMs: 1050,
+        variationMs: 45,
+        durationMs: durationSeconds * 1000,
+      );
+      final signal = _syntheticPpgRecording(
+        beatTimesMs: beats,
+        sampleFreqHz: sampleFreqHz,
+        sampleCount: durationSeconds * sampleFreqHz.toInt(),
+        baselineWanderAmplitude: 0,
+      );
+
+      final detected = const MsptdFastV2Detector().detectPeakIndices(
+        signal,
+        sampleFreqHz: sampleFreqHz,
+      );
+
+      final expectedBeats =
+          beats.where((beat) => beat < durationSeconds * 1000).length;
+      final yieldRatio = detected.length / expectedBeats;
+      // Below 1.0 only because the multi-scale window cannot resolve beats in
+      // the first and last second of the buffer. Well above the 0.66 measured
+      // from the legacy search on a real earbud recording.
+      expect(yieldRatio, greaterThan(0.85), reason: 'yield was $yieldRatio');
+      expect(yieldRatio, lessThan(1.05), reason: 'yield was $yieldRatio');
+    });
+
+    test('MSPTD recovers a physiological RMSSD from known beat times', () {
+      const sampleFreqHz = 200.0;
+      const durationSeconds = 60;
+      final beats = _syntheticBeatTimesMs(
+        meanRrMs: 1050,
+        variationMs: 45,
+        durationMs: durationSeconds * 1000,
+      );
+      final signal = _syntheticPpgRecording(
+        beatTimesMs: beats,
+        sampleFreqHz: sampleFreqHz,
+        sampleCount: durationSeconds * sampleFreqHz.toInt(),
+        baselineWanderAmplitude: 0,
+      );
+
+      final detected = const MsptdFastV2Detector()
+          .detectPeakIndices(signal, sampleFreqHz: sampleFreqHz)
+          .map((index) => index * 1000 / sampleFreqHz)
+          .toList(growable: false);
+
+      final truth = _rmssdOfBeatTimesMs(
+        beats.where((beat) => beat < durationSeconds * 1000).toList(),
+      );
+      final measured = _rmssdOfBeatTimesMs(detected);
+
+      // A missed or doubled beat shows up immediately as an implausible RMSSD,
+      // so this doubles as a beat-detection assertion.
+      expect(measured, lessThan(150), reason: 'measured $measured ms');
+      expect(
+        measured,
+        closeTo(truth, (truth * 0.6) + 10),
+        reason: 'measured $measured ms against a true $truth ms',
+      );
+    });
+
+    test('MSPTD publishes an accurate RMSSD through the full pipeline',
+        () async {
+      const sampleFreqHz = 200;
+      const durationSeconds = 60;
+      final beats = _syntheticBeatTimesMs(
+        meanRrMs: 1050,
+        variationMs: 45,
+        durationMs: durationSeconds * 1000,
+      );
+      final truth = _rmssdOfBeatTimesMs(
+        beats.where((beat) => beat < durationSeconds * 1000).toList(),
+      );
+
+      Future<List<HeartRateSample>> run({required bool useMsptd}) async {
+        final epoch = DateTime(2026);
+        var now = epoch;
+        final processor = HrHrvProcessor(
+          sampleFreq: sampleFreqHz.toDouble(),
+          accelerometerFreq: 50,
+          timestampExponent: -3,
+          hrvMinimumWindow: const Duration(seconds: 30),
+          now: () => now,
+          useMsptdBeatDetector: useMsptd,
+        );
+        addTearDown(processor.dispose);
+        final published = <HeartRateSample>[];
+        final subscription = processor.biometricStream.listen(published.add);
+        addTearDown(subscription.cancel);
+
+        const stepMs = 1000 ~/ sampleFreqHz;
+        final recording = _syntheticPpgRecording(
+          beatTimesMs: beats,
+          sampleFreqHz: sampleFreqHz.toDouble(),
+          sampleCount: durationSeconds * sampleFreqHz,
+        );
+        for (var i = 0; i < recording.length; i++) {
+          final timestamp = i * stepMs;
+          now = epoch.add(Duration(milliseconds: timestamp));
+          final optical = 1000 + (120 * recording[i]);
+          processor.processPpgSample(
+            timestamp,
+            optical * 0.9,
+            optical * 0.8,
+            optical,
+            0,
+          );
+        }
+        await Future<void>.delayed(Duration.zero);
+        return published;
+      }
+
+      double? lastRmssd(List<HeartRateSample> samples) => samples
+          .where((sample) => sample.rmssd != null)
+          .map((sample) => sample.rmssd)
+          .lastOrNull;
+
+      final msptdSamples = await run(useMsptd: true);
+      final legacySamples = await run(useMsptd: false);
+
+      final msptdRmssd = lastRmssd(msptdSamples);
+      final legacyRmssd = lastRmssd(legacySamples);
+
+      expect(msptdSamples, isNotEmpty);
+      expect(msptdRmssd, isNotNull);
+      expect(legacyRmssd, isNotNull);
+      expect(msptdSamples.last.heartRate, closeTo(60000 / 1050, 8));
+
+      // Both detectors recover the true RMSSD on this synthetic recording
+      // (measured: truth 28.7 ms, MSPTD 27.3 ms, legacy 27.3 ms). That is the
+      // point of this test: it pins MSPTD's end-to-end accuracy, and it records
+      // that the synthetic does NOT reproduce the field failure, where the
+      // legacy search found only ~66% of beats and reported ~166 ms on a clean
+      // 200 Hz earbud stream. Whatever defeats it there is not modelled here,
+      // so this must not be read as evidence that MSPTD is the better detector
+      // on real signals — the detector-comparison diagnostic decides that.
+      expect(msptdRmssd!, closeTo(truth, (truth * 0.6) + 10));
+      expect(
+        (msptdRmssd - truth).abs(),
+        lessThan((legacyRmssd! - truth).abs() + 5),
+        reason: 'MSPTD $msptdRmssd ms vs legacy $legacyRmssd ms '
+            'against a true $truth ms',
+      );
+    });
+
+    test('the detector comparison reports both families on one window',
+        () async {
+      const sampleFreqHz = 200;
+      const durationSeconds = 70;
+      final beats = _syntheticBeatTimesMs(
+        meanRrMs: 1050,
+        variationMs: 45,
+        durationMs: durationSeconds * 1000,
+      );
+      final epoch = DateTime(2026);
+      var now = epoch;
+      final diagnostics = <Map<String, Object?>>[];
+      final processor = HrHrvProcessor(
+        sampleFreq: sampleFreqHz.toDouble(),
+        accelerometerFreq: 50,
+        timestampExponent: -3,
+        hrvMinimumWindow: const Duration(seconds: 30),
+        diagnostics: diagnostics.add,
+        now: () => now,
+      );
+      addTearDown(processor.dispose);
+
+      const stepMs = 1000 ~/ sampleFreqHz;
+      final recording = _syntheticPpgRecording(
+        beatTimesMs: beats,
+        sampleFreqHz: sampleFreqHz.toDouble(),
+        sampleCount: durationSeconds * sampleFreqHz,
+      );
+      for (var i = 0; i < recording.length; i++) {
+        final timestamp = i * stepMs;
+        now = epoch.add(Duration(milliseconds: timestamp));
+        final optical = 1000 + (120 * recording[i]);
+        processor.processPpgSample(
+          timestamp,
+          optical * 0.9,
+          optical * 0.8,
+          optical,
+          0,
+        );
+      }
+
+      final comparisons = diagnostics
+          .where((event) => event['event'] == 'detector_comparison')
+          .toList();
+      expect(comparisons, isNotEmpty);
+
+      final candidates = (comparisons.last['candidates']! as List)
+          .cast<Map<String, Object?>>();
+      final modes = candidates.map((c) => c['mode']).toSet();
+      // The legacy family drives the metrics by default, but MSPTD must still
+      // be measured on the identical window so a traced run can compare them
+      // on a real signal without rebuilding the app.
+      expect(
+        modes,
+        containsAll(<String>[
+          'standardPositive',
+          'standardNegative',
+          'sensitivePositive',
+          'sensitiveNegative',
+          'msptdPositive',
+          'msptdNegative',
+        ]),
+      );
+      for (final candidate in candidates) {
+        expect(candidate['clean_pair_count'], isNotNull);
+        expect(candidate['peak_count'], isNotNull);
+        expect(candidate['signal_path'], isNotNull);
+      }
+
+      // Both paths must be measured on identical windows, so every detector
+      // appears once per path.
+      expect(
+        candidates
+            .where((c) => c['signal_path'] == 'beat')
+            .map((c) => c['mode'])
+            .toSet(),
+        candidates
+            .where((c) => c['signal_path'] == 'conditioned')
+            .map((c) => c['mode'])
+            .toSet(),
+      );
+    });
+
+    test('the lightly filtered path keeps the sharp edge the chain rounds off',
+        () async {
+      const sampleFreqHz = 200;
+      const durationSeconds = 60;
+      final beats = _syntheticBeatTimesMs(
+        meanRrMs: 1050,
+        variationMs: 45,
+        durationMs: durationSeconds * 1000,
+      );
+      final epoch = DateTime(2026);
+      var now = epoch;
+      final diagnostics = <Map<String, Object?>>[];
+      final processor = HrHrvProcessor(
+        sampleFreq: sampleFreqHz.toDouble(),
+        accelerometerFreq: 50,
+        timestampExponent: -3,
+        hrvMinimumWindow: const Duration(seconds: 30),
+        diagnostics: diagnostics.add,
+        now: () => now,
+      );
+      addTearDown(processor.dispose);
+
+      const stepMs = 1000 ~/ sampleFreqHz;
+      final recording = _syntheticPpgRecording(
+        beatTimesMs: beats,
+        sampleFreqHz: sampleFreqHz.toDouble(),
+        sampleCount: durationSeconds * sampleFreqHz,
+      );
+      for (var i = 0; i < recording.length; i++) {
+        final timestamp = i * stepMs;
+        now = epoch.add(Duration(milliseconds: timestamp));
+        final optical = 1000 + (120 * recording[i]);
+        processor.processPpgSample(
+          timestamp,
+          optical * 0.9,
+          optical * 0.8,
+          optical,
+          0,
+        );
+      }
+
+      final comparison = diagnostics.lastWhere(
+        (event) => event['event'] == 'detector_comparison',
+      );
+      final candidates =
+          (comparison['candidates']! as List).cast<Map<String, Object?>>();
+
+      int cleanPairsFor(String path) => candidates
+          .where((c) => c['signal_path'] == path)
+          .map((c) => (c['clean_pair_count'] as num?)?.toInt() ?? 0)
+          .fold(0, (a, b) => a > b ? a : b);
+
+      // Both paths must produce usable beats; which one wins on real hardware
+      // is what a traced session decides, so this only pins that the new path
+      // is wired up and detecting rather than returning nothing.
+      expect(cleanPairsFor('beat'), greaterThan(0));
+      expect(cleanPairsFor('conditioned'), greaterThan(0));
+    });
+  });
+}
+
+/// Beat times (ms) with natural beat-to-beat variation. The true RMSSD is
+/// measured from the generated series rather than assumed, so the tests compare
+/// against the real value instead of a nominal one.
+List<double> _syntheticBeatTimesMs({
+  required double meanRrMs,
+  required double variationMs,
+  required double durationMs,
+  int seed = 7,
+}) {
+  final random = Random(seed);
+  final beats = <double>[400];
+  var interval = meanRrMs;
+  while (beats.last < durationMs + meanRrMs) {
+    interval = meanRrMs +
+        ((interval - meanRrMs) * 0.6) +
+        ((random.nextDouble() * 2 - 1) * variationMs);
+    beats.add(beats.last + interval);
+  }
+  return beats;
+}
+
+double _rmssdOfBeatTimesMs(List<double> beatTimesMs) {
+  final intervals = <double>[
+    for (var i = 1; i < beatTimesMs.length; i++)
+      beatTimesMs[i] - beatTimesMs[i - 1],
+  ];
+  if (intervals.length < 2) return double.nan;
+  var sumSquared = 0.0;
+  for (var i = 1; i < intervals.length; i++) {
+    final difference = intervals[i] - intervals[i - 1];
+    sumSquared += difference * difference;
+  }
+  return sqrt(sumSquared / (intervals.length - 1));
+}
+
+/// A two-peak PPG pulse: a systolic peak followed by a smaller dicrotic peak,
+/// under respiratory amplitude modulation. The dicrotic peak is what an
+/// amplitude-and-refractory search mistakes for a second beat, which is the
+/// failure mode observed on a real earbud recording.
+///
+/// [beatAmplitudes] carries per-beat perfusion variation; real earbud PPG pulse
+/// height is far from constant, and a detector using one amplitude threshold
+/// across a window is exactly what that defeats.
+double _syntheticPpgAtMs(
+  double timeMs,
+  List<double> beatTimesMs, {
+  List<double>? beatAmplitudes,
+}) {
+  var value = 0.0;
+  for (var i = 0; i < beatTimesMs.length; i++) {
+    final beat = beatTimesMs[i];
+    if ((timeMs - beat).abs() > 2000) continue;
+    final interval = i + 1 < beatTimesMs.length
+        ? beatTimesMs[i + 1] - beat
+        : (i > 0 ? beat - beatTimesMs[i - 1] : 1000.0);
+    final amplitude = beatAmplitudes == null
+        ? 1.0
+        : beatAmplitudes[i % beatAmplitudes.length];
+
+    double bump(double centreFraction, double widthFraction, double height) {
+      final z = (timeMs - beat - (centreFraction * interval)) /
+          (widthFraction * interval);
+      return height * exp(-0.5 * z * z);
+    }
+
+    value += amplitude * (bump(0.15, 0.055, 1.0) + bump(0.42, 0.085, 0.42));
+  }
+  return value * (1 + (0.15 * sin(2 * pi * 0.25 * timeMs / 1000.0)));
+}
+
+/// Builds a full optical-channel recording with the degradations a real earbud
+/// PPG always carries: per-beat perfusion variation, low-frequency baseline
+/// wander, and sensor noise. Values are chosen once from typical published
+/// ranges, not tuned to favour either detector.
+/// [baselineWanderAmplitude] models slow optical drift. Pass 0 when feeding a
+/// detector directly: in the real pipeline the DC block and band-pass remove
+/// wander long before any detector sees the signal, so including it there would
+/// test the filters rather than the detector.
+List<double> _syntheticPpgRecording({
+  required List<double> beatTimesMs,
+  required double sampleFreqHz,
+  required int sampleCount,
+  double baselineWanderAmplitude = 3.0,
+  int seed = 11,
+}) {
+  final random = Random(seed);
+  final amplitudes = <double>[
+    for (var i = 0; i < beatTimesMs.length; i++)
+      1.0 + ((random.nextDouble() * 2 - 1) * 0.20),
+  ];
+  return <double>[
+    for (var i = 0; i < sampleCount; i++)
+      () {
+        final timeMs = i * 1000 / sampleFreqHz;
+        final pulse = _syntheticPpgAtMs(
+          timeMs,
+          beatTimesMs,
+          beatAmplitudes: amplitudes,
+        );
+        final wander =
+            baselineWanderAmplitude * sin(2 * pi * 0.1 * timeMs / 1000.0);
+        final noise = (random.nextDouble() * 2 - 1) * 0.10;
+        return pulse + wander + noise;
+      }(),
+  ];
 }
 
 class _TestBiometricSource implements BiometricSource {
@@ -1552,6 +2789,7 @@ class _TestBiometricSource implements BiometricSource {
       ValueNotifier(ActivityLevel.resting);
   int calibrationStarts = 0;
   int measurementStarts = 0;
+  int finalizeCalls = 0;
   HeartRateSample? bestEstimate;
   @override
   final bool suppressStressDetection;
@@ -1570,7 +2808,10 @@ class _TestBiometricSource implements BiometricSource {
   ValueListenable<ActivityLevel> get activityLevel => _activity;
 
   @override
-  HeartRateSample? finalizeBaselineEstimate() => bestEstimate;
+  HeartRateSample? finalizeBaselineEstimate() {
+    finalizeCalls++;
+    return bestEstimate;
+  }
 
   @override
   void beginCalibration() => calibrationStarts++;

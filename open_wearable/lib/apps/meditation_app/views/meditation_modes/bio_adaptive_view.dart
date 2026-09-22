@@ -107,9 +107,23 @@ class BioAdaptiveView extends StatefulWidget {
   State<BioAdaptiveView> createState() => _BioAdaptiveViewState();
 }
 
-class _BioAdaptiveViewState extends State<BioAdaptiveView> {
+class _BioAdaptiveViewState extends State<BioAdaptiveView>
+    with WidgetsBindingObserver {
   EarstreamState _earstreamState = EarstreamState.idle;
   Measurement? _measurement;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _measurement?.recordDiagnosticEvent('app_lifecycle', {
+      'state': state.name,
+    });
+  }
 
   void _startEarstream(UserAccount account) {
     _measurement?.dispose();
@@ -168,6 +182,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _measurement?.dispose();
     super.dispose();
   }
@@ -345,6 +360,9 @@ class BioAdaptiveContent extends StatelessWidget {
                               backgroundColor:
                                   Colors.redAccent.withValues(alpha: 0.1),
                               listenable: measurement.heartRate,
+                              freshness: phase is StressMonitoringPhase
+                                  ? measurement.metricsFresh
+                                  : null,
                               initialData: phase is StressMonitoringPhase
                                   ? measurement.baselineHeartRate
                                   : null,
@@ -363,6 +381,9 @@ class BioAdaptiveContent extends StatelessWidget {
                               listenable: measurement.rmssd
                                   .where((value) => value != null)
                                   .map((value) => value!.toStringAsFixed(1)),
+                              freshness: phase is StressMonitoringPhase
+                                  ? measurement.metricsFresh
+                                  : null,
                               initialData: phase is StressMonitoringPhase
                                   ? measurement.baselineRmssd
                                       ?.toStringAsFixed(1)
@@ -386,7 +407,12 @@ class BioAdaptiveContent extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _StressLevelTile(listenable: measurement.stressLevel),
+                      _StressLevelTile(
+                        listenable: measurement.stressLevel,
+                        freshness: phase is StressMonitoringPhase
+                            ? measurement.metricsFresh
+                            : null,
+                      ),
                       const SizedBox(height: 8),
                       _ActivityLevelTile(listenable: measurement.activityLevel),
                     ],
@@ -451,6 +477,7 @@ class _MeasurementTile extends StatelessWidget {
   final Color iconColor;
   final Color backgroundColor;
   final Stream<dynamic>? listenable;
+  final ValueListenable<bool>? freshness;
   final dynamic initialData;
 
   const _MeasurementTile({
@@ -461,6 +488,7 @@ class _MeasurementTile extends StatelessWidget {
     required this.iconColor,
     required this.backgroundColor,
     required this.listenable,
+    this.freshness,
     this.initialData,
   });
 
@@ -496,47 +524,70 @@ class _MeasurementTile extends StatelessWidget {
                     stream: listenable,
                     initialData: initialData,
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                "Loading...",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 14,
+                      final isBaseline = initialData != null &&
+                          snapshot.connectionState == ConnectionState.waiting;
+                      Widget valueContent(bool fresh) {
+                        if (!fresh && !isBaseline) {
+                          return Text(
+                            'Measuring…',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 14, color: iconColor),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  "Loading...",
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: iconColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1,
+                                  backgroundColor: backgroundColor,
                                   color: iconColor,
                                 ),
                               ),
+                            ],
+                          );
+                        }
+                        final value = snapshot.data;
+                        return FittedBox(
+                          alignment: Alignment.centerLeft,
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            isBaseline
+                                ? 'Baseline: $value $unit'
+                                : '$value $unit',
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
-                            const SizedBox(width: 4),
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1,
-                                backgroundColor: backgroundColor,
-                                color: iconColor,
-                              ),
-                            ),
-                          ],
+                          ),
                         );
                       }
-                      final value = snapshot.data;
-                      return FittedBox(
-                        alignment: Alignment.centerLeft,
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          "$value $unit",
-                          maxLines: 1,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      );
+
+                      final currentFreshness = freshness;
+                      return currentFreshness == null
+                          ? valueContent(true)
+                          : ValueListenableBuilder<bool>(
+                              valueListenable: currentFreshness,
+                              builder: (context, fresh, child) =>
+                                  valueContent(fresh),
+                            );
                     },
                   ),
                 ),
@@ -591,8 +642,10 @@ class _ActivityLevelTile extends StatelessWidget {
 
 class _StressLevelTile extends StatelessWidget {
   final ValueListenable<StressLevel> listenable;
+  final ValueListenable<bool>? freshness;
   const _StressLevelTile({
     required this.listenable,
+    this.freshness,
   });
 
   @override
@@ -600,33 +653,44 @@ class _StressLevelTile extends StatelessWidget {
     return ValueListenableBuilder(
       valueListenable: listenable,
       builder: (context, value, child) {
-        return Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(
-            vertical: 8,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: value.presentationBackgroundColor,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                value.presentationIcon,
-                color: value.presentationColor,
+        Widget content(bool fresh) => Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(
+                vertical: 8,
               ),
-              const SizedBox(width: 8),
-              Text(
-                value.presentationLabel,
-                style: TextStyle(
-                  color: value.presentationColor,
-                  fontWeight: FontWeight.w600,
-                ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: fresh
+                    ? value.presentationBackgroundColor
+                    : Colors.grey[100],
               ),
-            ],
-          ),
-        );
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    fresh
+                        ? value.presentationIcon
+                        : Icons.monitor_heart_outlined,
+                    color: fresh ? value.presentationColor : Colors.grey[700],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    fresh ? value.presentationLabel : 'Measuring...',
+                    style: TextStyle(
+                      color: fresh ? value.presentationColor : Colors.grey[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
+        final currentFreshness = freshness;
+        return currentFreshness == null
+            ? content(true)
+            : ValueListenableBuilder<bool>(
+                valueListenable: currentFreshness,
+                builder: (context, fresh, child) => content(fresh),
+              );
       },
     );
   }

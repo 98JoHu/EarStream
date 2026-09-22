@@ -26,6 +26,9 @@ sealed class MonitoringPhase {
   /// Timed phases may hold at 100% until the required sensor data is valid.
   bool get canAdvance => true;
 
+  /// Called by the controller only after this phase's timer has expired.
+  void atDeadline(PhaseContext ctx) {}
+
   StreamSubscription<HeartRateSample>? activate(
     PhaseContext ctx,
   );
@@ -70,12 +73,20 @@ class BaselinePhase extends MonitoringPhase {
   }) : duration = duration ?? BioAdaptiveModeConfig.baselineDuration;
 
   @override
-  bool get canAdvance {
-    if (useBestEffortAtDeadline) {
-      _deadlineEstimate ??= _source?.finalizeBaselineEstimate();
-      return _deadlineEstimate?.rmssd != null;
-    }
-    return _heartRateCount > 0 && _rmssdCount > 0;
+  bool get canAdvance => useBestEffortAtDeadline
+      ? _deadlineEstimate?.rmssd != null
+      : _heartRateCount > 0 && _rmssdCount > 0;
+
+  @override
+  void atDeadline(PhaseContext ctx) {
+    if (!useBestEffortAtDeadline) return;
+    // Keep asking until an estimate arrives that actually carries an RMSSD.
+    // The source may return a heart-rate-only sample as its last resort, and
+    // caching that with `??=` would pin [canAdvance] to false for good — the
+    // demo would sit at the end of its baseline forever. The processor itself
+    // applies the same rule: it only caches a resolved estimate with an RMSSD.
+    if (_deadlineEstimate?.rmssd != null) return;
+    _deadlineEstimate = _source?.finalizeBaselineEstimate();
   }
 
   bool get hasValidHeartRate => _heartRateCount > 0;
@@ -104,7 +115,7 @@ class BaselinePhase extends MonitoringPhase {
   @override
   void complete(PhaseContext ctx) {
     if (!useBestEffortAtDeadline) return;
-    final estimate = _deadlineEstimate ?? ctx.source.finalizeBaselineEstimate();
+    final estimate = _deadlineEstimate;
     final rmssd = estimate?.rmssd;
     if (estimate == null || rmssd == null) return;
     // The deadline estimate is based on the complete retained demo window and
@@ -157,6 +168,7 @@ class MonitoringPhaseController {
 
   void start() {
     _index = 0;
+    progress.value = 0;
     phase.value = current;
     _stopwatch
       ..reset()
@@ -201,8 +213,9 @@ class MonitoringPhaseController {
     progress.value =
         (_stopwatch.elapsed.inMilliseconds / duration.inMilliseconds)
             .clamp(0.0, 1.0);
-    if (_stopwatch.elapsed >= duration && current.canAdvance) {
-      _advance();
+    if (_stopwatch.elapsed >= duration) {
+      current.atDeadline(_ctx);
+      if (current.canAdvance) _advance();
     }
   }
 
@@ -211,16 +224,16 @@ class MonitoringPhaseController {
     current.complete(_ctx);
     _phaseSub?.cancel();
     _index++;
-    phase.value = current;
     _stopwatch
       ..reset()
       ..start();
     _activate();
+    progress.value = current.duration == null ? null : 0;
+    phase.value = current;
 
     // Once we reach an indefinite phase, the ticker has nothing left to do.
     if (current.duration == null) {
       _ticker?.cancel();
-      progress.value = null;
     }
   }
 

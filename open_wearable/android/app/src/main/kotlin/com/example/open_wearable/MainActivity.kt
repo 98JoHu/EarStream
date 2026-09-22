@@ -14,6 +14,13 @@ class MainActivity : FlutterActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
 
+    // Read-only audio routing diagnostics for the meditation app's opt-in
+    // biosignal trace. Registering it does nothing until Dart calls it.
+    AudioRouteDiagnostics(
+      applicationContext,
+      flutterEngine.dartExecutor.binaryMessenger,
+    )
+
     MethodChannel(
       flutterEngine.dartExecutor.binaryMessenger,
       SYSTEM_SETTINGS_CHANNEL,

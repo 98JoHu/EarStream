@@ -27,6 +27,9 @@ class Measurement {
   late final MonitoringMeditationDeadline _meditationDeadline;
   StreamSubscription<HeartRateSample>? _latestBiometricsSubscription;
   HeartRateSample? _latestBiometrics;
+  DateTime? _lastBiometricsAt;
+  Timer? _freshnessTimer;
+  final ValueNotifier<bool> metricsFresh = ValueNotifier(false);
 
   final ValueNotifier<BiometricMeditation?> meditation = ValueNotifier(null);
 
@@ -127,7 +130,8 @@ class Measurement {
 
   // The latest values stay local and are only included in a cloud prompt when
   // the session's explicit prompt policy permits it.
-  HeartRateSample? get latestBiometrics => _latestBiometrics;
+  HeartRateSample? get latestBiometrics =>
+      _hasFreshBiometrics ? _latestBiometrics : null;
   int? get baselineHeartRate => userAccount.baselineHeartRate;
   double? get baselineRmssd => userAccount.baselineRMSSD;
 
@@ -135,7 +139,26 @@ class Measurement {
   /// detector. RMSSD is intentionally irrelevant to meditation completion.
   bool get hasHeartRateRecoveredToBaseline {
     final latest = _latestBiometrics;
-    return latest != null && _detector.isHeartRateRecovered(latest.heartRate);
+    return latest != null &&
+        _hasFreshBiometrics &&
+        _detector.isHeartRateRecovered(latest.heartRate);
+  }
+
+  bool get _hasFreshBiometrics {
+    final last = _lastBiometricsAt;
+    return metricsFresh.value &&
+        last != null &&
+        DateTime.now().difference(last) <=
+            BioAdaptiveModeConfig.metricStaleAfter;
+  }
+
+  void recordDiagnosticEvent(
+    String event, [
+    Map<String, Object?> values = const {},
+  ]) {
+    if (_source case final SensorBiometricSource sensor) {
+      sensor.recordDiagnosticEvent(event, values);
+    }
   }
 
   // Publish the stress level
@@ -152,9 +175,15 @@ class Measurement {
   void start() {
     _meditationDeadline.reset();
     _source.start();
+    _latestBiometrics = null;
+    _lastBiometricsAt = null;
+    metricsFresh.value = false;
     _latestBiometricsSubscription = _source.biometrics.listen((sample) {
       _latestBiometrics = sample;
+      _lastBiometricsAt = DateTime.now();
+      metricsFresh.value = true;
     });
+    _startFreshnessTimer();
     _detector.reset();
     _phaseController.start();
     _onMonitoringPhaseChanged();
@@ -162,6 +191,8 @@ class Measurement {
 
   void pause() {
     _meditationDeadline.pause();
+    _freshnessTimer?.cancel();
+    metricsFresh.value = false;
     _source.pause();
     _phaseController.pause();
     _stopMeditation();
@@ -169,11 +200,13 @@ class Measurement {
 
   void resume() {
     _source.resume();
+    _startFreshnessTimer();
     _phaseController.resume();
     _meditationDeadline.resume();
   }
 
   void dispose() {
+    _freshnessTimer?.cancel();
     final currentMeditation = meditation.value;
     if (currentMeditation != null) {
       unawaited(
@@ -188,6 +221,14 @@ class Measurement {
     _detector.dispose();
     _phaseController.dispose();
     meditation.dispose();
+    metricsFresh.dispose();
+  }
+
+  void _startFreshnessTimer() {
+    _freshnessTimer?.cancel();
+    _freshnessTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      metricsFresh.value = _hasFreshBiometrics;
+    });
   }
 
   void _onStressLevelChanged() {
@@ -199,6 +240,12 @@ class Measurement {
 
   void _onMonitoringPhaseChanged() {
     if (_phaseController.current is StressMonitoringPhase) {
+      // Baseline measurements remain in the account as the comparison point,
+      // but must not masquerade as a current monitoring/recovery sample.
+      _latestBiometrics = null;
+      _lastBiometricsAt = null;
+      metricsFresh.value = false;
+      recordDiagnosticEvent('monitoring_started');
       _meditationDeadline.enterMonitoring();
     }
   }
@@ -212,6 +259,7 @@ class Measurement {
 
   void _startMeditation() {
     if (meditation.value != null) return;
+    recordDiagnosticEvent('meditation_triggered');
     _meditationDeadline.satisfy();
     if (_source case final RecordedStressBiometricSource recordedStress) {
       recordedStress.startRelaxationScenario();
@@ -225,6 +273,7 @@ class Measurement {
       analyticsStore: analyticsStore,
       analyticsMode:
           analyticsStore == null ? null : MeditationAnalyticsMode.bioAdaptive,
+      diagnosticEventSink: recordDiagnosticEvent,
     );
     meditation.value = session;
 

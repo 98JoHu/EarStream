@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_processor.dart';
+import 'hr_hrv_diagnostics.dart';
 import 'sensor_axis_mapping.dart';
 import 'activity_tracker.dart';
 
@@ -50,6 +51,10 @@ abstract interface class BiometricSource {
 }
 
 class SensorBiometricSource implements BiometricSource {
+  // Lightweight A/B check: no JSONL recording or per-sample timing.
+  static const bool _logPpgRate =
+      kDebugMode && bool.fromEnvironment('MEDITATION_PPG_RATE_LOG');
+
   final Sensor ppgSensor;
   final Sensor accelerometerSensor;
   final Sensor gyroscopeSensor;
@@ -75,6 +80,26 @@ class SensorBiometricSource implements BiometricSource {
   late final Stream<PpgMotionSample> _accelerometerStream;
   late final HrHrvProcessor _processor;
   late final ActivityTracker _activityTracker;
+  HrHrvDiagnosticsRecorder? _diagnosticsRecorder;
+  HrHrvSignalCapture? _rawPpgCapture;
+  HrHrvSignalCapture? _rawMotionCapture;
+  Stopwatch? _ppgDeliveryClock;
+  Timer? _ppgDeliveryTimer;
+  int _ppgDeliveryWindowStartUs = 0;
+  int _ppgDeliveredCount = 0;
+  int _ppgProcessingTotalUs = 0;
+  int _ppgProcessingMaximumUs = 0;
+  int? _ppgLastDeliveredTimestamp;
+  Stopwatch? _ppgRateClock;
+  Timer? _ppgRateTimer;
+  int _ppgRateWindowStartMs = 0;
+  int _ppgRateSampleCount = 0;
+  int? _ppgRateFirstTimestamp;
+  int? _ppgRateLastTimestamp;
+
+  /// Sample rates this device reports as selectable, per sensor. Populated
+  /// during [start] and reported through the existing diagnostics.
+  final Map<String, List<double>> _offeredFrequenciesHz = {};
 
   StreamSubscription<PpgOpticalSample>? _ppgSubscription;
   StreamSubscription<PpgMotionSample>? _accelSubscription;
@@ -111,12 +136,20 @@ class SensorBiometricSource implements BiometricSource {
       fallbackFrequency: BioAdaptiveModeConfig.accelerometerFallbackFrequencyHz,
       targetFrequencyHz: BioAdaptiveModeConfig.accelerometerTargetFrequencyHz,
     );
-    _configureSensorForStreaming(
+    final double gyroscopeFreq = _configureSensorForStreaming(
       gyroscopeSensor,
       sensorConfigProvider,
       fallbackFrequency: BioAdaptiveModeConfig.gyroscopeFallbackFrequencyHz,
       targetFrequencyHz: BioAdaptiveModeConfig.gyroscopeTargetFrequencyHz,
     );
+    if (_logPpgRate) {
+      debugPrint('Meditation selected sensor rates: PPG=$ppgFreq Hz, '
+          'accelerometer=$accelerometerFreq Hz, '
+          'gyroscope=$gyroscopeFreq Hz');
+      _offeredFrequenciesHz.forEach((sensorName, frequencies) {
+        debugPrint('Meditation rates offered by $sensorName: $frequencies');
+      });
+    }
 
     // Create the streams for PPG, accelerometer and gyroscope data
     _ppgStream = ppgSensor.sensorStream
@@ -164,6 +197,48 @@ class SensorBiometricSource implements BiometricSource {
         .asBroadcastStream();
 
     // Create the HR/HRV processor and activity tracker
+    if (HrHrvDiagnosticSettings.enabled) {
+      _diagnosticsRecorder = HrHrvDiagnosticsRecorder();
+      _diagnosticsRecorder?.record({
+        'event': 'sensor_metadata',
+        'ppg_axis_names': ppgSensor.axisNames,
+        'accelerometer_axis_names': accelerometerSensor.axisNames,
+        'configured_ppg_hz': ppgFreq,
+        'configured_accelerometer_hz': accelerometerFreq,
+        'configured_gyroscope_hz': gyroscopeFreq,
+        'offered_frequencies_hz': _offeredFrequenciesHz,
+        'requested_ppg_hz': BioAdaptiveModeConfig.ppgTargetFrequencyHz,
+        'requested_accelerometer_hz':
+            BioAdaptiveModeConfig.accelerometerTargetFrequencyHz,
+        'requested_gyroscope_hz':
+            BioAdaptiveModeConfig.gyroscopeTargetFrequencyHz,
+        'ppg_timestamp_exponent': ppgSensor.timestampExponent,
+        'accelerometer_timestamp_exponent':
+            accelerometerSensor.timestampExponent,
+      });
+      _ppgDeliveryClock = Stopwatch()..start();
+
+      if (HrHrvDiagnosticSettings.signalCaptureEnabled) {
+        final sink = _diagnosticsRecorder!.record;
+        // The raw optical and motion streams are what the processor consumes,
+        // so capturing them here makes an offline replay exact rather than
+        // approximate: conditioning can be re-run with different filters.
+        _rawPpgCapture = HrHrvSignalCapture(
+          event: 'ppg_raw_block',
+          channelNames: const ['red', 'ir', 'green', 'ambient'],
+          sink: sink,
+        );
+        _rawMotionCapture = HrHrvSignalCapture(
+          event: 'imu_raw_block',
+          channelNames: const ['x', 'y', 'z'],
+          sink: sink,
+          blockSize: 50,
+        );
+      }
+    }
+    if (_logPpgRate) {
+      _ppgRateClock = Stopwatch()..start();
+    }
     _processor = HrHrvProcessor(
       sampleFreq: ppgFreq,
       accelerometerFreq: accelerometerFreq,
@@ -171,6 +246,7 @@ class SensorBiometricSource implements BiometricSource {
       hrvMinimumWindow: hrvMinimumWindow,
       metricWindowDuration: metricWindowDuration,
       publishBestEffortEstimates: publishBestEffortEstimates,
+      diagnostics: _diagnosticsRecorder?.record,
     );
     if (startInCalibration) {
       _processor.beginCalibration();
@@ -191,6 +267,9 @@ class SensorBiometricSource implements BiometricSource {
   @override
   void pause() {
     if (!_started) return;
+    _diagnosticsRecorder?.record({'event': 'stream_paused'});
+    _stopPpgDeliveryTrace();
+    _stopPpgRateLog();
     _ppgSubscription?.cancel();
     _accelSubscription?.cancel();
     _activityTracker.pause();
@@ -209,17 +288,33 @@ class SensorBiometricSource implements BiometricSource {
   @override
   void resume() {
     if (!_started) return;
+    _diagnosticsRecorder?.record({'event': 'stream_resumed'});
+    _startPpgDeliveryTrace();
     _subscribe();
     _activityTracker.start();
   }
 
   @override
   void dispose() {
+    _stopPpgDeliveryTrace();
+    _stopPpgRateLog();
     _ppgSubscription?.cancel();
     _accelSubscription?.cancel();
     if (_started) {
       _activityTracker.dispose();
       _processor.dispose();
+    }
+    // Emit whatever is still buffered before the sink closes, so the final
+    // seconds of a session survive in the capture.
+    _rawPpgCapture?.flush();
+    _rawMotionCapture?.flush();
+    _rawPpgCapture = null;
+    _rawMotionCapture = null;
+    final recorder = _diagnosticsRecorder;
+    _diagnosticsRecorder = null;
+    if (recorder != null) {
+      recorder.record({'event': 'stream_disposed'});
+      unawaited(recorder.close());
     }
 
     scheduleMicrotask(() {
@@ -230,8 +325,16 @@ class SensorBiometricSource implements BiometricSource {
   }
 
   void _subscribe() {
+    _startPpgDeliveryTrace();
+    _startPpgRateLog();
     _ppgSubscription?.cancel();
     _ppgSubscription = _ppgStream.listen((data) {
+      final clock = _ppgDeliveryClock;
+      final startedUs = clock?.elapsedMicroseconds;
+      _rawPpgCapture?.add(
+        data.timestamp,
+        [data.red, data.ir, data.green, data.ambient],
+      );
       _processor.processPpgSample(
         data.timestamp,
         data.red,
@@ -239,10 +342,25 @@ class SensorBiometricSource implements BiometricSource {
         data.green,
         data.ambient,
       );
+      if (_ppgRateClock != null) {
+        _ppgRateFirstTimestamp ??= data.timestamp;
+        _ppgRateLastTimestamp = data.timestamp;
+        _ppgRateSampleCount++;
+      }
+      if (clock != null && startedUs != null) {
+        final processingUs = clock.elapsedMicroseconds - startedUs;
+        _ppgDeliveredCount++;
+        _ppgProcessingTotalUs += processingUs;
+        if (processingUs > _ppgProcessingMaximumUs) {
+          _ppgProcessingMaximumUs = processingUs;
+        }
+        _ppgLastDeliveredTimestamp = data.timestamp;
+      }
     });
 
     _accelSubscription?.cancel();
     _accelSubscription = _accelerometerStream.listen((data) {
+      _rawMotionCapture?.add(data.timestamp, [data.x, data.y, data.z]);
       _processor.processAccelerometerSample(
         data.timestamp,
         data.x,
@@ -250,6 +368,74 @@ class SensorBiometricSource implements BiometricSource {
         data.z,
       );
     });
+  }
+
+  /// Session events share the same local, debug-only trace as the PPG data.
+  void recordDiagnosticEvent(
+    String event, [
+    Map<String, Object?> values = const {},
+  ]) {
+    _diagnosticsRecorder?.record({'event': event, ...values});
+  }
+
+  void _startPpgDeliveryTrace() {
+    final clock = _ppgDeliveryClock;
+    if (clock == null || _ppgDeliveryTimer != null) return;
+    _ppgDeliveryWindowStartUs = clock.elapsedMicroseconds;
+    _ppgDeliveredCount = 0;
+    _ppgProcessingTotalUs = 0;
+    _ppgProcessingMaximumUs = 0;
+    _ppgDeliveryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final elapsedUs = clock.elapsedMicroseconds;
+      final count = _ppgDeliveredCount;
+      recordDiagnosticEvent('ppg_delivery', {
+        'wall_elapsed_ms': (elapsedUs - _ppgDeliveryWindowStartUs) / 1000.0,
+        'sample_count': count,
+        'processing_mean_us': count == 0 ? null : _ppgProcessingTotalUs / count,
+        'processing_max_us': count == 0 ? null : _ppgProcessingMaximumUs,
+        'last_sensor_timestamp_ticks': _ppgLastDeliveredTimestamp,
+      });
+      _ppgDeliveryWindowStartUs = elapsedUs;
+      _ppgDeliveredCount = 0;
+      _ppgProcessingTotalUs = 0;
+      _ppgProcessingMaximumUs = 0;
+    });
+  }
+
+  void _stopPpgDeliveryTrace() {
+    _ppgDeliveryTimer?.cancel();
+    _ppgDeliveryTimer = null;
+  }
+
+  void _startPpgRateLog() {
+    final clock = _ppgRateClock;
+    if (clock == null || _ppgRateTimer != null) return;
+    _ppgRateWindowStartMs = clock.elapsedMilliseconds;
+    _ppgRateSampleCount = 0;
+    _ppgRateFirstTimestamp = null;
+    _ppgRateLastTimestamp = null;
+    _ppgRateTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      final nowMs = clock.elapsedMilliseconds;
+      final wallSeconds = (nowMs - _ppgRateWindowStartMs) / 1000.0;
+      final first = _ppgRateFirstTimestamp;
+      final last = _ppgRateLastTimestamp;
+      final sensorSeconds = first == null || last == null
+          ? null
+          : (last - first) * pow(10, ppgSensor.timestampExponent).toDouble();
+      debugPrint('Meditation PPG delivery: '
+          '${(wallSeconds > 0 ? _ppgRateSampleCount / wallSeconds : 0).toStringAsFixed(1)} samples/s '
+          '($_ppgRateSampleCount in ${wallSeconds.toStringAsFixed(1)}s; '
+          'sensor span ${sensorSeconds?.toStringAsFixed(1) ?? "n/a"}s)');
+      _ppgRateWindowStartMs = nowMs;
+      _ppgRateSampleCount = 0;
+      _ppgRateFirstTimestamp = null;
+      _ppgRateLastTimestamp = null;
+    });
+  }
+
+  void _stopPpgRateLog() {
+    _ppgRateTimer?.cancel();
+    _ppgRateTimer = null;
   }
 
   double _configureSensorForStreaming(
@@ -276,6 +462,14 @@ class SensorBiometricSource implements BiometricSource {
       configuration,
       distinct: true,
     );
+    // The selectable rates come from the device's sensor scheme at runtime, so
+    // they cannot be read from the app's configuration. Record them so a single
+    // instrumented run reveals which rates this firmware actually offers.
+    _offeredFrequenciesHz[sensor.sensorName] = values
+        .whereType<SensorFrequencyConfigurationValue>()
+        .map((value) => value.frequencyHz)
+        .toList(growable: false)
+      ..sort();
     SensorConfigurationValue? appliedValue;
     if (values.isNotEmpty) {
       appliedValue = _selectBestConfigurationValue(

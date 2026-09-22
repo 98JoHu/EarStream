@@ -32,22 +32,103 @@ abstract final class BioAdaptiveModeConfig {
   static const Duration? hrvMinimumWindowOverride = null;
   static const Duration? metricWindowDurationOverride = null;
 
+  // Beat detector used for the published HR/RMSSD metrics.
+  //
+  // Off (default) keeps the existing four-mode polarity/sensitivity peak
+  // search. Enabling it selects the MSPTD-fast-v2 detector instead, evaluated
+  // on both signal polarities and ranked by the same clean-pair criterion.
+  //
+  // The detector-comparison diagnostic always reports every candidate,
+  // including MSPTD, so a traced run can measure the difference before this
+  // switch is flipped. Enable with:
+  //   flutter run --dart-define=MEDITATION_MSPTD_DETECTOR=true
+  static const bool useMsptdBeatDetector =
+      bool.fromEnvironment('MEDITATION_MSPTD_DETECTOR');
+
+  // Optical channel selection.
+  //
+  // Rank channels by modulation relative to their own DC level (perfusion
+  // index) instead of by absolute AC amplitude, and hold the choice for the
+  // measurement instead of re-deciding every sample.
+  //
+  // Measured on an OpenEarable v2 recording: the previous rule chose green
+  // 96.8% of the time and detected 73% of beats; ranking by perfusion and
+  // committing selects infrared and detects 101%. Set to false to restore the
+  // previous behaviour for comparison.
+  static const bool useNormalizedChannelSelection = true;
+  static const bool commitOpticalChannelAtMeasurementStart = true;
+
+  /// Minimum time a channel is held before another may take over.
+  ///
+  /// The 15% perfusion margin alone does not stop thrashing when two channels
+  /// are close. One session switched green/infrared more than ten times during
+  /// calibration, the last immediately after the commit and therefore at the
+  /// very start of the baseline window; each switch steps the beat path's
+  /// filters by tens of thousands of counts. That baseline resolved to 31 bpm
+  /// from three usable intervals, which armed the demo's 3% threshold at
+  /// 32 bpm and fired stress within seconds.
+  static const Duration opticalChannelDwell = Duration(seconds: 5);
+
+  // Beat timing signal path.
+  //
+  // The full conditioning chain low-passes the waveform enough that the
+  // systolic peak becomes a broad hump whose maximum wanders: measured peak
+  // positions jitter with a standard deviation of 62 ms against a clean
+  // reference, and RMSSD squares successive differences, so that alone adds
+  // about 87 ms of noise.
+  //
+  // Enabling this detects and times beats on a parallel, lightly filtered
+  // signal (selected channel -> DC block -> band-pass, skipping the motion
+  // suppressor, IMU canceller and normalizer). Measured on an OpenEarable v2
+  // recording of a still, seated session: outlier-filtered RMSSD 117 ms to
+  // 81 ms during meditation and 166 ms to 111 ms during monitoring, with
+  // fewer implausible intervals.
+  //
+  // A later recording with deliberate head movement and talking settled the
+  // open question: the lightly filtered path wins in every motion regime,
+  // measured as mean clean consecutive beat pairs per comparison window —
+  // still 8.0 vs 7.5, light movement 16.2 vs 12.0, sustained movement 11.5 vs
+  // 8.5 — leading in 7 of 8 windows with lower RMSSD throughout. The skipped
+  // stages were not protecting the waveform under motion; the step limiter and
+  // the normalizer's clipping were themselves distorting it.
+  //
+  // Set to false to restore the previous behaviour. The detector-comparison
+  // diagnostic reports both paths whichever way this is set.
+  static const bool useLightlyFilteredBeatPath = true;
+
+  /// Minimum separation between beats on the lightly filtered path, in seconds.
+  ///
+  /// The smoothing stages that path skips were doing two jobs, not one: they
+  /// rounded off the systolic edge (which cost timing precision) *and* they
+  /// blurred away the dicrotic notch. Restoring the edge restores the notch, so
+  /// the 250 ms floor used for the conditioned signal lets the notch register
+  /// as a beat.
+  ///
+  /// Measured across the four legacy modes on real data, worst-case heart rate
+  /// against a true 52 bpm: 66 bpm at 212 ms, 54 bpm at 350 ms, 52 bpm at
+  /// 450 ms. At 400 ms every mode agrees, which also neutralises the fact that
+  /// mode selection happens once and then sticks. The cost is a ceiling of
+  /// 150 bpm, far above anything a seated meditation produces.
+  static const double beatPathMinimumBeatIntervalSeconds = 0.40;
+
   static const double defaultHeartRateWindowSeconds = 10;
   static const double defaultMetricEligibilityWindowSeconds = 4;
   static const double defaultHrvHistoryWindowSeconds = 300;
   static const Duration defaultHrvMinimumWindow = Duration(seconds: 60);
   static const Duration processorWarmupDuration = Duration(seconds: 10);
   static const Duration metricEmitInterval = Duration(seconds: 3);
+  static const Duration metricStaleAfter = Duration(seconds: 12);
   static const Duration phaseProgressUpdateInterval =
       Duration(milliseconds: 100);
 
-  // Requested sensor stream rates and fallbacks when metadata is unavailable.
+  // Keep IMU traffic low while PPG and meditation audio run concurrently.
+  // The activity classifier uses time-based windows, so 25 Hz is sufficient.
   static const int ppgTargetFrequencyHz = 200;
   static const double ppgFallbackFrequencyHz = 100;
-  static const int accelerometerTargetFrequencyHz = 100;
-  static const double accelerometerFallbackFrequencyHz = 100;
-  static const int gyroscopeTargetFrequencyHz = 100;
-  static const double gyroscopeFallbackFrequencyHz = 100;
+  static const int accelerometerTargetFrequencyHz = 25;
+  static const double accelerometerFallbackFrequencyHz = 25;
+  static const int gyroscopeTargetFrequencyHz = 25;
+  static const double gyroscopeFallbackFrequencyHz = 25;
 
   static const Duration chartVisibleWindow = Duration(minutes: 1);
 

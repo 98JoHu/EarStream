@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:math';
 
 import '../configs/bio_adaptive_mode_config.dart';
+import 'hr_hrv_diagnostics.dart';
+import 'msptd_fast_v2_detector.dart';
+import 'pulse_interval_rmssd.dart';
 
 class HeartRateSample {
   final int heartRate;
@@ -17,10 +20,11 @@ class HeartRateSample {
 /// apps/heart_tracker/model/ppg_filter.dart): adaptive channel selection,
 /// ambient-light cancellation, accelerometer-referenced motion cancellation,
 /// motion-aware outlier suppression, DC-block + band-pass filtering, bounded
-/// normalization, then a windowed (10s buffer, ~1Hz) peak detector with
-/// quality gating feeds both the HR estimate and a rolling RR-interval
-/// history (up to 5 minutes, minimum 1 minute before HRV is reported) used
-/// for RMSSD. Kept as a separate copy (not an import) so the meditation app
+/// normalization, then a windowed (~1 Hz) peak detector (10s regular / 30s
+/// demo buffer) with quality gating. Detected beats feed the HR estimate and
+/// a rolling RR-interval history (regular: up to 5 minutes, minimum 1 minute;
+/// demo: 30 seconds) used for RMSSD. Kept as a separate copy (not an import)
+/// so the meditation app
 /// doesn't depend on the heart_tracker app.
 ///
 /// Unlike the Heart Tracker page, this has no gyroscope and no optical
@@ -33,29 +37,64 @@ class HeartRateSample {
 ///
 /// NOTE: heart_tracker_page.dart validates this pipeline with both PPG and
 /// accelerometer streamed at 50Hz. This app streams PPG at 200Hz and the
-/// accelerometer at 100Hz instead, so every fixed per-sample smoothing
-/// constant below (EMA alphas, window/tap-history sizes) has been
-/// re-tuned for those rates rather than copied as-is from the 50Hz
-/// reference — see the per-class comments below.
+/// accelerometer at a requested 25Hz instead. PPG-stage constants below are
+/// scaled for 200Hz; motion-reference EMA coefficients are derived from the
+/// sensor's selected accelerometer rate to preserve their time constants.
 class HrHrvProcessor {
   final double sampleFreq;
   final double accelerometerFreq;
   final int timestampExponent;
   final bool publishBestEffortEstimates;
+  final HrHrvDiagnosticSink? diagnostics;
   final DateTime Function() _now;
 
+  /// Whether MSPTD-fast-v2 drives the published metrics instead of the legacy
+  /// amplitude/refractory peak search. Defaults to
+  /// [BioAdaptiveModeConfig.useMsptdBeatDetector]; overridable so both
+  /// detectors can be measured against one identical input.
+  final bool useMsptdBeatDetector;
+
+  /// Detector candidates eligible to drive published metrics. The other family
+  /// is still evaluated for the detector-comparison diagnostic.
+  List<_PeakDetectionMode> get _selectableModes => useMsptdBeatDetector
+      ? const [
+          _PeakDetectionMode.msptdPositive,
+          _PeakDetectionMode.msptdNegative,
+        ]
+      : const [
+          _PeakDetectionMode.standardPositive,
+          _PeakDetectionMode.standardNegative,
+          _PeakDetectionMode.sensitivePositive,
+          _PeakDetectionMode.sensitiveNegative,
+        ];
+
   static const double _minBeatIntervalSec = 0.25;
+
+  // Narrower than the 30-240 bpm accepted for a live reading: a resting
+  // baseline taken from a seated person has far less room than a momentary
+  // estimate, and halved or doubled beat detection lands outside this.
+  static const double _minimumPlausibleBaselineBpm = 40;
+  static const double _maximumPlausibleBaselineBpm = 120;
   static const double _maxBeatIntervalSec = 2.0;
 
-  final _AdaptiveOpticalChannelSelector _channelSelector =
-      _AdaptiveOpticalChannelSelector();
+  late final _AdaptiveOpticalChannelSelector _channelSelector;
   final _AmbientLightCanceler _ambientCanceler = _AmbientLightCanceler();
-  final _MotionNoiseSuppressor _motionSuppressor = _MotionNoiseSuppressor();
-  final _MultiReferenceMotionCanceler _imuCanceler =
-      _MultiReferenceMotionCanceler();
+  late final _MotionNoiseSuppressor _motionSuppressor;
+  late final _MultiReferenceMotionCanceler _imuCanceler;
   late final _HighPassFilter _dcBlockFilter;
   late final _BandPassFilter _bandPassFilter;
+
+  // The beat-timing path deliberately uses its own filter instances fed
+  // straight from the selected optical channel, so it never inherits the
+  // smoothing the main chain applies upstream of these stages.
+  late final _HighPassFilter _beatDcBlockFilter;
+  late final _BandPassFilter _beatBandPassFilter;
   final _BoundedSignalNormalizer _normalizer = _BoundedSignalNormalizer();
+
+  HrHrvSignalCapture? _conditionedCapture;
+
+  /// The channel the beat-path filters currently hold state for.
+  String? _beatPathChannel;
 
   final List<_ConditionedSample> _buffer = [];
   final List<_ConditionedSample> _deadlineEvidence = [];
@@ -69,9 +108,27 @@ class HrHrvProcessor {
   late final double _minimumWindowTicks;
   late final double _evaluationPeriodTicks;
   double _lastEvaluationTick = double.negativeInfinity;
+  double _lastDetectorComparisonTick = double.negativeInfinity;
+  int? _firstMeasurementTimestamp;
+  _PeakDetectionMode? _activePeakDetectionMode;
+  int _poorPeakWindowCount = 0;
+  int _lastCrediblePeakPairCount = 0;
+  String _lastRmssdSource = 'unavailable';
+  int? _traceLastPpgTimestamp;
+  int? _traceHealthStartTimestamp;
+  int _traceSampleCount = 0;
+  int _traceGapCount = 0;
+  int _traceNonIncreasingCount = 0;
+  int _traceChannelChanges = 0;
+  double _traceMaximumGapMs = 0;
+  double _traceMinimumSelectedOptical = double.infinity;
+  double _traceMaximumSelectedOptical = double.negativeInfinity;
+  int _traceNonFiniteSelectedOpticalCount = 0;
+  String? _tracePreviousChannel;
 
   double _hrEstimate = 75.0;
   double _hrCovariance = 1.0;
+  bool _hasMeasuredHeartRate = false;
   final double _hrProcessNoise = 0.02;
   final double _hrMeasurementNoise = 5.0;
 
@@ -131,6 +188,28 @@ class HrHrvProcessor {
 
     final retainedEstimate = _estimateRetainedBaseline();
     final resolved = retainedEstimate ?? _bestEffortEstimate ?? _latestSample;
+    final selectedSource = retainedEstimate != null
+        ? 'retained_signal'
+        : _bestEffortEstimate != null
+            ? 'best_effort'
+            : _latestSample != null
+                ? 'latest_published'
+                : 'none';
+    HrHrvDiagnosticSettings.logSummary(
+      'Meditation baseline: HR=${resolved?.heartRate ?? "n/a"} BPM, '
+      'RMSSD=${resolved?.rmssd?.toStringAsFixed(1) ?? "n/a"} ms, '
+      'source=$selectedSource, '
+      'detector=${_activePeakDetectionMode?.name ?? "unselected"}',
+    );
+    _trace('baseline_deadline', {
+      'retained_samples': _deadlineEvidence.length,
+      'calibration_samples': _baselineEvidenceStartIndex,
+      'baseline_samples':
+          _deadlineEvidence.length - _baselineEvidenceStartIndex,
+      'selected_source': selectedSource,
+      'heart_rate_bpm': resolved?.heartRate,
+      'rmssd_ms': resolved?.rmssd,
+    });
     if (resolved != null && resolved.rmssd != null) {
       _deadlineEstimate = resolved;
       _bestEffortEstimate = resolved;
@@ -144,6 +223,10 @@ class HrHrvProcessor {
   /// to the HR/HRV estimator. Filter state is deliberately retained.
   void beginCalibration() {
     if (!_measurementEnabled) return;
+    _trace('phase_changed', {'phase': 'calibration'});
+    // A new calibration re-opens the channel choice; the earbud may have been
+    // refitted since the last measurement.
+    _channelSelector.releaseCommitment();
     _measurementEnabled = false;
     _deadlineEvidence.clear();
     _deadlineEstimate = null;
@@ -157,6 +240,19 @@ class HrHrvProcessor {
   /// Calibration samples cannot enter peak detection or RR history.
   void beginMeasurement() {
     if (_measurementEnabled) return;
+    _trace('phase_changed', {'phase': 'measurement'});
+    // Calibration exists to warm the filters; by its end there is enough
+    // evidence to pick an optical channel. Freezing it here stops the
+    // per-sample switching that costs beats mid-measurement.
+    if (BioAdaptiveModeConfig.commitOpticalChannelAtMeasurementStart) {
+      _channelSelector.commit();
+      _trace('optical_channel_committed', {
+        'channel': _channelSelector.committedChannel,
+        'green_perfusion': _channelSelector.greenPerfusion,
+        'red_perfusion': _channelSelector.redPerfusion,
+        'infrared_perfusion': _channelSelector.infraredPerfusion,
+      });
+    }
     _baselineEvidenceStartIndex = _deadlineEvidence.length;
     _clearEstimatorState();
     _measurementEnabled = true;
@@ -164,7 +260,15 @@ class HrHrvProcessor {
 
   void _emit(HeartRateSample sample) {
     _latestSample = sample;
+    _trace('metric_published', {
+      'heart_rate_bpm': sample.heartRate,
+      'rmssd_ms': sample.rmssd,
+    });
     _metricStreamController.add(sample);
+  }
+
+  void _trace(String event, Map<String, Object?> values) {
+    diagnostics?.call({'event': event, ...values});
   }
 
   HrHrvProcessor({
@@ -174,14 +278,57 @@ class HrHrvProcessor {
     Duration? hrvMinimumWindow,
     Duration? metricWindowDuration,
     this.publishBestEffortEstimates = false,
+    this.diagnostics,
     DateTime Function()? now,
-  }) : _now = now ?? DateTime.now {
+    bool? useMsptdBeatDetector,
+  })  : _now = now ?? DateTime.now,
+        useMsptdBeatDetector = useMsptdBeatDetector ??
+            BioAdaptiveModeConfig.useMsptdBeatDetector {
+    _motionSuppressor = _MotionNoiseSuppressor(
+      accelerometerFreq: accelerometerFreq,
+    );
+    _imuCanceler = _MultiReferenceMotionCanceler(
+      accelerometerFreq: accelerometerFreq,
+    );
+    _channelSelector = _AdaptiveOpticalChannelSelector(
+      useNormalizedRanking:
+          BioAdaptiveModeConfig.useNormalizedChannelSelection,
+      minimumDwellSamples:
+          (BioAdaptiveModeConfig.opticalChannelDwell.inMilliseconds *
+                  sampleFreq /
+                  1000)
+              .round(),
+    );
     _dcBlockFilter = _HighPassFilter(cutoffFreq: 0.12, sampleFreq: sampleFreq);
     _bandPassFilter = _BandPassFilter(
       sampleFreq: sampleFreq,
       lowCut: 0.45,
       highCut: 5.5,
     );
+    // Same coefficients: the band itself is not the problem, only what the
+    // signal has been through before reaching it. Measured on real data,
+    // 0.45-5.5 Hz and 0.7-3.0 Hz perform identically here.
+    _beatDcBlockFilter =
+        _HighPassFilter(cutoffFreq: 0.12, sampleFreq: sampleFreq);
+    _beatBandPassFilter = _BandPassFilter(
+      sampleFreq: sampleFreq,
+      lowCut: 0.45,
+      highCut: 5.5,
+    );
+
+    final diagnosticSink = diagnostics;
+    if (diagnosticSink != null &&
+        HrHrvDiagnosticSettings.signalCaptureEnabled) {
+      // The conditioned waveform is what every detector actually sees. Keeping
+      // it alongside the raw capture lets an offline replay prove it
+      // reproduces the device's own conditioning before trusting its verdict.
+      _conditionedCapture = HrHrvSignalCapture(
+        event: 'ppg_conditioned_block',
+        channelNames: const ['signal', 'motion'],
+        sink: diagnosticSink,
+        fractionDigits: 5,
+      );
+    }
 
     _ticksPerSecond = pow(10, -timestampExponent).toDouble();
     _ticksToMilliseconds = pow(10, timestampExponent + 3).toDouble();
@@ -199,6 +346,21 @@ class HrHrvProcessor {
             BioAdaptiveModeConfig.defaultHrvHistoryWindowSeconds) *
         _ticksPerSecond;
     this.hrvMinimumWindow = hrvMinimumWindow ?? _defaultHrvMinimumWindow;
+    _trace('processor_created', {
+      'configured_ppg_hz': sampleFreq,
+      'configured_accelerometer_hz': accelerometerFreq,
+      'imu_gravity_alpha': _imuCanceler.gravityAlpha,
+      'imu_dynamic_alpha': _imuCanceler.dynamicAlpha,
+      'imu_scale_alpha': _imuCanceler.scaleAlpha,
+      'motion_gravity_alpha': _motionSuppressor.gravityAlpha,
+      'motion_level_alpha': _motionSuppressor.motionAlpha,
+      'timestamp_exponent': timestampExponent,
+      'metric_window_ms': _windowDurationTicks * _ticksToMilliseconds,
+      'metric_eligibility_ms': _minimumWindowTicks * _ticksToMilliseconds,
+      'hrv_history_window_ms': _hrvWindowTicks * _ticksToMilliseconds,
+      'hrv_minimum_window_ms': _hrvMinimumWindowTicks * _ticksToMilliseconds,
+      'best_effort_enabled': publishBestEffortEstimates,
+    });
   }
 
   /// Minimum RR-history span required before RMSSD is reported at all.
@@ -249,6 +411,9 @@ class HrHrvProcessor {
   ) {
     final selectedOpticalSignal =
         _channelSelector.select(green: green, red: red, ir: ir);
+    if (diagnostics != null) {
+      _tracePpgHealth(timestamp, selectedOpticalSignal);
+    }
     final ambientCanceled = _ambientCanceler.filter(
       green: selectedOpticalSignal,
       ambient: ambient,
@@ -261,11 +426,41 @@ class HrHrvProcessor {
     final bandPassed = _bandPassFilter.filter(dcBlocked);
     final bounded = _normalizer.filter(bandPassed, motionLevel: motionLevel);
 
+    // Fed from the selected channel directly, in parallel with the chain
+    // above, so the sharp systolic edge survives for beat timing. A channel
+    // change is a step of tens of thousands of counts; the conditioned path
+    // absorbs that in its normalizer, this one has nothing to absorb it, so
+    // restart the filters rather than let them ring through the step.
+    final currentChannel = _channelSelector.selectedChannel;
+    if (_beatPathChannel != null && _beatPathChannel != currentChannel) {
+      _beatDcBlockFilter.reset();
+      _beatBandPassFilter.reset();
+      _trace('beat_path_filters_reset', {
+        'from': _beatPathChannel,
+        'to': currentChannel,
+      });
+    }
+    _beatPathChannel = currentChannel;
+
+    final beatSignal = _beatBandPassFilter.filter(
+      _beatDcBlockFilter.filter(selectedOpticalSignal),
+    );
+
     final conditionedSample = _ConditionedSample(
       timestamp: timestamp,
       signal: bounded,
+      beatSignal: beatSignal,
       motionLevel: motionLevel,
     );
+    _conditionedCapture?.add(
+      timestamp,
+      [bounded, motionLevel],
+      context: {
+        'phase': _measurementEnabled ? 'measurement' : 'calibration',
+        'channel': _channelSelector.selectedChannel,
+      },
+    );
+
     if (_collectDeadlineEvidence) {
       _deadlineEvidence.add(conditionedSample);
     }
@@ -275,6 +470,7 @@ class HrHrvProcessor {
     }
 
     _firstSampleTime ??= _now();
+    _firstMeasurementTimestamp ??= timestamp;
 
     _buffer.add(conditionedSample);
     _buffer.removeWhere(
@@ -298,16 +494,103 @@ class HrHrvProcessor {
   }
 
   void dispose() {
+    _conditionedCapture?.flush();
+    _conditionedCapture = null;
+    _trace('processor_disposed', {});
     _metricStreamController.close();
   }
 
+  void _tracePpgHealth(int timestamp, double selectedOpticalSignal) {
+    final channel = _channelSelector.selectedChannel;
+    final previousChannel = _tracePreviousChannel;
+    if (previousChannel != null && previousChannel != channel) {
+      _traceChannelChanges++;
+    }
+    _tracePreviousChannel = channel;
+
+    final previousTimestamp = _traceLastPpgTimestamp;
+    if (previousTimestamp != null) {
+      final delta = timestamp - previousTimestamp;
+      if (delta <= 0) {
+        _traceNonIncreasingCount++;
+        if (delta < 0) {
+          _trace('timestamp_discontinuity', {
+            'previous_timestamp_ticks': previousTimestamp,
+            'current_timestamp_ticks': timestamp,
+          });
+          _traceHealthStartTimestamp = timestamp;
+          _traceSampleCount = 0;
+        }
+      } else {
+        final gapMs = delta * _ticksToMilliseconds;
+        _traceMaximumGapMs = max(_traceMaximumGapMs, gapMs);
+        if (delta > (2.5 * _ticksPerSecond / sampleFreq)) {
+          _traceGapCount++;
+        }
+      }
+    }
+    _traceLastPpgTimestamp = timestamp;
+    _traceHealthStartTimestamp ??= timestamp;
+    _traceSampleCount++;
+    if (selectedOpticalSignal.isFinite) {
+      _traceMinimumSelectedOptical =
+          min(_traceMinimumSelectedOptical, selectedOpticalSignal);
+      _traceMaximumSelectedOptical =
+          max(_traceMaximumSelectedOptical, selectedOpticalSignal);
+    } else {
+      _traceNonFiniteSelectedOpticalCount++;
+    }
+
+    final spanTicks = timestamp - _traceHealthStartTimestamp!;
+    if (spanTicks < _ticksPerSecond) return;
+    _trace('stream_health', {
+      'phase': _measurementEnabled ? 'measurement' : 'calibration',
+      'timestamp_ticks': timestamp,
+      'sample_count': _traceSampleCount,
+      'observed_hz': spanTicks > 0
+          ? ((_traceSampleCount - 1) * _ticksPerSecond / spanTicks)
+          : null,
+      'gap_count': _traceGapCount,
+      'non_increasing_timestamp_count': _traceNonIncreasingCount,
+      'maximum_gap_ms': _traceMaximumGapMs,
+      'selected_channel': channel,
+      'channel_changes': _traceChannelChanges,
+      'selected_optical_min': _traceMinimumSelectedOptical.isFinite
+          ? _traceMinimumSelectedOptical
+          : null,
+      'selected_optical_max': _traceMaximumSelectedOptical.isFinite
+          ? _traceMaximumSelectedOptical
+          : null,
+      'non_finite_selected_optical_count': _traceNonFiniteSelectedOpticalCount,
+    });
+    _traceHealthStartTimestamp = timestamp;
+    _traceSampleCount = 1;
+    _traceGapCount = 0;
+    _traceNonIncreasingCount = 0;
+    _traceMaximumGapMs = 0;
+    _traceChannelChanges = 0;
+    _traceMinimumSelectedOptical = double.infinity;
+    _traceMaximumSelectedOptical = double.negativeInfinity;
+    _traceNonFiniteSelectedOpticalCount = 0;
+  }
+
   void _evaluateVitals(int latestTimestamp) {
+    final measurementSpanTicks =
+        latestTimestamp - (_firstMeasurementTimestamp ?? latestTimestamp);
     final observedWindowTicks = _buffer.isEmpty
         ? 0.0
         : (_buffer.last.timestamp - _buffer.first.timestamp).toDouble();
-    final oneSampleToleranceTicks = _ticksPerSecond / max(1.0, sampleFreq);
-    if (_buffer.length < 20 ||
-        observedWindowTicks + oneSampleToleranceTicks < _minimumWindowTicks) {
+    // Eligibility is elapsed measurement time, not the exact distance between
+    // the first and last samples surviving a trailing window. With irregular
+    // delivery a 30-second buffer commonly spans 29.9x seconds forever.
+    if (_buffer.length < 20 || measurementSpanTicks < _minimumWindowTicks) {
+      _trace('evaluation_skipped', {
+        'reason': 'insufficient_window',
+        'timestamp_ticks': latestTimestamp,
+        'measurement_span_ms': measurementSpanTicks * _ticksToMilliseconds,
+        'window_span_ms': observedWindowTicks * _ticksToMilliseconds,
+        'buffer_samples': _buffer.length,
+      });
       return;
     }
 
@@ -320,20 +603,33 @@ class HrHrvProcessor {
     // demo still evaluates the pulse waveform so its fixed deadline can retain
     // a low-confidence, beat-derived candidate instead of producing no value.
     if (recentMotion >= 1.45 && !publishBestEffortEstimates) {
+      _trace('evaluation_skipped', {
+        'reason': 'heavy_motion',
+        'timestamp_ticks': latestTimestamp,
+        'average_motion': recentMotion,
+        'waveform_quality_score': qualityScore,
+      });
       return;
     }
 
     final effectiveSampleFreqHz = _estimateEffectiveSampleFreqHz();
-    final peakEstimate = _estimateHeartRateByPeak(
-      estimatedSampleFreqHz: effectiveSampleFreqHz,
-    );
+    final peakEstimate = _selectLivePeakEstimate(effectiveSampleFreqHz);
+    if (!publishBestEffortEstimates || _deadlineEstimate != null) {
+      _maybeCompareDetectors(
+        _buffer,
+        effectiveSampleFreqHz,
+        context: 'monitoring',
+      );
+    }
     final peaks = peakEstimate.peakTimestamps;
     final peakHeartRate = peakEstimate.heartRateBpm;
+    _lastCrediblePeakPairCount = peakEstimate.crediblePairCount;
 
     final peakScore = (peaks.length / 8.0).clamp(0.0, 1.0);
     qualityScore = ((0.78 * qualityScore) + (0.22 * peakScore)).clamp(0.0, 1.0);
 
     final ibiTicks = <double>[];
+    final intervalSequence = <double?>[];
     for (var i = 1; i < peaks.length; i++) {
       final interval = (peaks[i] - peaks[i - 1]).toDouble();
       final intervalSeconds = interval / _ticksPerSecond;
@@ -341,6 +637,9 @@ class HrHrvProcessor {
           intervalSeconds >= _minBeatIntervalSec &&
           intervalSeconds <= _maxBeatIntervalSec) {
         ibiTicks.add(interval);
+        intervalSequence.add(interval);
+      } else {
+        intervalSequence.add(null);
       }
     }
     if (ibiTicks.length >= 2) {
@@ -359,14 +658,28 @@ class HrHrvProcessor {
 
     final currentBestEffort = _considerBestEffortEstimate(
       heartRate: peakHeartRate,
-      ibiTicks: ibiTicks,
+      intervalSequence: intervalSequence,
       qualityScore: qualityScore,
     );
 
     final classifiedQuality = _classifyQuality(qualityScore);
+    _tracePeakEvaluation(
+      timestamp: latestTimestamp,
+      qualityScore: qualityScore,
+      averageMotion: recentMotion,
+      qualityClass: classifiedQuality,
+      estimatedSampleFreqHz: effectiveSampleFreqHz,
+      peaks: peaks,
+      validIntervals: ibiTicks,
+      intervalSequence: intervalSequence,
+      peakHeartRate: peakHeartRate,
+      detectionMode: peakEstimate.mode.name,
+      bestEffort: currentBestEffort,
+    );
     if (classifiedQuality == _SignalQuality.bad ||
         classifiedQuality == _SignalQuality.unavailable) {
       if (publishBestEffortEstimates && currentBestEffort != null) {
+        _lastRmssdSource = 'window_best_effort';
         _maybeEmit(
           currentBestEffort.heartRate.toDouble(),
           currentBestEffort.rmssd,
@@ -380,31 +693,121 @@ class HrHrvProcessor {
 
     final smoothedHeartRate = _kalmanUpdateHeartRate(peakHeartRate);
 
-    _updateRrHistory(peaks, latestTimestamp);
-    final rmssdMs = _computeRollingRmssdMs() ??
+    // Before the detector mode is selected, successive evaluations may use
+    // different pulse polarities. None of those provisional beat times may
+    // enter the long-lived RR history.
+    if (_activePeakDetectionMode != null) {
+      _updateRrHistory(peaks, latestTimestamp);
+    }
+    final rollingRmssdMs = _computeRollingRmssdMs(latestTimestamp);
+    final rmssdMs = rollingRmssdMs ??
         (publishBestEffortEstimates ? currentBestEffort?.rmssd : null);
+    _lastRmssdSource = rollingRmssdMs != null
+        ? 'rolling_history'
+        : rmssdMs != null
+            ? 'window_best_effort'
+            : 'unavailable';
+    _trace('rolling_metric', {
+      'timestamp_ticks': latestTimestamp,
+      'smoothed_heart_rate_bpm': smoothedHeartRate,
+      'rmssd_ms': rmssdMs,
+      'rmssd_source': _lastRmssdSource,
+      'rr_history_count': _rrHistory.length,
+      'rr_history_span_ms': _rrHistory.length >= 2
+          ? (_rrHistory.last.timestamp - _rrHistory.first.timestamp) *
+              _ticksToMilliseconds
+          : 0,
+    });
 
     _maybeEmit(smoothedHeartRate, rmssdMs);
   }
 
-  /// Folds newly-detected peaks (from the current 10s signal window) into
+  void _tracePeakEvaluation({
+    required int timestamp,
+    required double qualityScore,
+    required double averageMotion,
+    required _SignalQuality qualityClass,
+    required double estimatedSampleFreqHz,
+    required List<int> peaks,
+    required List<double> validIntervals,
+    required List<double?> intervalSequence,
+    required double? peakHeartRate,
+    required String detectionMode,
+    required HeartRateSample? bestEffort,
+  }) {
+    if (diagnostics == null) return;
+    final intervals = <Map<String, Object?>>[];
+    for (var index = 1; index < peaks.length; index++) {
+      final milliseconds =
+          (peaks[index] - peaks[index - 1]) * _ticksToMilliseconds;
+      intervals.add({
+        'ending_peak_ticks': peaks[index],
+        'interval_ms': milliseconds,
+        'within_absolute_range': milliseconds >= 250 && milliseconds <= 2000,
+      });
+    }
+    final filtered = _removeIbiOutliers(validIntervals);
+    final rmssdEstimate = PulseIntervalRmssd.estimate(
+      intervalSequence,
+      allowSparse: true,
+    );
+    _trace('peak_evaluation', {
+      'timestamp_ticks': timestamp,
+      'window_span_ms': _buffer.length < 2
+          ? 0.0
+          : (_buffer.last.timestamp - _buffer.first.timestamp) *
+              _ticksToMilliseconds,
+      'effective_sample_hz': estimatedSampleFreqHz,
+      'quality_score': qualityScore,
+      'quality_class': qualityClass.name,
+      'average_motion': averageMotion,
+      'selected_channel': _channelSelector.selectedChannel,
+      'peak_timestamps_ticks': peaks,
+      'intervals': intervals,
+      'range_accepted_intervals_ms':
+          validIntervals.map((value) => value * _ticksToMilliseconds).toList(),
+      'median_filtered_intervals_ms':
+          filtered.map((value) => value * _ticksToMilliseconds).toList(),
+      'rmssd_pair_count': rmssdEstimate.pairCount,
+      'rmssd_method': rmssdEstimate.method,
+      'peak_heart_rate_bpm': peakHeartRate,
+      'peak_detection_mode': detectionMode,
+      'best_effort_heart_rate_bpm': bestEffort?.heartRate,
+      'best_effort_rmssd_ms': bestEffort?.rmssd,
+    });
+  }
+
+  /// Folds newly-detected peaks (from the current 10s regular / 30s demo
+  /// signal window) into
   /// the rolling RR-interval history, then prunes entries older than the
   /// 5-minute HRV window. `peaks` is a *full* re-detection over the last
-  /// 10s each call (not incremental), so only peaks strictly newer than the
+  /// full signal window each call (not incremental), so only peaks newer than the
   /// last one already recorded are turned into intervals — this avoids
   /// double-counting the same beat across overlapping evaluation cycles
   /// while still correctly bridging the interval from the last recorded
   /// peak into the first newly-seen one.
   void _updateRrHistory(List<int> peaks, int latestTimestamp) {
     var previousPeak = _lastRecordedPeakTimestamp;
+    final traceIntervals =
+        diagnostics == null ? null : <Map<String, Object?>>[];
     for (final peak in peaks) {
       if (previousPeak != null && peak > previousPeak) {
         final intervalTicks = (peak - previousPeak).toDouble();
         final intervalSeconds = intervalTicks / _ticksPerSecond;
-        if (intervalSeconds >= _minBeatIntervalSec &&
-            intervalSeconds <= _maxBeatIntervalSec) {
+        final accepted = intervalSeconds >= _minBeatIntervalSec &&
+            intervalSeconds <= _maxBeatIntervalSec;
+        traceIntervals?.add({
+          'previous_peak_ticks': previousPeak,
+          'ending_peak_ticks': peak,
+          'interval_ms': intervalTicks * _ticksToMilliseconds,
+          'accepted': accepted,
+          'reason':
+              accepted ? 'within_absolute_range' : 'outside_absolute_range',
+        });
+        if (accepted) {
           _rrHistory.add(
             _TimestampedInterval(
+              startingPeakTimestamp: previousPeak,
               timestamp: peak,
               intervalTicks: intervalTicks,
             ),
@@ -420,26 +823,68 @@ class HrHrvProcessor {
     _rrHistory.removeWhere(
       (entry) => entry.timestamp < latestTimestamp - _hrvWindowTicks,
     );
+    if (traceIntervals != null) {
+      _trace('rr_history_update', {
+        'timestamp_ticks': latestTimestamp,
+        'new_intervals': traceIntervals,
+        'history_count': _rrHistory.length,
+        'history_span_ms': _rrHistory.length >= 2
+            ? (_rrHistory.last.timestamp - _rrHistory.first.timestamp) *
+                _ticksToMilliseconds
+            : 0,
+      });
+    }
   }
 
   /// RMSSD over the rolling RR-interval history: grows from a 1-minute
   /// minimum up to a 5-minute sliding window, recomputed every evaluation
   /// cycle alongside HR (matching Shaffer & Ginsberg 2017 short-term HRV
   /// recording lengths), rather than smoothed frame-to-frame.
-  double? _computeRollingRmssdMs() {
+  double? _computeRollingRmssdMs(int latestTimestamp) {
     if (_rrHistory.length < 2) {
       return null;
     }
-    final windowSpanTicks =
-        (_rrHistory.last.timestamp - _rrHistory.first.timestamp).toDouble();
-    if (windowSpanTicks < _hrvMinimumWindowTicks) {
-      return null;
+    if (_hrvMinimumWindowTicks >= _hrvWindowTicks) {
+      // In the demo the minimum and maximum are both 30 seconds. Interval
+      // endpoints cannot span that entire window after old entries are
+      // pruned. Require 30 seconds of measurement plus RR coverage reaching
+      // back to within one physiologically valid beat of the window start.
+      final measurementStart = _firstMeasurementTimestamp;
+      final minimumCoverageTicks =
+          _hrvMinimumWindowTicks - (_maxBeatIntervalSec * _ticksPerSecond);
+      if (measurementStart == null ||
+          latestTimestamp - measurementStart < _hrvMinimumWindowTicks ||
+          latestTimestamp - _rrHistory.first.startingPeakTimestamp <
+              minimumCoverageTicks) {
+        return null;
+      }
+    } else {
+      // Keep the production mode's full history-span requirement unchanged.
+      final historySpanTicks =
+          (_rrHistory.last.timestamp - _rrHistory.first.timestamp).toDouble();
+      if (historySpanTicks < _hrvMinimumWindowTicks) return null;
     }
 
-    final intervalTicks =
-        _rrHistory.map((entry) => entry.intervalTicks).toList(growable: false);
-    final robustIntervalTicks = _removeIbiOutliers(intervalTicks);
-    final rmssdTicks = _computeRmssd(robustIntervalTicks);
+    final intervalSequence = <double?>[];
+    for (var i = 0; i < _rrHistory.length; i++) {
+      if (i > 0 &&
+          _rrHistory[i].startingPeakTimestamp != _rrHistory[i - 1].timestamp) {
+        intervalSequence.add(null);
+      }
+      intervalSequence.add(_rrHistory[i].intervalTicks);
+    }
+    final estimate = PulseIntervalRmssd.estimate(
+      intervalSequence,
+      allowSparse: true,
+    );
+    _trace('rolling_rmssd_quality', {
+      'timestamp_ticks': latestTimestamp,
+      'pair_count': estimate.pairCount,
+      'method': estimate.method,
+      'last_interval_age_ms':
+          (latestTimestamp - _rrHistory.last.timestamp) * _ticksToMilliseconds,
+    });
+    final rmssdTicks = estimate.ticks;
     if (rmssdTicks == null || !rmssdTicks.isFinite || rmssdTicks <= 0) {
       return null;
     }
@@ -459,7 +904,10 @@ class HrHrvProcessor {
       _deadlineEvidence.length,
     );
     final baselineSamples = _deadlineEvidence.sublist(splitIndex);
-    final baselineEstimate = _estimateRetainedSamples(baselineSamples);
+    final baselineEstimate = _estimateRetainedSamples(
+      baselineSamples,
+      sourceLabel: 'baseline',
+    );
     if (baselineEstimate != null) return baselineEstimate;
 
     // The complete 30-second baseline is always the primary source. Only if
@@ -472,38 +920,40 @@ class HrHrvProcessor {
     final rescueSamples = calibrationSamples
         .where((sample) => sample.timestamp >= calibrationWindowStart)
         .toList(growable: false);
-    return _estimateRetainedSamples(rescueSamples);
+    return _estimateRetainedSamples(
+      rescueSamples,
+      sourceLabel: 'calibration_rescue',
+    );
   }
 
   HeartRateSample? _estimateRetainedSamples(
-    List<_ConditionedSample> samples,
-  ) {
-    if (samples.length < 8) return null;
+    List<_ConditionedSample> samples, {
+    required String sourceLabel,
+  }) {
+    if (samples.length < 8) {
+      _trace('retained_window', {
+        'source': sourceLabel,
+        'sample_count': samples.length,
+        'result': 'too_few_samples',
+      });
+      return null;
+    }
 
     final effectiveSampleFreq = _estimateEffectiveSampleFreqHz(samples);
-    final positive = _estimateHeartRateByPeak(
-      estimatedSampleFreqHz: effectiveSampleFreq,
-      source: samples,
-      amplitudeScale: 0.12,
-      minimumAmplitude: 0.002,
-      minimumSignalStd: 1e-8,
-      refractoryScale: 1.0,
+    // The deadline uses the same peak detector and quality ranking as live
+    // monitoring. It may choose a mode on the complete baseline window, then
+    // retains that mode for monitoring so the RR history never joins peaks
+    // from different polarities or sensitivities.
+    final peakEstimate = _bestPeakEstimate(
+      samples,
+      effectiveSampleFreq,
+      comparisonContext: sourceLabel == 'baseline'
+          ? 'baseline_deadline'
+          : 'calibration_rescue',
     );
-    final negative = _estimateHeartRateByPeak(
-      estimatedSampleFreqHz: effectiveSampleFreq,
-      source: samples,
-      amplitudeScale: 0.12,
-      minimumAmplitude: 0.002,
-      minimumSignalStd: 1e-8,
-      signalPolarity: -1.0,
-      refractoryScale: 1.0,
-    );
-    final peakEstimate =
-        negative.peakTimestamps.length > positive.peakTimestamps.length
-            ? negative
-            : positive;
 
     final ibiTicks = <double>[];
+    final intervalSequence = <double?>[];
     final peaks = peakEstimate.peakTimestamps;
     for (var i = 1; i < peaks.length; i++) {
       final interval = (peaks[i] - peaks[i - 1]).toDouble();
@@ -511,8 +961,24 @@ class HrHrvProcessor {
       if (intervalSeconds >= _minBeatIntervalSec &&
           intervalSeconds <= _maxBeatIntervalSec) {
         ibiTicks.add(interval);
+        intervalSequence.add(interval);
+      } else {
+        intervalSequence.add(null);
       }
     }
+    _trace('retained_window', {
+      'source': sourceLabel,
+      'sample_count': samples.length,
+      'span_ms': (samples.last.timestamp - samples.first.timestamp) *
+          _ticksToMilliseconds,
+      'effective_sample_hz': effectiveSampleFreq,
+      'peak_detection_mode': peakEstimate.mode.name,
+      'credible_pair_count': peakEstimate.crediblePairCount,
+      'accepted_interval_count': peakEstimate.acceptedIntervalCount,
+      'peak_timestamps_ticks': peaks,
+      'range_accepted_intervals_ms':
+          ibiTicks.map((value) => value * _ticksToMilliseconds).toList(),
+    });
     if (ibiTicks.length < 2) return null;
 
     final robustIntervals = _removeIbiOutliers(ibiTicks);
@@ -522,7 +988,9 @@ class HrHrvProcessor {
     if (!medianInterval.isFinite || medianInterval <= 0) return null;
 
     final heartRate = 60.0 * _ticksPerSecond / medianInterval;
-    final rmssdTicks = _computeRmssd(robustIntervals);
+    final rmssdEstimate =
+        PulseIntervalRmssd.estimate(intervalSequence, allowSparse: true);
+    final rmssdTicks = rmssdEstimate.ticks;
     if (!heartRate.isFinite ||
         heartRate < 30 ||
         heartRate > 240 ||
@@ -530,7 +998,36 @@ class HrHrvProcessor {
         !rmssdTicks.isFinite) {
       return null;
     }
-    final rmssdMs = (rmssdTicks * _ticksToMilliseconds).clamp(0.0, 300.0);
+    final rawRmssdMs = rmssdTicks * _ticksToMilliseconds;
+    // A baseline is the reference every later stress decision is measured
+    // against, so an implausible one is worse than none: it re-arms the
+    // detector at a threshold real physiology clears immediately. Observed in
+    // the field as hr=31 with rmssd saturated at the 300 ms ceiling, which
+    // armed a 3% demo threshold at 32 bpm and fired stress within seconds.
+    if (rawRmssdMs >= 300.0 ||
+        heartRate < _minimumPlausibleBaselineBpm ||
+        heartRate > _maximumPlausibleBaselineBpm) {
+      _trace('retained_rejected', {
+        'source': sourceLabel,
+        'heart_rate_bpm': heartRate,
+        'raw_rmssd_ms': rawRmssdMs,
+        'reason': rawRmssdMs >= 300.0 ? 'rmssd_saturated' : 'heart_rate_range',
+      });
+      return null;
+    }
+    final rmssdMs = rawRmssdMs.clamp(0.0, 300.0);
+    _trace('retained_result', {
+      'source': sourceLabel,
+      'heart_rate_bpm': heartRate,
+      'raw_rmssd_ms': rmssdTicks * _ticksToMilliseconds,
+      'reported_rmssd_ms': rmssdMs,
+      'rmssd_pair_count': rmssdEstimate.pairCount,
+      'rmssd_method': rmssdEstimate.method,
+      'peak_detection_mode': peakEstimate.mode.name,
+      'median_filtered_intervals_ms':
+          robustIntervals.map((value) => value * _ticksToMilliseconds).toList(),
+    });
+    _activatePeakDetectionMode(peakEstimate.mode);
     return HeartRateSample(
       heartRate: heartRate.round(),
       rmssd: rmssdMs,
@@ -539,15 +1036,17 @@ class HrHrvProcessor {
 
   HeartRateSample? _considerBestEffortEstimate({
     required double? heartRate,
-    required List<double> ibiTicks,
+    required List<double?> intervalSequence,
     required double qualityScore,
   }) {
-    if (heartRate == null || ibiTicks.length < 2 || !qualityScore.isFinite) {
+    if (heartRate == null || !qualityScore.isFinite) {
       return null;
     }
 
-    final robustIntervals = _removeIbiOutliers(ibiTicks);
-    final rmssdTicks = _computeRmssd(robustIntervals);
+    final rmssdTicks = PulseIntervalRmssd.estimate(
+      intervalSequence,
+      allowSparse: true,
+    ).ticks;
     if (rmssdTicks == null || !rmssdTicks.isFinite || rmssdTicks < 0) {
       return null;
     }
@@ -582,14 +1081,24 @@ class HrHrvProcessor {
     _lastEmitTime = now;
 
     _emit(HeartRateSample(heartRate: heartRate.round(), rmssd: rmssd));
+    HrHrvDiagnosticSettings.logSummary(
+      'Meditation metrics: HR=${heartRate.round()} BPM, '
+      'RMSSD=${rmssd?.toStringAsFixed(1) ?? "n/a"} ms, '
+      'source=$_lastRmssdSource, '
+      'clean_pairs=$_lastCrediblePeakPairCount, '
+      'detector=${_activePeakDetectionMode?.name ?? "unselected"}',
+    );
   }
 
   void _clearEstimatorState() {
     _firstSampleTime = null;
+    _firstMeasurementTimestamp = null;
     _lastEmitTime = null;
     _lastEvaluationTick = double.negativeInfinity;
+    _lastDetectorComparisonTick = double.negativeInfinity;
     _buffer.clear();
-    // RR history outlives `_buffer` (5-minute window vs 10s), so it must be
+    // RR history can outlive `_buffer` (5-minute history vs 10s regular
+    // signal window), so it must be
     // cleared explicitly — otherwise a new measurement window inherits the
     // previous one's intervals, immediately satisfies the minimum-span gate,
     // and reports RMSSD computed from earlier beats.
@@ -600,13 +1109,19 @@ class HrHrvProcessor {
     _bestEffortQuality = double.negativeInfinity;
     _hrEstimate = 75.0;
     _hrCovariance = 1.0;
+    _hasMeasuredHeartRate = false;
+    _activePeakDetectionMode = null;
+    _poorPeakWindowCount = 0;
+    _lastCrediblePeakPairCount = 0;
+    _lastRmssdSource = 'unavailable';
   }
 
   ({double score, double averageMotion}) _estimateRecentWaveformQualityScore({
     required int latestTimestamp,
+    List<_ConditionedSample>? source,
   }) {
     final qualityWindowTicks = 3.0 * _ticksPerSecond;
-    final recent = _buffer
+    final recent = (source ?? _buffer)
         .where(
           (sample) => sample.timestamp >= latestTimestamp - qualityWindowTicks,
         )
@@ -683,6 +1198,377 @@ class HrHrvProcessor {
     return estimated;
   }
 
+  _PeakCandidate _selectLivePeakEstimate(double effectiveSampleFreqHz) {
+    final activeMode = _activePeakDetectionMode;
+    if (activeMode != null) {
+      final active = _peakCandidate(
+        _buffer,
+        effectiveSampleFreqHz,
+        activeMode,
+      );
+      if (active.crediblePairCount >= 2) {
+        _poorPeakWindowCount = 0;
+        return active;
+      }
+      _poorPeakWindowCount++;
+      if (_poorPeakWindowCount < 5 || _poorPeakWindowCount % 5 != 0) {
+        return active;
+      }
+
+      // A sustained loss of usable beats can follow a change in earbud fit or
+      // optical channel. Re-select only if another detector is clearly better;
+      // changing peak polarity without clearing RR history fabricates beats.
+      final replacement = _bestPeakEstimate(_buffer, effectiveSampleFreqHz);
+      if (replacement.mode != activeMode &&
+          replacement.crediblePairCount >= 4 &&
+          replacement.crediblePairCount >= active.crediblePairCount + 3) {
+        _activatePeakDetectionMode(replacement.mode);
+        return replacement;
+      }
+      return active;
+    }
+
+    final best = _bestPeakEstimate(_buffer, effectiveSampleFreqHz);
+    final measurementStart = _firstMeasurementTimestamp;
+    final windowReady = measurementStart != null &&
+        _buffer.last.timestamp - measurementStart >=
+            min(_windowDurationTicks, 10.0 * _ticksPerSecond);
+    if (windowReady && best.crediblePairCount >= 2) {
+      _activatePeakDetectionMode(best.mode);
+    }
+    return best;
+  }
+
+  void _activatePeakDetectionMode(_PeakDetectionMode mode) {
+    final previous = _activePeakDetectionMode;
+    if (previous == mode) return;
+    if (previous != null) {
+      _rrHistory.clear();
+      _lastRecordedPeakTimestamp = null;
+    }
+    _activePeakDetectionMode = mode;
+    _poorPeakWindowCount = 0;
+    _trace('peak_detector_selected', {
+      'mode': mode.name,
+      'previous_mode': previous?.name,
+    });
+  }
+
+  _PeakCandidate _bestPeakEstimate(
+    List<_ConditionedSample> samples,
+    double effectiveSampleFreqHz, {
+    String? comparisonContext,
+  }) {
+    final selectable = _selectableModes;
+    final active = _activePeakDetectionMode;
+    final modes = <_PeakDetectionMode>[
+      if (active != null && selectable.contains(active)) active,
+      ...selectable.where((mode) => mode != active),
+    ];
+    var best = _peakCandidate(samples, effectiveSampleFreqHz, modes.first);
+    for (final mode in modes.skip(1)) {
+      final candidate = _peakCandidate(samples, effectiveSampleFreqHz, mode);
+      if (candidate.isBetterThan(best)) best = candidate;
+    }
+    if (comparisonContext != null &&
+        _detectorComparisonDue(samples.last.timestamp)) {
+      _reportDetectorComparison(
+        samples,
+        effectiveSampleFreqHz,
+        best,
+        context: comparisonContext,
+      );
+    }
+    return best;
+  }
+
+  bool _detectorComparisonDue(int latestTimestamp) =>
+      (HrHrvDiagnosticSettings.detectorComparisonEnabled ||
+          HrHrvDiagnosticSettings.beatQualityEnabled ||
+          diagnostics != null) &&
+      latestTimestamp - _lastDetectorComparisonTick >= 30 * _ticksPerSecond;
+
+  void _maybeCompareDetectors(
+    List<_ConditionedSample> samples,
+    double effectiveSampleFreqHz, {
+    required String context,
+  }) {
+    final measurementStart = _firstMeasurementTimestamp;
+    if (samples.isEmpty ||
+        measurementStart == null ||
+        samples.last.timestamp - measurementStart < 30 * _ticksPerSecond ||
+        !_detectorComparisonDue(samples.last.timestamp)) {
+      return;
+    }
+    // Shadow evaluation only: its result never changes the selected mode,
+    // rolling beat history, published metrics, or meditation state.
+    _bestPeakEstimate(
+      samples,
+      effectiveSampleFreqHz,
+      comparisonContext: context,
+    );
+  }
+
+  void _reportDetectorComparison(
+    List<_ConditionedSample> samples,
+    double effectiveSampleFreqHz,
+    _PeakCandidate best, {
+    required String context,
+  }) {
+    final latestTimestamp = samples.last.timestamp;
+    _lastDetectorComparisonTick = latestTimestamp.toDouble();
+    final spanMs =
+        (latestTimestamp - samples.first.timestamp) * _ticksToMilliseconds;
+    // Every candidate is evaluated here — both detector families and both
+    // signal paths — so a single traced run compares all of them on identical
+    // windows, whichever combination is currently driving the metrics.
+    final ordered = [
+      for (final beatPath in const [false, true])
+        for (final mode in _PeakDetectionMode.values)
+          _peakCandidate(
+            samples,
+            effectiveSampleFreqHz,
+            mode,
+            beatPath: beatPath,
+          ),
+    ];
+    if (diagnostics != null) {
+      _trace(
+        'detector_comparison',
+        {
+          'context': context,
+          'timestamp_ticks': latestTimestamp,
+          'window_span_ms': spanMs,
+          'sample_count': samples.length,
+          'active_mode': _activePeakDetectionMode?.name,
+          'ranked_best_mode': best.mode.name,
+          'candidates': ordered
+              .map(
+                (candidate) => {
+                  'mode': candidate.mode.name,
+                  'signal_path': candidate.signalPath,
+                  'peak_count': candidate.peakTimestamps.length,
+                  'heart_rate_bpm': candidate.heartRateBpm,
+                  'rmssd_ms': candidate.rmssdTicks == null
+                      ? null
+                      : candidate.rmssdTicks! * _ticksToMilliseconds,
+                  'rmssd_method': candidate.rmssdMethod,
+                  'clean_pair_count': candidate.crediblePairCount,
+                  'accepted_interval_count': candidate.acceptedIntervalCount,
+                  'rejected_interval_count': candidate.rejectedIntervalCount,
+                  'last_peak_age_ms': candidate.peakTimestamps.isEmpty
+                      ? null
+                      : (latestTimestamp - candidate.peakTimestamps.last) *
+                          _ticksToMilliseconds,
+                },
+              )
+              .toList(),
+        },
+      );
+    }
+    HrHrvDiagnosticSettings.logDetectorComparison(
+      'Meditation detector comparison: $context, '
+      'window=${spanMs.toStringAsFixed(0)} ms, '
+      'active=${_activePeakDetectionMode?.name ?? "unselected"}, '
+      'best=${best.mode.name}',
+    );
+    for (final candidate in ordered) {
+      final rmssdMs = candidate.rmssdTicks == null
+          ? 'n/a'
+          : (candidate.rmssdTicks! * _ticksToMilliseconds).toStringAsFixed(1);
+      HrHrvDiagnosticSettings.logDetectorComparison(
+        '  ${candidate.mode.name}: '
+        'peaks=${candidate.peakTimestamps.length}, '
+        'clean_pairs=${candidate.crediblePairCount}, '
+        'accepted=${candidate.acceptedIntervalCount}, '
+        'rejected=${candidate.rejectedIntervalCount}, '
+        'HR=${candidate.heartRateBpm?.toStringAsFixed(1) ?? "n/a"} BPM, '
+        'RMSSD=$rmssdMs ms (${candidate.rmssdMethod})',
+      );
+    }
+    _reportBeatQualitySnapshot(samples, best, ordered, context: context);
+  }
+
+  void _reportBeatQualitySnapshot(
+    List<_ConditionedSample> samples,
+    _PeakCandidate best,
+    List<_PeakCandidate> candidates, {
+    required String context,
+  }) {
+    if (!HrHrvDiagnosticSettings.beatQualityEnabled && diagnostics == null) {
+      return;
+    }
+    final activeMode = _activePeakDetectionMode;
+    // Candidates now cover both signal paths, so match the live path too —
+    // otherwise this snapshot could describe the path that is not in use.
+    final livePath = BioAdaptiveModeConfig.useLightlyFilteredBeatPath
+        ? 'beat'
+        : 'conditioned';
+    final selected = activeMode == null
+        ? best
+        : candidates.firstWhere(
+            (candidate) =>
+                candidate.mode == activeMode &&
+                candidate.signalPath == livePath,
+            orElse: () => best,
+          );
+    final latestTimestamp = samples.last.timestamp;
+    final windowSpanMs =
+        (latestTimestamp - samples.first.timestamp) * _ticksToMilliseconds;
+    final recentQuality = _estimateRecentWaveformQualityScore(
+      latestTimestamp: latestTimestamp,
+      source: samples,
+    );
+    final intervalsMs = <int>[];
+    final rejectedPositions = <int>[];
+    for (var index = 1; index < selected.peakTimestamps.length; index++) {
+      final intervalTicks =
+          selected.peakTimestamps[index] - selected.peakTimestamps[index - 1];
+      intervalsMs.add((intervalTicks * _ticksToMilliseconds).round());
+      final intervalSeconds = intervalTicks / _ticksPerSecond;
+      if (intervalSeconds < _minBeatIntervalSec ||
+          intervalSeconds > _maxBeatIntervalSec) {
+        rejectedPositions.add(index - 1);
+      }
+    }
+    final lastPeakAgeMs = selected.peakTimestamps.isEmpty
+        ? null
+        : (latestTimestamp - selected.peakTimestamps.last) *
+            _ticksToMilliseconds;
+    final effectiveSampleHz = _estimateEffectiveSampleFreqHz(samples);
+    if (diagnostics != null) {
+      _trace('beat_quality_snapshot', {
+        'context': context,
+        'timestamp_ticks': latestTimestamp,
+        'mode': selected.mode.name,
+        'window_span_ms': windowSpanMs,
+        'sample_count': samples.length,
+        'effective_sample_hz': effectiveSampleHz,
+        'current_optical_channel': _channelSelector.selectedChannel,
+        'waveform_quality_last_3s': recentQuality.score,
+        'motion_last_3s': recentQuality.averageMotion,
+        'peak_count': selected.peakTimestamps.length,
+        'clean_pair_count': selected.crediblePairCount,
+        'last_peak_age_ms': lastPeakAgeMs,
+        'intervals_ms': intervalsMs,
+        'rejected_interval_positions': rejectedPositions,
+      });
+    }
+    HrHrvDiagnosticSettings.logBeatQuality(
+      'Meditation beat quality: $context, '
+      'mode=${selected.mode.name}, '
+      'window_ms=${windowSpanMs.toStringAsFixed(0)}, '
+      'samples=${samples.length}, '
+      'effective_hz=${effectiveSampleHz.toStringAsFixed(1)}, '
+      'channel=${_channelSelector.selectedChannel}, '
+      'quality_3s=${recentQuality.score.toStringAsFixed(2)}, '
+      'motion_3s=${recentQuality.averageMotion.toStringAsFixed(2)}, '
+      'peaks=${selected.peakTimestamps.length}, '
+      'clean_pairs=${selected.crediblePairCount}, '
+      'last_peak_age_ms=${lastPeakAgeMs?.toStringAsFixed(0) ?? "n/a"}',
+    );
+    final rejected = rejectedPositions.toSet();
+    HrHrvDiagnosticSettings.logBeatQuality(
+      'Meditation beat intervals (ms; ! = outside 250-2000): '
+      '${[
+        for (var index = 0; index < intervalsMs.length; index++)
+          '${intervalsMs[index]}${rejected.contains(index) ? "!" : ""}',
+      ].join(" ")}',
+    );
+  }
+
+  _PeakCandidate _peakCandidate(
+    List<_ConditionedSample> samples,
+    double effectiveSampleFreqHz,
+    _PeakDetectionMode mode, {
+    bool? beatPath,
+  }) {
+    final useBeatPath =
+        beatPath ?? BioAdaptiveModeConfig.useLightlyFilteredBeatPath;
+    final estimate = mode.usesMsptd
+        ? _estimateHeartRateByMsptd(
+            estimatedSampleFreqHz: effectiveSampleFreqHz,
+            source: samples,
+            signalPolarity: mode.polarity,
+            beatPath: useBeatPath,
+          )
+        : _estimateHeartRateByPeak(
+            estimatedSampleFreqHz: effectiveSampleFreqHz,
+            source: samples,
+            amplitudeScale: mode.sensitive ? 0.12 : 0.35,
+            minimumAmplitude: mode.sensitive ? 0.002 : 0.04,
+            minimumSignalStd: mode.sensitive ? 1e-8 : 1e-4,
+            signalPolarity: mode.polarity,
+            refractoryScale: mode.sensitive ? 1.0 : 0.85,
+            beatPath: useBeatPath,
+          );
+    final peaks = estimate.peakTimestamps;
+    final intervals = <double?>[];
+    var acceptedCount = 0;
+    for (var i = 1; i < peaks.length; i++) {
+      final interval = (peaks[i] - peaks[i - 1]).toDouble();
+      final seconds = interval / _ticksPerSecond;
+      if (seconds >= _minBeatIntervalSec && seconds <= _maxBeatIntervalSec) {
+        intervals.add(interval);
+        acceptedCount++;
+      } else {
+        intervals.add(null);
+      }
+    }
+    final rmssd = PulseIntervalRmssd.estimate(intervals);
+    return _PeakCandidate(
+      mode: mode,
+      signalPath: useBeatPath ? 'beat' : 'conditioned',
+      heartRateBpm: estimate.heartRateBpm,
+      peakTimestamps: peaks,
+      crediblePairCount:
+          rmssd.method == 'adjacent_median_filtered' ? rmssd.pairCount : 0,
+      rmssdTicks: rmssd.ticks,
+      rmssdMethod: rmssd.method,
+      acceptedIntervalCount: acceptedCount,
+      rejectedIntervalCount: intervals.length - acceptedCount,
+    );
+  }
+
+  /// Beat detection via MSPTD-fast-v2. Unlike [_estimateHeartRateByPeak] this
+  /// has no amplitude threshold or refractory tuning: the multi-scale local
+  /// maxima scalogram decides which local maxima are beats, and the detector
+  /// applies its own 0.28 s minimum separation. Only the polarity choice is
+  /// still ours, because the conditioned signal may present pulses as troughs.
+  ({double? heartRateBpm, List<int> peakTimestamps}) _estimateHeartRateByMsptd({
+    required double estimatedSampleFreqHz,
+    required List<_ConditionedSample> source,
+    required double signalPolarity,
+    bool beatPath = false,
+  }) {
+    if (source.length < 8) {
+      return (heartRateBpm: null, peakTimestamps: const []);
+    }
+
+    final safeSampleFreq =
+        estimatedSampleFreqHz.isFinite && estimatedSampleFreqHz > 0
+            ? estimatedSampleFreqHz
+            : sampleFreq;
+
+    final signal = source
+        .map((sample) => sample.valueFor(beatPath: beatPath) * signalPolarity)
+        .toList(growable: false);
+
+    final peakIndices = const MsptdFastV2Detector().detectPeakIndices(
+      signal,
+      sampleFreqHz: safeSampleFreq,
+    );
+
+    final peaks = <int>[];
+    for (final index in peakIndices) {
+      if (index >= 0 && index < source.length) {
+        peaks.add(source[index].timestamp);
+      }
+    }
+
+    return _estimateHeartRateFromPeakTimestamps(peaks);
+  }
+
   ({double? heartRateBpm, List<int> peakTimestamps}) _estimateHeartRateByPeak({
     required double estimatedSampleFreqHz,
     List<_ConditionedSample>? source,
@@ -691,14 +1577,16 @@ class HrHrvProcessor {
     double minimumSignalStd = 1e-4,
     double signalPolarity = 1.0,
     double refractoryScale = 0.85,
+    bool beatPath = false,
   }) {
     final samples = source ?? _buffer;
     if (samples.length < 8) {
       return (heartRateBpm: null, peakTimestamps: const []);
     }
 
-    final signal =
-        samples.map((sample) => sample.signal).toList(growable: false);
+    final signal = samples
+        .map((sample) => sample.valueFor(beatPath: beatPath))
+        .toList(growable: false);
     final mean = signal.reduce((a, b) => a + b) / signal.length;
     final centered = signal
         .map((value) => (value - mean) * signalPolarity)
@@ -713,9 +1601,15 @@ class HrHrvProcessor {
         estimatedSampleFreqHz.isFinite && estimatedSampleFreqHz > 0
             ? estimatedSampleFreqHz
             : sampleFreq;
+    // The lightly filtered path preserves the dicrotic notch that the
+    // smoothing stages used to blur away, so it needs a wider refractory to
+    // avoid counting it as a beat.
+    final minimumBeatInterval = beatPath
+        ? BioAdaptiveModeConfig.beatPathMinimumBeatIntervalSeconds
+        : _minBeatIntervalSec * refractoryScale;
     final minPeakDistanceSamples = max(
       1,
-      (safeSampleFreq * _minBeatIntervalSec * refractoryScale).round(),
+      (safeSampleFreq * minimumBeatInterval).round(),
     );
     final amplitudeThreshold =
         max(minimumAmplitude, signalStd * amplitudeScale);
@@ -764,7 +1658,9 @@ class HrHrvProcessor {
         intervalsSeconds.add(intervalSeconds);
       }
     }
-    if (intervalsSeconds.isEmpty) {
+    // A single peak-to-peak interval is not enough to establish a pulse
+    // rhythm, even though it can be converted into a numerical BPM.
+    if (intervalsSeconds.length < 2) {
       return (heartRateBpm: null, peakTimestamps: peaks);
     }
 
@@ -794,25 +1690,6 @@ class HrHrvProcessor {
     return filtered.length >= 2 ? filtered : ibiTicks;
   }
 
-  double? _computeRmssd(List<double> ibiTicks) {
-    if (ibiTicks.length < 2) {
-      return null;
-    }
-
-    var sumSquared = 0.0;
-    var count = 0;
-    for (var i = 1; i < ibiTicks.length; i++) {
-      final delta = ibiTicks[i] - ibiTicks[i - 1];
-      sumSquared += delta * delta;
-      count += 1;
-    }
-
-    if (count == 0) {
-      return null;
-    }
-    return sqrt(sumSquared / count);
-  }
-
   double _standardDeviation(List<double> values) {
     if (values.length < 2) {
       return 0;
@@ -832,6 +1709,12 @@ class HrHrvProcessor {
       return _hrEstimate;
     }
 
+    if (!_hasMeasuredHeartRate) {
+      _hasMeasuredHeartRate = true;
+      _hrEstimate = measurement;
+      return measurement;
+    }
+
     _hrCovariance += _hrProcessNoise;
     final gain = _hrCovariance / (_hrCovariance + _hrMeasurementNoise);
     _hrEstimate += gain * (measurement - _hrEstimate);
@@ -842,11 +1725,80 @@ class HrHrvProcessor {
 
 enum _SignalQuality { unavailable, bad, fair, good }
 
+enum _PeakDetectionMode {
+  standardPositive(1.0, false),
+  standardNegative(-1.0, false),
+  sensitivePositive(1.0, true),
+  sensitiveNegative(-1.0, true),
+  // MSPTD-fast-v2 replaces the amplitude/refractory heuristics entirely, so
+  // `sensitive` carries no meaning for these two; only the polarity applies.
+  msptdPositive(1.0, false, usesMsptd: true),
+  msptdNegative(-1.0, false, usesMsptd: true);
+
+  const _PeakDetectionMode(
+    this.polarity,
+    this.sensitive, {
+    this.usesMsptd = false,
+  });
+
+  final double polarity;
+  final bool sensitive;
+  final bool usesMsptd;
+}
+
+class _PeakCandidate {
+  final _PeakDetectionMode mode;
+
+  /// Which signal the beats were taken from: 'conditioned' or 'beat'.
+  final String signalPath;
+
+  final double? heartRateBpm;
+  final List<int> peakTimestamps;
+  final int crediblePairCount;
+  final double? rmssdTicks;
+  final String rmssdMethod;
+  final int acceptedIntervalCount;
+  final int rejectedIntervalCount;
+
+  const _PeakCandidate({
+    required this.mode,
+    required this.signalPath,
+    required this.heartRateBpm,
+    required this.peakTimestamps,
+    required this.crediblePairCount,
+    required this.rmssdTicks,
+    required this.rmssdMethod,
+    required this.acceptedIntervalCount,
+    required this.rejectedIntervalCount,
+  });
+
+  // Prefer clean consecutive beat pairs over raw peak count. On a tie,
+  // prefer the candidate with fewer physiologically impossible gaps, then
+  // more measured intervals. The caller's ordering preserves an active mode
+  // (or the stricter detector) when all evidence is equal.
+  bool isBetterThan(_PeakCandidate other) {
+    if (heartRateBpm == null) return false;
+    if (other.heartRateBpm == null) return true;
+    if (crediblePairCount != other.crediblePairCount) {
+      return crediblePairCount > other.crediblePairCount;
+    }
+    final total = acceptedIntervalCount + rejectedIntervalCount;
+    final otherTotal =
+        other.acceptedIntervalCount + other.rejectedIntervalCount;
+    final acceptanceComparison = (acceptedIntervalCount * otherTotal) -
+        (other.acceptedIntervalCount * total);
+    if (acceptanceComparison != 0) return acceptanceComparison > 0;
+    return acceptedIntervalCount > other.acceptedIntervalCount;
+  }
+}
+
 class _TimestampedInterval {
+  final int startingPeakTimestamp;
   final int timestamp;
   final double intervalTicks;
 
   const _TimestampedInterval({
+    required this.startingPeakTimestamp,
     required this.timestamp,
     required this.intervalTicks,
   });
@@ -854,14 +1806,27 @@ class _TimestampedInterval {
 
 class _ConditionedSample {
   final int timestamp;
+
+  /// The fully conditioned waveform: motion-suppressed, IMU-cancelled and
+  /// amplitude-normalized. Used for quality scoring, which is calibrated
+  /// against its bounded range.
   final double signal;
+
+  /// The same optical channel with only a DC block and band-pass applied.
+  /// Retains the sharp systolic edge that the smoothing stages round off, so
+  /// beat *timing* taken from it is markedly more precise.
+  final double beatSignal;
+
   final double motionLevel;
 
   const _ConditionedSample({
     required this.timestamp,
     required this.signal,
+    required this.beatSignal,
     required this.motionLevel,
   });
+
+  double valueFor({required bool beatPath}) => beatPath ? beatSignal : signal;
 }
 
 class _HighPassFilter {
@@ -879,6 +1844,13 @@ class _HighPassFilter {
     final dt = 1.0 / sampleFreq;
     final rc = 1.0 / (2 * pi * cutoffFreq);
     alpha = rc / (rc + dt);
+  }
+
+  /// Drops accumulated state so the next sample starts a fresh response
+  /// instead of being treated as a step away from the previous channel.
+  void reset() {
+    _lastInput = null;
+    _lastOutput = null;
   }
 
   double filter(double x) {
@@ -927,6 +1899,13 @@ class _BandPassFilter {
     b2 = (1 - alpha) / norm;
   }
 
+  /// Returns to the pre-warm state so the next sample seeds the filter afresh
+  /// rather than ringing through a step from a different optical channel.
+  void reset() {
+    x1 = x2 = y1 = y2 = 0;
+    _isFirstSample = true;
+  }
+
   double filter(double x) {
     // Pre-warm filter state on the first sample to avoid a step-function
     // transient: a band-pass filter has zero DC gain, so y1=y2=0 is correct,
@@ -950,6 +1929,33 @@ class _AdaptiveOpticalChannelSelector {
   static const double _meanAlpha = 0.005;
   static const double _energyAlpha = 0.02;
 
+  _AdaptiveOpticalChannelSelector({
+    this.useNormalizedRanking = true,
+    this.minimumDwellSamples = 0,
+  });
+
+  /// How long a channel must be held before another may take over.
+  ///
+  /// Hysteresis alone does not stop thrashing when two channels are close: one
+  /// observed session switched green/infrared more than ten times during
+  /// calibration, the last of them immediately after the channel was committed
+  /// and therefore right at the start of the baseline window. Each switch is a
+  /// step of tens of thousands of counts into the beat path's filters, and that
+  /// session's baseline came out at 31 bpm from three usable intervals.
+  final int minimumDwellSamples;
+  int _samplesOnCurrentChannel = 0;
+
+  /// Ranks channels by modulation relative to their own DC level (the
+  /// perfusion index) rather than by absolute AC amplitude.
+  ///
+  /// Absolute amplitude scales with DC, so the brightest channel wins even
+  /// when its pulse is the weakest. Measured on an OpenEarable v2 recording:
+  /// green DC 128540 / perfusion 0.045% / cardiac SNR 33.6 dB, versus infrared
+  /// DC 40890 / perfusion 0.107% / SNR 43.6 dB. The old ranking chose green
+  /// 96.8% of the time and detected 73% of beats; choosing infrared with no
+  /// other change detected 101%.
+  final bool useNormalizedRanking;
+
   bool _isInitialized = false;
   double _meanGreen = 0;
   double _meanRed = 0;
@@ -957,6 +1963,42 @@ class _AdaptiveOpticalChannelSelector {
   double _energyGreen = 0;
   double _energyRed = 0;
   double _energyIr = 0;
+  String selectedChannel = 'none';
+
+  bool _isCommitted = false;
+  String? _committedChannel;
+
+  /// Whether the channel choice has been frozen for the measurement.
+  bool get isCommitted => _isCommitted;
+  String? get committedChannel => _committedChannel;
+
+  /// Modulation relative to DC, the comparable measure of pulse strength.
+  double get greenPerfusion => _perfusion(_energyGreen, _meanGreen);
+  double get redPerfusion => _perfusion(_energyRed, _meanRed);
+  double get infraredPerfusion => _perfusion(_energyIr, _meanIr);
+
+  static double _perfusion(double energy, double mean) {
+    final magnitude = mean.abs();
+    if (!energy.isFinite || !magnitude.isFinite || magnitude < 1e-6) return 0;
+    return energy / magnitude;
+  }
+
+  /// Freezes the current choice for the rest of the measurement.
+  ///
+  /// Re-deciding per sample is itself harmful: every switch is a discontinuity
+  /// to filters that carry state. The shipped selector switched 68 times in
+  /// 150 seconds. Ranking correctly but still switching recovered only 85% of
+  /// beats, against 101% when the channel was held fixed.
+  void commit() {
+    if (_isCommitted || selectedChannel == 'none') return;
+    _isCommitted = true;
+    _committedChannel = selectedChannel;
+  }
+
+  void releaseCommitment() {
+    _isCommitted = false;
+    _committedChannel = null;
+  }
 
   double select({
     required double green,
@@ -978,6 +2020,25 @@ class _AdaptiveOpticalChannelSelector {
     _energyRed = _ema(_energyRed, (red - _meanRed).abs(), _energyAlpha);
     _energyIr = _ema(_energyIr, (ir - _meanIr).abs(), _energyAlpha);
 
+    // Statistics above keep updating while committed so diagnostics stay
+    // meaningful, but the channel itself no longer moves.
+    if (_isCommitted) {
+      final held = switch (_committedChannel) {
+        'green' => green,
+        'red' => red,
+        'infrared' => ir,
+        _ => double.nan,
+      };
+      if (held.isFinite) return held;
+      _isCommitted = false;
+      _committedChannel = null;
+    }
+
+    if (useNormalizedRanking) {
+      final ranked = _selectByPerfusion(green: green, red: red, ir: ir);
+      if (ranked != null) return ranked;
+    }
+
     final strongestAltEnergy = max(_energyRed, _energyIr);
     final greenLikelyMissing =
         green.abs() < 1e-6 && (red.abs() > 1e-3 || ir.abs() > 1e-3);
@@ -987,23 +2048,71 @@ class _AdaptiveOpticalChannelSelector {
       final preferRed = _energyRed >= _energyIr;
       final fallback = preferRed ? red : ir;
       if (fallback.isFinite) {
+        selectedChannel = preferRed ? 'red' : 'infrared';
         return fallback;
       }
     }
 
     if (green.isFinite) {
+      selectedChannel = 'green';
       return green;
     }
     if (red.isFinite && ir.isFinite) {
+      selectedChannel = red.abs() >= ir.abs() ? 'red' : 'infrared';
       return red.abs() >= ir.abs() ? red : ir;
     }
     if (red.isFinite) {
+      selectedChannel = 'red';
       return red;
     }
     if (ir.isFinite) {
+      selectedChannel = 'infrared';
       return ir;
     }
+    selectedChannel = 'none';
     return 0;
+  }
+
+  /// A challenger must be this much better than the channel already in use
+  /// before the selector moves. Without a margin, channels whose pulse strength
+  /// is genuinely comparable swap on floating-point noise, and each swap is a
+  /// discontinuity to the stateful filters downstream — which costs more beats
+  /// than picking the slightly weaker channel ever would.
+  static const double _switchMargin = 1.15;
+
+  /// Picks the channel with the strongest pulse relative to its own DC level.
+  /// Returns null while no channel has enough evidence yet, so the caller falls
+  /// back to the original absolute-amplitude rule.
+  double? _selectByPerfusion({
+    required double green,
+    required double red,
+    required double ir,
+  }) {
+    final candidates = <({String name, double value, double perfusion})>[
+      (name: 'green', value: green, perfusion: greenPerfusion),
+      (name: 'red', value: red, perfusion: redPerfusion),
+      (name: 'infrared', value: ir, perfusion: infraredPerfusion),
+    ].where((c) => c.value.isFinite && c.perfusion > 0).toList();
+    if (candidates.isEmpty) return null;
+
+    var best = candidates.first;
+    for (final candidate in candidates.skip(1)) {
+      if (candidate.perfusion > best.perfusion) best = candidate;
+    }
+
+    final incumbent = candidates
+        .where((candidate) => candidate.name == selectedChannel)
+        .firstOrNull;
+    if (incumbent != null &&
+        (best.perfusion < incumbent.perfusion * _switchMargin ||
+            _samplesOnCurrentChannel < minimumDwellSamples)) {
+      _samplesOnCurrentChannel++;
+      return incumbent.value;
+    }
+
+    if (best.name != selectedChannel) _samplesOnCurrentChannel = 0;
+    selectedChannel = best.name;
+    return best.value;
   }
 
   double _ema(double state, double value, double alpha) {
@@ -1056,11 +2165,27 @@ class _AmbientLightCanceler {
   }
 }
 
+// The reference filter's motion EMAs were specified per sample at 50 Hz.
+// Keep their real-time response unchanged when the selected IMU rate changes.
+double _sensorEmaAlphaAtRate(double alphaAt50Hz, double frequencyHz) {
+  final safeFrequency =
+      frequencyHz.isFinite && frequencyHz > 0 ? frequencyHz : 50.0;
+  return 1.0 - pow(1.0 - alphaAt50Hz, 50.0 / safeFrequency).toDouble();
+}
+
 class _MultiReferenceMotionCanceler {
+  final double gravityAlpha;
+  final double dynamicAlpha;
+  final double scaleAlpha;
   final _PadasipStyleMultiInputNlmsCanceler _canceler =
       _PadasipStyleMultiInputNlmsCanceler(
     tapsPerAxis: 16,
   );
+
+  _MultiReferenceMotionCanceler({required double accelerometerFreq})
+      : gravityAlpha = _sensorEmaAlphaAtRate(0.04, accelerometerFreq),
+        dynamicAlpha = _sensorEmaAlphaAtRate(0.18, accelerometerFreq),
+        scaleAlpha = _sensorEmaAlphaAtRate(0.06, accelerometerFreq);
 
   bool _isInitialized = false;
   double _gravityX = 0;
@@ -1091,10 +2216,6 @@ class _MultiReferenceMotionCanceler {
       _referenceScaleZ = 0.2;
       return;
     }
-
-    const gravityAlpha = 0.0202;
-    const dynamicAlpha = 0.0945;
-    const scaleAlpha = 0.0305;
 
     _gravityX = (_gravityX * (1.0 - gravityAlpha)) + (x * gravityAlpha);
     _gravityY = (_gravityY * (1.0 - gravityAlpha)) + (y * gravityAlpha);
@@ -1259,6 +2380,13 @@ class _MotionNoiseSuppressor {
   static const double _baseStepScale = 1.375;
   static const double _baseAlpha = 0.0725;
 
+  final double gravityAlpha;
+  final double motionAlpha;
+
+  _MotionNoiseSuppressor({required double accelerometerFreq})
+      : gravityAlpha = _sensorEmaAlphaAtRate(0.04, accelerometerFreq),
+        motionAlpha = _sensorEmaAlphaAtRate(0.15, accelerometerFreq);
+
   final List<double> _history = [];
 
   bool _isInitialized = false;
@@ -1275,16 +2403,14 @@ class _MotionNoiseSuppressor {
       return;
     }
 
-    // This runs once per accelerometer sample. heart_tracker's PpgFilter
-    // uses 0.96/0.04 and 0.85/0.15 at its validated 50Hz accelerometer
-    // rate; this app streams the accelerometer at 100Hz (2x), so these are
-    // the equivalent rates for the same real-time behavior at 100Hz.
-    _gravityMagnitude = (_gravityMagnitude * 0.9798) + (magnitude * 0.0202);
+    _gravityMagnitude =
+        (_gravityMagnitude * (1.0 - gravityAlpha)) + (magnitude * gravityAlpha);
     final dynamicMagnitude = (magnitude - _gravityMagnitude).abs();
     final dynamicScale = max(0.08, _gravityMagnitude.abs() * 0.02);
     final normalizedDynamicMagnitude = dynamicMagnitude / dynamicScale;
-    _motionLevel =
-        ((_motionLevel * 0.922) + (normalizedDynamicMagnitude * 0.078)).clamp(
+    _motionLevel = ((_motionLevel * (1.0 - motionAlpha)) +
+            (normalizedDynamicMagnitude * motionAlpha))
+        .clamp(
       0.0,
       8.0,
     );
