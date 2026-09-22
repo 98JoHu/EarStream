@@ -32,19 +32,6 @@ abstract final class BioAdaptiveModeConfig {
   static const Duration? hrvMinimumWindowOverride = null;
   static const Duration? metricWindowDurationOverride = null;
 
-  // Beat detector used for the published HR/RMSSD metrics.
-  //
-  // Off (default) keeps the existing four-mode polarity/sensitivity peak
-  // search. Enabling it selects the MSPTD-fast-v2 detector instead, evaluated
-  // on both signal polarities and ranked by the same clean-pair criterion.
-  //
-  // The detector-comparison diagnostic always reports every candidate,
-  // including MSPTD, so a traced run can measure the difference before this
-  // switch is flipped. Enable with:
-  //   flutter run --dart-define=MEDITATION_MSPTD_DETECTOR=true
-  static const bool useMsptdBeatDetector =
-      bool.fromEnvironment('MEDITATION_MSPTD_DETECTOR');
-
   // Optical channel selection.
   //
   // Rank channels by modulation relative to their own DC level (perfusion

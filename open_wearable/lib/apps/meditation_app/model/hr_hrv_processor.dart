@@ -3,7 +3,6 @@ import 'dart:math';
 
 import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_diagnostics.dart';
-import 'msptd_fast_v2_detector.dart';
 import 'pulse_interval_rmssd.dart';
 
 class HeartRateSample {
@@ -47,26 +46,6 @@ class HrHrvProcessor {
   final bool publishBestEffortEstimates;
   final HrHrvDiagnosticSink? diagnostics;
   final DateTime Function() _now;
-
-  /// Whether MSPTD-fast-v2 drives the published metrics instead of the legacy
-  /// amplitude/refractory peak search. Defaults to
-  /// [BioAdaptiveModeConfig.useMsptdBeatDetector]; overridable so both
-  /// detectors can be measured against one identical input.
-  final bool useMsptdBeatDetector;
-
-  /// Detector candidates eligible to drive published metrics. The other family
-  /// is still evaluated for the detector-comparison diagnostic.
-  List<_PeakDetectionMode> get _selectableModes => useMsptdBeatDetector
-      ? const [
-          _PeakDetectionMode.msptdPositive,
-          _PeakDetectionMode.msptdNegative,
-        ]
-      : const [
-          _PeakDetectionMode.standardPositive,
-          _PeakDetectionMode.standardNegative,
-          _PeakDetectionMode.sensitivePositive,
-          _PeakDetectionMode.sensitiveNegative,
-        ];
 
   static const double _minBeatIntervalSec = 0.25;
 
@@ -280,10 +259,7 @@ class HrHrvProcessor {
     this.publishBestEffortEstimates = false,
     this.diagnostics,
     DateTime Function()? now,
-    bool? useMsptdBeatDetector,
-  })  : _now = now ?? DateTime.now,
-        useMsptdBeatDetector = useMsptdBeatDetector ??
-            BioAdaptiveModeConfig.useMsptdBeatDetector {
+  }) : _now = now ?? DateTime.now {
     _motionSuppressor = _MotionNoiseSuppressor(
       accelerometerFreq: accelerometerFreq,
     );
@@ -483,14 +459,6 @@ class HrHrvProcessor {
     _lastEvaluationTick = timestamp.toDouble();
 
     _evaluateVitals(timestamp);
-  }
-
-  /// Pushes a synthetic sample directly onto [biometricStream], bypassing the
-  /// PPG pipeline entirely. Used for demo scenarios (see
-  /// Measurement.simulateStress), never by the real sensor path.
-  void emitSimulatedSample(int heartRate, double? rmssd) {
-    if (!_measurementEnabled) return;
-    _emit(HeartRateSample(heartRate: heartRate, rmssd: rmssd));
   }
 
   void dispose() {
@@ -1259,7 +1227,7 @@ class HrHrvProcessor {
     double effectiveSampleFreqHz, {
     String? comparisonContext,
   }) {
-    final selectable = _selectableModes;
+    const selectable = _PeakDetectionMode.values;
     final active = _activePeakDetectionMode;
     final modes = <_PeakDetectionMode>[
       if (active != null && selectable.contains(active)) active,
@@ -1485,23 +1453,16 @@ class HrHrvProcessor {
   }) {
     final useBeatPath =
         beatPath ?? BioAdaptiveModeConfig.useLightlyFilteredBeatPath;
-    final estimate = mode.usesMsptd
-        ? _estimateHeartRateByMsptd(
-            estimatedSampleFreqHz: effectiveSampleFreqHz,
-            source: samples,
-            signalPolarity: mode.polarity,
-            beatPath: useBeatPath,
-          )
-        : _estimateHeartRateByPeak(
-            estimatedSampleFreqHz: effectiveSampleFreqHz,
-            source: samples,
-            amplitudeScale: mode.sensitive ? 0.12 : 0.35,
-            minimumAmplitude: mode.sensitive ? 0.002 : 0.04,
-            minimumSignalStd: mode.sensitive ? 1e-8 : 1e-4,
-            signalPolarity: mode.polarity,
-            refractoryScale: mode.sensitive ? 1.0 : 0.85,
-            beatPath: useBeatPath,
-          );
+    final estimate = _estimateHeartRateByPeak(
+      estimatedSampleFreqHz: effectiveSampleFreqHz,
+      source: samples,
+      amplitudeScale: mode.sensitive ? 0.12 : 0.35,
+      minimumAmplitude: mode.sensitive ? 0.002 : 0.04,
+      minimumSignalStd: mode.sensitive ? 1e-8 : 1e-4,
+      signalPolarity: mode.polarity,
+      refractoryScale: mode.sensitive ? 1.0 : 0.85,
+      beatPath: useBeatPath,
+    );
     final peaks = estimate.peakTimestamps;
     final intervals = <double?>[];
     var acceptedCount = 0;
@@ -1528,45 +1489,6 @@ class HrHrvProcessor {
       acceptedIntervalCount: acceptedCount,
       rejectedIntervalCount: intervals.length - acceptedCount,
     );
-  }
-
-  /// Beat detection via MSPTD-fast-v2. Unlike [_estimateHeartRateByPeak] this
-  /// has no amplitude threshold or refractory tuning: the multi-scale local
-  /// maxima scalogram decides which local maxima are beats, and the detector
-  /// applies its own 0.28 s minimum separation. Only the polarity choice is
-  /// still ours, because the conditioned signal may present pulses as troughs.
-  ({double? heartRateBpm, List<int> peakTimestamps}) _estimateHeartRateByMsptd({
-    required double estimatedSampleFreqHz,
-    required List<_ConditionedSample> source,
-    required double signalPolarity,
-    bool beatPath = false,
-  }) {
-    if (source.length < 8) {
-      return (heartRateBpm: null, peakTimestamps: const []);
-    }
-
-    final safeSampleFreq =
-        estimatedSampleFreqHz.isFinite && estimatedSampleFreqHz > 0
-            ? estimatedSampleFreqHz
-            : sampleFreq;
-
-    final signal = source
-        .map((sample) => sample.valueFor(beatPath: beatPath) * signalPolarity)
-        .toList(growable: false);
-
-    final peakIndices = const MsptdFastV2Detector().detectPeakIndices(
-      signal,
-      sampleFreqHz: safeSampleFreq,
-    );
-
-    final peaks = <int>[];
-    for (final index in peakIndices) {
-      if (index >= 0 && index < source.length) {
-        peaks.add(source[index].timestamp);
-      }
-    }
-
-    return _estimateHeartRateFromPeakTimestamps(peaks);
   }
 
   ({double? heartRateBpm, List<int> peakTimestamps}) _estimateHeartRateByPeak({
@@ -1729,21 +1651,12 @@ enum _PeakDetectionMode {
   standardPositive(1.0, false),
   standardNegative(-1.0, false),
   sensitivePositive(1.0, true),
-  sensitiveNegative(-1.0, true),
-  // MSPTD-fast-v2 replaces the amplitude/refractory heuristics entirely, so
-  // `sensitive` carries no meaning for these two; only the polarity applies.
-  msptdPositive(1.0, false, usesMsptd: true),
-  msptdNegative(-1.0, false, usesMsptd: true);
+  sensitiveNegative(-1.0, true);
 
-  const _PeakDetectionMode(
-    this.polarity,
-    this.sensitive, {
-    this.usesMsptd = false,
-  });
+  const _PeakDetectionMode(this.polarity, this.sensitive);
 
   final double polarity;
   final bool sensitive;
-  final bool usesMsptd;
 }
 
 class _PeakCandidate {

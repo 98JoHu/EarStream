@@ -331,11 +331,9 @@ reports a baseline-deadline snapshot in the demo, then at most one monitoring
 snapshot every 30 seconds after 30 seconds of measurement data. Each snapshot
 includes the candidate's peak count, accepted and
 rejected interval counts, clean consecutive-pair count, HR, and RMSSD/method.
-It also identifies the active and internally top-ranked candidate. Since the
-MSPTD detector was added, the snapshot reports **six** candidates: the four
-legacy polarity/sensitivity modes plus `msptdPositive` and `msptdNegative`.
-Both families are always measured on the identical conditioned window, so one
-traced run compares them without rebuilding the app.
+It also identifies the active and internally top-ranked candidate. The snapshot reports each of the four
+polarity/sensitivity modes on **both** signal paths, tagged with `signal_path`,
+so one traced run compares them without rebuilding the app.
 This is a
 shadow comparison: it never selects a mode or changes published measurements.
 It adds work only at those snapshots, not for each PPG sample, and does not
@@ -427,30 +425,6 @@ Ruled out along the way, each measured rather than assumed: a running-window
 amplitude threshold, the refractory period (swept 212–600 ms), the normalizer's
 ±1.45 clamp (raising it to 4.0 cuts saturation from 5.1% to 0.2% and moves
 jitter by 1.5 ms), and each conditioning stage bypassed individually.
-
-### Beat detector selection
-
-Two beat-detector families exist. The default is the original four-mode
-polarity/sensitivity peak search. The alternative is MSPTD-fast-v2
-(`model/msptd_fast_v2_detector.dart`, adapted from the MIT-licensed
-`ppg-beats` project), evaluated on both signal polarities because the
-conditioned waveform can present pulses as troughs.
-
-MSPTD downsamples to 20 Hz internally and then refines each peak against the
-full-rate signal, so beat timing keeps its original resolution. It applies its
-own 0.28 s minimum beat separation instead of the legacy 0.2125 s refractory.
-
-The published metrics use the legacy search unless a debug build opts in:
-
-```powershell
-flutter run --dart-define=MEDITATION_MSPTD_DETECTOR=true
-```
-
-The switch lives in `BioAdaptiveModeConfig.useMsptdBeatDetector` and can also be
-passed directly to `HrHrvProcessor` so both detectors can be measured against
-one identical input in tests. Regardless of the switch, the detector-comparison
-diagnostic evaluates every candidate, so a traced run measures the two families
-against each other before the default is changed.
 
 ### Waveform capture and offline replay
 
