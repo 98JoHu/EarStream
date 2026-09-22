@@ -24,6 +24,7 @@ class PreferencesPage extends StatefulWidget implements DrawerPage {
 class _PreferencesPageState extends State<PreferencesPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _additionalPreferencesController;
+  late Gender _voiceGender;
   late SpeakingSpeed _speakingSpeed;
   late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
@@ -35,6 +36,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _additionalPreferencesController = TextEditingController(
       text: widget.userAccount.additionalPreferences ?? '',
     );
+    _voiceGender = widget.userAccount.voiceGender ?? Gender.female;
     _speakingSpeed = widget.userAccount.speakingSpeed ?? SpeakingSpeed.slow;
     _meditationType =
         widget.userAccount.meditationType ?? MeditationType.mindfulness;
@@ -53,6 +55,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   void _saveProfile() {
     if (_formKey.currentState!.validate()) {
       setState(() {
+        widget.userAccount.voiceGender = _voiceGender;
         widget.userAccount.speakingSpeed = _speakingSpeed;
         widget.userAccount.meditationType = _meditationType;
         widget.userAccount.meditationEnvironment = _meditationEnvironment;
@@ -99,8 +102,19 @@ class _PreferencesPageState extends State<PreferencesPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'These settings stay optional at startup, but they shape the generated script, ambience, and delivery once a session begins. Voice service settings are managed under API Keys.',
+                    'These settings stay optional at startup, but they shape the generated script, ambience, and delivery once a session begins. The voice service and provider itself are managed under API Keys.',
                     style: TextStyle(color: Colors.grey[700], height: 1.4),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Voice Gender',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  VoiceGenderDropdown(
+                    initialSelection: _voiceGender,
+                    onSelected: (value) =>
+                        setState(() => _voiceGender = value!),
                   ),
                   const SizedBox(height: 24),
                   const Text(

@@ -83,6 +83,16 @@ abstract final class OverallMeditationConfig {
   static const String kokoroMaleVoiceName = 'bm_lewis';
   static const int kokoroMaleSpeakerId = 10;
   static const int kokoroThreadCount = 4;
+
+  /// Multiplies pauses after synthesis: 1.0 leaves them as the model produced
+  /// them, above that lengthens them. Valid range is 0.01 to 10.
+  ///
+  /// sherpa-onnx defaults this to 0.2, meaning it compresses every silence
+  /// longer than 0.2 s to a fifth of its length. That is reasonable for an
+  /// assistant reading a reply and wrong for guided meditation, where the
+  /// pauses are the point. This is the knob for narration rhythm; Kokoro has
+  /// no pitch or style control to go with it.
+  static const double kokoroSilenceScale = 1.5;
   // Kokoro synthesizes one sentence at a time internally; batching a couple of
   // them cuts the per-call overhead without a large latency step.
   static const int kokoroMaxSentencesPerBatch = 2;

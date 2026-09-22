@@ -158,6 +158,34 @@ void main() {
     });
   });
 
+  group('engine configuration', () {
+    test('points at the files the model directory actually contains', () {
+      final config = configFor('/data/user/0/app/files/kokoro-en-v0_19');
+
+      expect(config.model.kokoro.model, endsWith('/model.onnx'));
+      expect(config.model.kokoro.voices, endsWith('/voices.bin'));
+      expect(config.model.kokoro.tokens, endsWith('/tokens.txt'));
+      expect(config.model.kokoro.dataDir, endsWith('/espeak-ng-data'));
+      expect(
+        config.model.kokoro.model,
+        startsWith('/data/user/0/app/files/kokoro-en-v0_19'),
+      );
+      // Only the Kokoro family is configured.
+      expect(config.model.vits.model, isEmpty);
+      expect(config.model.matcha.acousticModel, isEmpty);
+    });
+
+    test('does not leave sherpa-onnx compressing the pauses', () {
+      // sherpa-onnx defaults silenceScale to 0.2, which squeezes every pause
+      // longer than 0.2 s down to a fifth. For guided meditation the pauses
+      // are the point, so this must be set explicitly and above 1.0.
+      final config = configFor('/tmp/kokoro');
+      expect(config.silenceScale, OverallMeditationConfig.kokoroSilenceScale);
+      expect(config.silenceScale, greaterThan(1.0));
+      expect(config.silenceScale, lessThanOrEqualTo(10.0));
+    });
+  });
+
   group('local synthesis', () {
     test('produces playable audio rather than device speech', () async {
       final engine = _FakeKokoroEngine();

@@ -371,6 +371,7 @@ class SettingsView extends DemoStepView {
 class _SettingsViewState extends State<SettingsView> {
   final _random = Random();
 
+  late Gender _voiceGender;
   late SpeakingSpeed _speakingSpeed;
   late MeditationType _meditationType;
   late MeditationEnvironment _meditationEnvironment;
@@ -378,6 +379,7 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void initState() {
     super.initState();
+    _voiceGender = widget.userAccount.voiceGender ?? Gender.female;
     _speakingSpeed = widget.userAccount.speakingSpeed ?? SpeakingSpeed.slow;
     _meditationType =
         widget.userAccount.meditationType ?? MeditationType.mindfulness;
@@ -390,6 +392,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   void _randomiseSelection() {
     setState(() {
+      _voiceGender = _randomEntry(voiceGenderOptions);
       _speakingSpeed = _randomEntry(speakingSpeedOptions);
       _meditationType = _randomEntry(meditationTypeOptions);
       _meditationEnvironment = _randomEntry(meditationEnvironmentOptions);
@@ -397,6 +400,7 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _savePreferences() {
+    widget.userAccount.voiceGender = _voiceGender;
     widget.userAccount.speakingSpeed = _speakingSpeed;
     widget.userAccount.meditationType = _meditationType;
     widget.userAccount.meditationEnvironment = _meditationEnvironment;
@@ -448,6 +452,19 @@ class _SettingsViewState extends State<SettingsView> {
               icon: const Icon(Icons.casino_outlined),
               label: const Text('Surprise me'),
             ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Voice Gender',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          VoiceGenderDropdown(
+            key: ValueKey(_voiceGender),
+            initialSelection: _voiceGender,
+            onSelected: (value) {
+              if (value != null) setState(() => _voiceGender = value);
+            },
           ),
           const SizedBox(height: 24),
           const Text(

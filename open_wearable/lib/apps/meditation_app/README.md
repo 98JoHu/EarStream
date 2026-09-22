@@ -148,9 +148,9 @@ or finishes. It copies only cloud-service configuration and the voice choice
 from the main account. Permanent profile fields, stored baselines, stress
 sensitivity, and personal meditation preferences are not copied.
 
-Attendees can choose meditation type, environment, and speaking speed for the
-current demo. Provider, region, and voice selection are configured only on the
-**API Keys** page.
+Attendees can choose voice gender, meditation type, environment, and speaking
+speed for the current demo; "Surprise me" randomises all four. Provider, region
+and credentials are configured only on the **API Keys** page.
 
 The demo prompt policy excludes both permanent profile information and
 physiological measurements. HR/RMSSD processing remains local to the phone.
@@ -611,8 +611,15 @@ buffer, while the consumer plays from that buffer.
 
 ## Text-to-speech and audio
 
-The TTS provider and voice are selected on the **API Keys** page. They are not
-available in Profile, Meditation Preferences, or demo attendee preferences.
+The TTS provider, the processing region and the ElevenLabs voice id are
+selected on the **API Keys** page, and are not available in Profile,
+Meditation Preferences, or demo attendee preferences.
+
+Voice gender is a meditation preference, not a service setting: it appears at
+the top of **Meditation Preferences** and of the demo attendee preferences, as
+well as on the API Keys page where it is labelled **Default Voice**. All three
+edit the same `UserAccount.voiceGender`, which every provider maps to its own
+voice — an ElevenLabs voice id, a Tencent voice type, or a Kokoro speaker id.
 
 ### ElevenLabs
 
@@ -667,6 +674,18 @@ endpoints are unreachable.
   model costs seconds and several hundred MB. It is released in
   `MeditationView.dispose`.
 - Output is 16-bit PCM WAV played from memory, like the cloud providers' MP3.
+
+Rhythm is tuned with `kokoroSilenceScale`, which multiplies every pause longer
+than 0.2 s after synthesis. sherpa-onnx defaults it to 0.2, compressing pauses
+to a fifth of their length; the in-app sets 1.5 instead, because in guided
+meditation the pauses carry the pacing. Valid range is 0.01 to 10.
+
+Kokoro has no pitch parameter and no style or instruction prompt: its timbre
+comes entirely from the speaker's style vector in `voices.bin`, so the only
+ways to change the delivery are the voice, the speed, the silence scale, and
+the punctuation of the generated text. Ellipses, commas and sentence breaks are
+what produce the pauses that the silence scale then stretches, which makes the
+DeepSeek prompt the closest thing to a style control.
 
 #### Adding the model to a build
 

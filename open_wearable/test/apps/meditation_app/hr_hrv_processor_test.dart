@@ -39,6 +39,7 @@ import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_vi
 import 'package:open_wearable/apps/meditation_app/views/pages/api_keys_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/preferences_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/weekly_analytics_page.dart';
+import 'package:open_wearable/apps/meditation_app/widgets/custom_dropdown.dart';
 import 'package:open_wearable/apps/meditation_app/widgets/meditation_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -1527,7 +1528,7 @@ void main() {
   });
 
   group('voice settings location', () {
-    testWidgets('personal preferences contain no provider or voice selector',
+    testWidgets('personal preferences choose the voice but not the service',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -1537,11 +1538,42 @@ void main() {
         ),
       );
 
+      // How the narrator sounds is a meditation preference; which service
+      // produces it, and with which credentials, stays under API Keys.
+      expect(find.text('Voice Gender'), findsOneWidget);
       expect(find.text('Speaking Speed'), findsOneWidget);
       expect(find.text('TTS Provider'), findsNothing);
-      expect(find.text('Default Voice'), findsNothing);
       expect(find.text('ElevenLabs Voice'), findsNothing);
       expect(find.text('Tencent processing region'), findsNothing);
+    });
+
+    testWidgets('the chosen voice gender is saved to the account',
+        (tester) async {
+      final account = UserAccount(voiceGender: Gender.female);
+      // Tall enough that the save button is on screen without scrolling.
+      await tester.binding.setSurfaceSize(const Size(800, 2000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PreferencesPage(userAccount: account),
+          ),
+        ),
+      );
+
+      tester
+          .widget<VoiceGenderDropdown>(find.byType(VoiceGenderDropdown))
+          .onSelected(Gender.male);
+      await tester.pumpAndSettle();
+
+      // The page holds the choice until it is saved, like its other fields.
+      expect(account.voiceGender, Gender.female);
+
+      await tester.tap(find.text('Save Profile'));
+      await tester.pumpAndSettle();
+
+      expect(account.voiceGender, Gender.male);
     });
 
     testWidgets('API Keys contains provider and voice controls',
@@ -1581,8 +1613,10 @@ void main() {
       );
 
       expect(find.text('Speaking Speed'), findsOneWidget);
+      // Attendees pick the narrator's voice for their own session; provider
+      // and credentials remain inherited from the configured account.
+      expect(find.text('Voice Gender'), findsOneWidget);
       expect(find.text('Text-to-Speech Provider'), findsNothing);
-      expect(find.text('Voice Gender'), findsNothing);
       expect(find.text('Tencent Processing Region'), findsNothing);
     });
   });

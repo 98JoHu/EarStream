@@ -271,7 +271,7 @@ void _workerMain(SendPort boot) {
       case _CreateCommand(:final reply, :final directory):
         try {
           tts?.free();
-          tts = sherpa.OfflineTts(_configFor(directory));
+          tts = sherpa.OfflineTts(configFor(directory));
           reply.send(
             _CreatedReply(
               sampleRate: tts!.sampleRate,
@@ -312,7 +312,12 @@ void _workerMain(SendPort boot) {
   });
 }
 
-sherpa.OfflineTtsConfig _configFor(String directory) {
+/// Builds the engine configuration for a model directory.
+///
+/// Visible for testing because the file names and the silence scale are easy
+/// to get wrong and impossible to notice without a device.
+@visibleForTesting
+sherpa.OfflineTtsConfig configFor(String directory) {
   String at(String name) => '$directory/$name';
   return sherpa.OfflineTtsConfig(
     model: sherpa.OfflineTtsModelConfig(
@@ -326,6 +331,7 @@ sherpa.OfflineTtsConfig _configFor(String directory) {
       debug: false,
     ),
     maxNumSenetences: OverallMeditationConfig.kokoroMaxSentencesPerBatch,
+    silenceScale: OverallMeditationConfig.kokoroSilenceScale,
   );
 }
 
