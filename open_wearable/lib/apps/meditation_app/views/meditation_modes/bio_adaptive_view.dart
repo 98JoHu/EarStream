@@ -15,6 +15,7 @@ import '../../model/measurement_phase.dart'
         CalibrationPhase,
         MonitoringPhase,
         StressMonitoringPhase;
+import '../../model/meditation.dart' show BiometricMeditation, MeditationPhase;
 import '../../model/stress_detector.dart' show StressLevel;
 import '../../model/user_account.dart';
 import '../../model/activity_tracker.dart' show ActivityLevel;
@@ -193,39 +194,77 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
         widget.userAccount ?? context.read<UserAccount>();
     final measurement = _measurement;
 
+    if (_earstreamState != EarstreamState.running || measurement == null) {
+      return _layout(userAccount, measurement, completed: false);
+    }
+
+    // A finished meditation takes over the view, matching the
+    // meditation-only demo: the success card is the result of the session, not
+    // a footnote under a measurement that is still scrolling past above it.
+    return ValueListenableBuilder<BiometricMeditation?>(
+      valueListenable: measurement.meditation,
+      builder: (context, meditation, child) {
+        if (meditation == null) {
+          return _layout(userAccount, measurement, completed: false);
+        }
+        return ValueListenableBuilder<MeditationPhase>(
+          valueListenable: meditation.phase,
+          builder: (context, phase, child) => _layout(
+            userAccount,
+            measurement,
+            completed: phase == MeditationPhase.finished,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _layout(
+    UserAccount userAccount,
+    Measurement? measurement, {
+    required bool completed,
+  }) {
+    final isRunning = _earstreamState == EarstreamState.running;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_earstreamState == EarstreamState.running && measurement != null)
-          BioAdaptiveContent(measurement: measurement),
-        if (_earstreamState == EarstreamState.running &&
-            !userAccount.hasValidDeepseekKey) ...[
+        if (isRunning && measurement != null)
+          // Hidden rather than removed: the chart's accumulated history and
+          // its stream subscription survive the card, so dismissing it returns
+          // to a live view instead of an empty one.
+          Offstage(
+            offstage: completed,
+            child: BioAdaptiveContent(measurement: measurement),
+          ),
+        if (isRunning && !completed && !userAccount.hasValidDeepseekKey) ...[
           SizedBox(height: 16),
           APIWarning(serviceName: "Deepseek"),
           SizedBox(height: 16),
         ],
-        if (_earstreamState == EarstreamState.running &&
+        if (isRunning &&
+            !completed &&
             !userAccount.hasValidSelectedTtsProvider) ...[
           APIWarning(serviceName: userAccount.ttsProvider.label),
           const SizedBox(height: 16),
         ],
-        if (_earstreamState == EarstreamState.running && measurement != null)
+        if (isRunning && measurement != null)
           MeditationTile(
             meditationNotifier: measurement.meditation,
             onMeditationComplete: measurement.dismissMeditation,
           ),
-        if (_earstreamState == EarstreamState.running)
-          const SizedBox(height: 8),
+        if (isRunning && !completed) const SizedBox(height: 8),
         // Control Buttons
-        BioAdaptiveControls(
-          earstreamState: _earstreamState,
-          onStart: () => _startEarstream(userAccount),
-          onResume: _resumeEarstream,
-          onPause: _pauseEarstream,
-          onSimulateStress: () => _playRecordedStress(userAccount),
-          onReset: _resetEarstream,
-          showStressSimulation: widget.sessionConfig.allowStressSimulation,
-        ),
+        if (!completed)
+          BioAdaptiveControls(
+            earstreamState: _earstreamState,
+            onStart: () => _startEarstream(userAccount),
+            onResume: _resumeEarstream,
+            onPause: _pauseEarstream,
+            onSimulateStress: () => _playRecordedStress(userAccount),
+            onReset: _resetEarstream,
+            showStressSimulation: widget.sessionConfig.allowStressSimulation,
+          ),
       ],
     );
   }

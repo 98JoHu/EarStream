@@ -702,6 +702,13 @@ Completed sessions show a success card and the single-line mood choices
 **Serene**, **Relaxed**, **Neutral**, and **Stressed**. Selecting a mood
 currently dismisses the completed session; mood values are not persisted.
 
+In the biosignal-adaptive modes the card replaces the session view rather than
+appearing beneath it: the live measurement, API warnings, and session controls
+are hidden while it is shown, matching the meditation-only demo. The measurement
+keeps running underneath, hidden rather than removed, so the heart-rate chart
+retains its history and is live again the moment the card is dismissed. The
+demo's **End Demo** button sits outside this view and stays available.
+
 Weekly analytics stores regular biosignal-adaptive and timed session records in
 `SharedPreferences`. Each record contains mode, start time, end time, and
 completion state. The dashboard derives total duration, completion rate,
