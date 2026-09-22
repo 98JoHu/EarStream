@@ -113,8 +113,9 @@ Activity handling below.
 - The maximum is 10 generated segments.
 - Each regular segment requests approximately 280 words from DeepSeek.
 - Regular segments are narration-driven; no 30-second target is applied.
-- After each spoken segment, the current HR/RMSSD sample may be sent to
-  DeepSeek so the next segment can adapt.
+- The next segment is requested while the current one is still speaking, so the
+  HR/RMSSD sample it carries is the one read when the current segment *starts*,
+  not when it ends. See Narration pipeline below.
 - After each segment, the app checks whether measured HR is at or below the
   baseline HR. If so, it proceeds to the completion message.
 - RMSSD is deliberately not part of the recovery/termination condition.
@@ -574,6 +575,40 @@ If the opening generation fails, the whole session switches to the static
 local script. If generation of a later adaptive segment fails, that segment is
 replaced with the static fallback text and the remaining session can continue.
 
+### Narration pipeline
+
+Generation and speech synthesis used to happen in the gap between segments, so
+the listener sat through a DeepSeek request plus a TTS request as silence
+before every segment. They now run *during* playback of the previous segment.
+
+`TtsService` splits into `prepare(text)`, which synthesizes and returns a
+`PreparedNarration`, and `play(narration)`, which only plays. `Meditation`
+runs a single producer that generates and synthesizes ahead into a bounded
+buffer, while the consumer plays from that buffer.
+
+- One producer, not several: each generated segment is conditioned on the
+  conversation history of the one before it, so the requests cannot be
+  parallelized.
+- Lookahead depth is `OverallMeditationConfig.narrationPrefetchDepth` (3).
+  `BiometricMeditation` overrides it to 1, because its request carries the
+  biometrics read when the current segment starts; producing further ahead
+  would send readings from progressively further in the past.
+- The **decision** to play a produced segment is unchanged: it is still taken
+  at the end of the previous segment, against heart rate. A segment that was
+  produced ahead of a recovery exit is discarded, not played.
+- The welcome message is the one narration nothing precedes, so its synthesis
+  is still awaited on its own. The first segment and the completion message are
+  produced while it plays.
+- Producer and consumer wake each other directly, so a segment that arrives
+  late starts playing the moment it is ready.
+- When the session ends early, the producer is told to stop and is *not*
+  awaited: a request already in flight has nowhere to go and must not hold back
+  the closing narration. Disposing the script ends that request.
+- Retries live in `prepare`. Playback of already-fetched audio is not retried,
+  since replaying part of a spoken segment is worse than surfacing the error.
+- Narration that was prepared before a voice-service outage is still played;
+  the session fails only once it actually runs out of narration.
+
 ## Text-to-speech and audio
 
 The TTS provider and voice are selected on the **API Keys** page. They are not
@@ -796,15 +831,22 @@ From `open_wearable/`:
 ```powershell
 flutter pub get
 flutter analyze
-flutter test test/apps/meditation_app/hr_hrv_processor_test.dart
+flutter test test/apps/meditation_app/
 flutter run
 ```
 
-The focused test suite covers configuration alignment, calibration isolation,
-demo deadline estimates, provider/region parsing, voice selection, demo privacy,
-stress playback, HR-only recovery, demo segment capping, presentation,
-weekly analytics, Tencent signing/chunking, sensor-axis disambiguation, stale
-credential checks, prompt formatting, and demographic-baseline isolation.
+`hr_hrv_processor_test.dart` covers configuration alignment, calibration
+isolation, demo deadline estimates, provider/region parsing, voice selection,
+demo privacy, stress playback, HR-only recovery, demo segment capping,
+presentation, weekly analytics, Tencent signing/chunking, sensor-axis
+disambiguation, stale credential checks, prompt formatting, and
+demographic-baseline isolation.
+
+`meditation_pipeline_test.dart` drives a whole `Meditation` against a fake
+audioplayers platform and a fake `TtsProvider`, and covers the narration
+pipeline: overlap of synthesis with playback, the lookahead bound, discarding a
+segment prefetched ahead of an early exit, stopping the producer on stop, and
+voice-outage handling.
 
 ## Current limitations
 

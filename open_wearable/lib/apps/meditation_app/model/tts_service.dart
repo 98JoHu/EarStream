@@ -141,6 +141,21 @@ class TtsSessionException implements Exception {
   String toString() => '$providerName failed after retries: $cause';
 }
 
+/// Narration that has already been synthesized and is waiting to be played.
+///
+/// Splitting synthesis from playback is what lets a meditation produce the next
+/// segment while the current one is still speaking. The on-device fallback has
+/// no synthesize-to-buffer step, so for that route [sources] stays null and the
+/// text is spoken directly at playback time.
+class PreparedNarration {
+  final String text;
+  final List<Source>? sources;
+
+  const PreparedNarration({required this.text, this.sources});
+
+  bool get isDeviceSpoken => sources == null;
+}
+
 /// Owns the narration route and keeps it stable for one meditation session.
 class TtsService {
   final UserAccount _userAccount;
@@ -152,12 +167,17 @@ class TtsService {
   int _playbackGeneration = 0;
   bool _isDisposed = false;
 
-  TtsService({required UserAccount userAccount})
+  /// [provider] overrides the account's configured cloud voice. It exists for
+  /// routes the [TtsProviderOption] enum does not name, and it is the seam the
+  /// tests synthesize through.
+  TtsService({required UserAccount userAccount, TtsProvider? provider})
       : _userAccount = userAccount,
-        _provider = switch (userAccount.ttsProvider) {
-          TtsProviderOption.elevenLabs => ElevenLabsTtsProvider(userAccount),
-          TtsProviderOption.tencent => TencentTtsProvider(userAccount),
-        },
+        _provider = provider ??
+            switch (userAccount.ttsProvider) {
+              TtsProviderOption.elevenLabs =>
+                ElevenLabsTtsProvider(userAccount),
+              TtsProviderOption.tencent => TencentTtsProvider(userAccount),
+            },
         _fallbackTts = FlutterTts() {
     // A cloud outage must not silently change the voice mid-meditation.
     _usesDeviceFallback = !_provider.isAvailable;
@@ -188,42 +208,35 @@ class TtsService {
     ),
   );
 
-  Future<void> speak(String text) async {
-    if (_isDisposed) return;
-    final playbackGeneration = ++_playbackGeneration;
-    if (_usesDeviceFallback) {
-      try {
-        await (_fallbackInitialization ??=
-            _initializeFallbackTts(_userAccount));
-        if (playbackGeneration != _playbackGeneration || _isDisposed) return;
-        await _fallbackTts.speak(text);
-        return;
-      } catch (error) {
-        throw TtsSessionException(
-          providerName: 'DeviceTtsProvider',
-          cause: error,
-        );
-      }
+  /// Synthesizes [text] without playing it, so it can be produced ahead of
+  /// time. Retries live here because synthesis is the network-dependent half;
+  /// playback of already-fetched audio rarely fails and replaying part of a
+  /// spoken segment would be worse than surfacing the error.
+  Future<PreparedNarration> prepare(String text) async {
+    if (_isDisposed || _usesDeviceFallback) {
+      return PreparedNarration(text: text);
     }
 
     Object? lastError;
     const retryDelays = OverallMeditationConfig.cloudTtsRetryDelays;
     for (var attempt = 0; attempt < retryDelays.length; attempt++) {
-      if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+      if (_isDisposed) return PreparedNarration(text: text);
       final delay = retryDelays[attempt];
       if (delay > Duration.zero) await Future<void>.delayed(delay);
-      if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+      if (_isDisposed) return PreparedNarration(text: text);
 
       try {
-        await _speakWithProvider(text, playbackGeneration);
-        return;
+        final sources = await _provider.synthesize(text);
+        if (sources.isEmpty) {
+          throw StateError('The voice service returned no audio.');
+        }
+        return PreparedNarration(text: text, sources: sources);
       } catch (error) {
         lastError = error;
         debugPrint(
           'Error using ${_provider.runtimeType} '
           '(attempt ${attempt + 1}/${retryDelays.length}): $error',
         );
-        await _player.stop();
       }
     }
 
@@ -233,28 +246,52 @@ class TtsService {
     );
   }
 
-  Future<void> _speakWithProvider(
-    String text,
-    int playbackGeneration,
-  ) async {
-    final sources = await _provider.synthesize(text);
-    if (sources.isEmpty) {
-      throw StateError('The voice service returned no audio.');
-    }
-    if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+  /// Plays narration produced earlier by [prepare].
+  Future<void> play(PreparedNarration narration) async {
+    if (_isDisposed) return;
+    final playbackGeneration = ++_playbackGeneration;
 
-    await _player.setAudioContext(_premiumTtsAudioContext);
-    for (final source in sources) {
-      if (playbackGeneration != _playbackGeneration || _isDisposed) return;
-      final playbackEnded = Future.any([
-        _player.onPlayerComplete.first,
-        _player.onPlayerStateChanged
-            .firstWhere((state) => state == PlayerState.stopped),
-      ]);
-      await _player.play(source);
-      await playbackEnded;
-      if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+    if (narration.isDeviceSpoken) {
+      try {
+        await (_fallbackInitialization ??=
+            _initializeFallbackTts(_userAccount));
+        if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+        await _fallbackTts.speak(narration.text);
+        return;
+      } catch (error) {
+        throw TtsSessionException(
+          providerName: 'DeviceTtsProvider',
+          cause: error,
+        );
+      }
     }
+
+    try {
+      await _player.setAudioContext(_premiumTtsAudioContext);
+      for (final source in narration.sources!) {
+        if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+        final playbackEnded = Future.any([
+          _player.onPlayerComplete.first,
+          _player.onPlayerStateChanged
+              .firstWhere((state) => state == PlayerState.stopped),
+        ]);
+        await _player.play(source);
+        await playbackEnded;
+        if (playbackGeneration != _playbackGeneration || _isDisposed) return;
+      }
+    } catch (error) {
+      await _player.stop();
+      throw TtsSessionException(
+        providerName: _provider.runtimeType.toString(),
+        cause: error,
+      );
+    }
+  }
+
+  /// Synthesizes and plays in one step, for narration with nothing to overlap.
+  Future<void> speak(String text) async {
+    if (_isDisposed) return;
+    await play(await prepare(text));
   }
 
   Future<void> stop() async {

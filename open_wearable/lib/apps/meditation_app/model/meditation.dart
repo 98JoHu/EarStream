@@ -2,6 +2,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:collection';
 import '../configs/bio_adaptive_mode_config.dart';
 import '../configs/overall_config.dart';
 import '../configs/timed_mode_config.dart';
@@ -13,6 +14,14 @@ import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'audio_route_diagnostics.dart';
 import 'tts_service.dart';
+
+/// A generated segment together with its already-synthesized narration.
+class _PreparedSegment {
+  final MeditationSegment segment;
+  final PreparedNarration narration;
+
+  const _PreparedSegment({required this.segment, required this.narration});
+}
 
 enum MeditationPhase {
   preparing,
@@ -60,13 +69,26 @@ class Meditation {
           'Analytics store and mode must either both be set or both be null.',
         ) {
     phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
-    ttsService = TtsService(userAccount: userAccount);
+    ttsService = createTtsService();
   }
+
+  /// The narration route for this session, fixed for its whole duration.
+  @protected
+  TtsService createTtsService() => TtsService(userAccount: userAccount);
 
   // This method can be overridden in subclasses to implement early exit conditions.
   bool checkEarlyExit() => false;
 
   HeartRateSample? readCurrentBiometrics() => null;
+
+  /// How many segments may be produced ahead of the one being played.
+  ///
+  /// Generation and speech synthesis both cost seconds that used to be silence
+  /// between segments, so they now run while the previous segment is speaking.
+  /// Sessions without biosignals can run further ahead because nothing they
+  /// send depends on the moment the request is made.
+  int get narrationPrefetchDepth =>
+      OverallMeditationConfig.narrationPrefetchDepth;
 
   Future<void> start() async {
     if (_isDisposed) return;
@@ -129,18 +151,29 @@ class Meditation {
 
     if (isStopped) return _endRun();
 
-    // Speak the welcome message
+    // Speak the welcome message. Nothing precedes it, so this synthesis is the
+    // one wait that cannot be overlapped.
     phase.value = MeditationPhase.welcome;
-    await _speakRespectingPause(opening.welcomeMessage);
+    final welcome = await _prepareNarration(opening.welcomeMessage);
+    if (isStopped) return _endRun();
+
+    // Both of these are known already, so they are synthesized while the
+    // welcome plays rather than in the silence that used to follow it.
+    final firstSegment = _observed(_prepareSegment(opening.firstSegment));
+    final completion = _observed(
+      _prepareNarration(opening.completionMessage),
+    );
+
+    await _playRespectingPause(welcome);
 
     // Run through the meditation segments
     phase.value = MeditationPhase.segment;
-    await _runSegments(opening.firstSegment);
+    await _runSegments(await firstSegment);
 
     // Speak the completion message
     if (isStopped) return _endRun();
     phase.value = MeditationPhase.completion;
-    await _speakRespectingPause(opening.completionMessage);
+    await _playRespectingPause(await completion);
 
     // Mark the meditation as finished
     phase.value = MeditationPhase.finished;
@@ -223,7 +256,24 @@ class Meditation {
     if (route.isNotEmpty) sink(event, route);
   }
 
-  Future<void> _speakRespectingPause(String text) async {
+  /// Keeps a future's error from being reported as unhandled while it is
+  /// produced ahead of the point where it is awaited.
+  Future<T> _observed<T>(Future<T> future) {
+    unawaited(future.then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    return future;
+  }
+
+  Future<PreparedNarration> _prepareNarration(String text) =>
+      ttsService.prepare(text);
+
+  Future<_PreparedSegment> _prepareSegment(MeditationSegment segment) async {
+    return _PreparedSegment(
+      segment: segment,
+      narration: await _prepareNarration(segment.instruction),
+    );
+  }
+
+  Future<void> _playRespectingPause(PreparedNarration narration) async {
     while (true) {
       if (isPaused.value) await _waitForResume();
       if (isStopped) return;
@@ -231,7 +281,7 @@ class Meditation {
       diagnosticEventSink?.call('narration_requested', const {});
       await _recordAudioRoute('audio_route_at_narration');
       try {
-        await ttsService.speak(text);
+        await ttsService.play(narration);
         diagnosticEventSink?.call('narration_finished', const {});
       } catch (error) {
         diagnosticEventSink?.call('narration_failed', {
@@ -285,29 +335,77 @@ class Meditation {
     }
   }
 
-  Future<void> _runSegments(MeditationSegment first) async {
-    MeditationSegment? segment = first;
-    while (segment != null && !isStopped) {
-      final current = segment;
+  /// Plays segments while the ones after them are generated and synthesized.
+  ///
+  /// Producing the next segment used to begin only once the current one had
+  /// stopped speaking, so its generation and synthesis time was silence the
+  /// listener sat through. It now runs during playback instead.
+  ///
+  /// The decision to *play* a produced segment is still taken at the end of the
+  /// previous one, against heart rate as before. A segment produced ahead of an
+  /// early exit is simply discarded.
+  Future<void> _runSegments(_PreparedSegment first) async {
+    final buffer = Queue<_PreparedSegment>();
+    final stopProducing = Completer<void>();
+    var producerFinished = false;
+    Object? producerError;
+    StackTrace? producerStackTrace;
+
+    // The two sides wake each other instead of only polling, so a segment that
+    // arrives late still starts playing the moment it is ready. The poll
+    // interval stays as a liveness backstop for stop() and dispose().
+    Completer<void>? bufferFilled;
+    Completer<void>? bufferDrained;
+    void wake(Completer<void>? Function() read, void Function() clear) {
+      final waiter = read();
+      clear();
+      if (waiter != null && !waiter.isCompleted) waiter.complete();
+    }
+
+    // One producer, because each generated segment depends on the conversation
+    // history of the one before it and cannot be requested in parallel.
+    final producer = _observed(
+      () async {
+        try {
+          while (!isStopped && !_isDisposed && !stopProducing.isCompleted) {
+            if (buffer.length >= narrationPrefetchDepth) {
+              bufferDrained ??= Completer<void>();
+              await Future.any([
+                bufferDrained!.future,
+                stopProducing.future,
+                Future<void>.delayed(
+                  OverallMeditationConfig.progressUpdateInterval,
+                ),
+              ]);
+              continue;
+            }
+            final segment = await _script!.nextSegment(readCurrentBiometrics());
+            if (segment == null) break;
+            if (isStopped || _isDisposed || stopProducing.isCompleted) break;
+            buffer.add(await _prepareSegment(segment));
+            wake(() => bufferFilled, () => bufferFilled = null);
+          }
+        } catch (error, stackTrace) {
+          producerError = error;
+          producerStackTrace = stackTrace;
+        } finally {
+          producerFinished = true;
+          wake(() => bufferFilled, () => bufferFilled = null);
+        }
+      }(),
+    );
+
+    var current = first;
+    while (!isStopped) {
       final segmentStart = DateTime.now();
-      final segmentDuration = Duration(seconds: current.durationSeconds);
+      final segmentDuration =
+          Duration(seconds: current.segment.durationSeconds);
       var pausedDuration = Duration.zero;
-      var speaking = true;
 
-      final speakFuture = _speakRespectingPause(current.instruction);
-      // Observe completion without creating an unhandled derived Future when
-      // speech fails. The original Future is still awaited below so its error
-      // follows the meditation's normal failure path.
-      unawaited(
-        speakFuture.then<void>(
-          (_) => speaking = false,
-          onError: (Object _, StackTrace __) => speaking = false,
-        ),
-      );
+      await _playRespectingPause(current.narration);
+      if (isStopped) break;
 
-      // Prefetch of the next segment, started when speaking finishes.
-      Future<MeditationSegment?>? nextFuture;
-
+      // Hold out any remaining nominal segment time before moving on.
       while (true) {
         if (isPaused.value) {
           final pauseStart = DateTime.now();
@@ -315,32 +413,51 @@ class Meditation {
           pausedDuration += DateTime.now().difference(pauseStart);
         }
         if (isStopped) break;
-
-        // The instruction just finished: sample biometrics now and begin
-        // generating the next segment during the remaining breathing pause.
-        if (!speaking && nextFuture == null) {
-          nextFuture = _script!.nextSegment(readCurrentBiometrics());
-        }
-
         final elapsed =
             DateTime.now().difference(segmentStart) - pausedDuration;
-        if (!speaking && elapsed >= segmentDuration) break;
-
-        await Future.delayed(
-          OverallMeditationConfig.progressUpdateInterval,
-        );
+        if (elapsed >= segmentDuration) break;
+        await Future.delayed(OverallMeditationConfig.progressUpdateInterval);
       }
-
-      await speakFuture; // ensure the instruction has finished speaking
 
       if (isStopped) break;
       if (checkEarlyExit()) break;
 
-      // The prefetch usually completed during the pause; await whatever's left.
-      // (If we broke before speaking ended, nextFuture may be null.)
-      segment =
-          await (nextFuture ?? _script!.nextSegment(readCurrentBiometrics()));
+      // Wait for the producer only if it has not kept up.
+      while (buffer.isEmpty && !producerFinished && !isStopped) {
+        bufferFilled ??= Completer<void>();
+        await Future.any([
+          bufferFilled!.future,
+          Future<void>.delayed(OverallMeditationConfig.progressUpdateInterval),
+        ]);
+      }
+      if (isStopped) break;
+      // Segments that were prepared before the producer failed are still good
+      // and are played first, so a failure surfaces where the old sequential
+      // code surfaced it: when the session actually runs out of narration.
+      if (buffer.isNotEmpty) {
+        current = buffer.removeFirst();
+        wake(() => bufferDrained, () => bufferDrained = null);
+        continue;
+      }
+      if (producerError != null) {
+        _stopProducer(stopProducing);
+        Error.throwWithStackTrace(
+          producerError!,
+          producerStackTrace ?? StackTrace.current,
+        );
+      }
+      break;
     }
+
+    // The session does not wait for a request that is already in flight: its
+    // result has nowhere to go, and the closing narration should not be held
+    // back by it. _endRun() disposes the script, which ends that request.
+    _stopProducer(stopProducing);
+    unawaited(producer);
+  }
+
+  static void _stopProducer(Completer<void> stopProducing) {
+    if (!stopProducing.isCompleted) stopProducing.complete();
   }
 
   void _endRun() {
@@ -435,6 +552,12 @@ class BiometricMeditation extends Meditation {
     super.diagnosticEventSink,
     required this.measurement,
   });
+
+  /// One segment of lookahead, no more: the next request reports the
+  /// biometrics read when the current segment begins, so producing further
+  /// ahead would send readings from progressively further in the past.
+  @override
+  int get narrationPrefetchDepth => 1;
 
   @override
   bool checkEarlyExit() => measurement.hasHeartRateRecoveredToBaseline;

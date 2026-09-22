@@ -12,6 +12,17 @@ abstract final class OverallMeditationConfig {
   // 30-second segment target in DemoModeConfig.
   static const Duration standardNarrationMinimumDuration = Duration.zero;
   static const Duration progressUpdateInterval = Duration(seconds: 1);
+
+  /// How many segments a session without biosignals may produce ahead of the
+  /// one being played.
+  ///
+  /// Generation and speech synthesis used to happen in the silence between
+  /// segments; they now run during playback. One segment of lookahead already
+  /// covers a normal wait, so the extra depth exists to absorb an unusually
+  /// slow request rather than to go faster. Biosignal-adaptive sessions are
+  /// pinned to one: their next request carries the biometrics sampled when the
+  /// current segment starts and cannot be made before then.
+  static const int narrationPrefetchDepth = 3;
   static const double backgroundMusicVolume = 0.3;
   static const String audioAssetPrefix =
       'lib/apps/meditation_app/assets/audio/';
