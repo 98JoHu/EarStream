@@ -48,7 +48,8 @@ abstract final class AudioRouteDiagnostics {
   @visibleForTesting
   static Future<Map<String, Object?>> readRoute() async {
     try {
-      final result = await _channel.invokeMapMethod<String, Object?>('describe');
+      final result =
+          await _channel.invokeMapMethod<String, Object?>('describe');
       return result ?? const {};
     } catch (error) {
       return {'audio_route_error': error.runtimeType.toString()};

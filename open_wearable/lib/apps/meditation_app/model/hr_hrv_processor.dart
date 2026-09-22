@@ -267,8 +267,7 @@ class HrHrvProcessor {
       accelerometerFreq: accelerometerFreq,
     );
     _channelSelector = _AdaptiveOpticalChannelSelector(
-      useNormalizedRanking:
-          BioAdaptiveModeConfig.useNormalizedChannelSelection,
+      useNormalizedRanking: BioAdaptiveModeConfig.useNormalizedChannelSelection,
       minimumDwellSamples:
           (BioAdaptiveModeConfig.opticalChannelDwell.inMilliseconds *
                   sampleFreq /

@@ -32,8 +32,7 @@ abstract final class HrHrvDiagnosticSettings {
   static bool get detectorComparisonEnabled =>
       kDebugMode && detectorComparisonRequested;
   static bool get beatQualityEnabled => kDebugMode && beatQualityRequested;
-  static bool get signalCaptureEnabled =>
-      kDebugMode && signalCaptureRequested;
+  static bool get signalCaptureEnabled => kDebugMode && signalCaptureRequested;
 
   /// A decision-only trace stays small; a waveform capture needs room for a
   /// full session, so the limit is raised only when capture is on.
@@ -53,8 +52,6 @@ abstract final class HrHrvDiagnosticSettings {
   }
 }
 
-/// Writes processor decisions, not raw PPG, to a local app-private JSONL file.
-/// Recording failures must never interrupt a meditation or alter its values.
 /// Buffers a sampled signal and emits one diagnostic event per block.
 ///
 /// One JSONL line per sample at 200 Hz is neither readable nor compact enough
@@ -126,6 +123,9 @@ class HrHrvSignalCapture {
   }
 }
 
+/// Writes processor decisions and, when signal capture is enabled, the sampled
+/// waveform, to a local app-private JSONL file. Recording failures must never
+/// interrupt a meditation or alter its values.
 class HrHrvDiagnosticsRecorder {
   static const int _maximumPendingLines = 512;
 
@@ -148,8 +148,7 @@ class HrHrvDiagnosticsRecorder {
   })  : _directoryProvider =
             directoryProvider ?? getApplicationSupportDirectory,
         _startedAt = startedAt ?? DateTime.now(),
-        _maximumBytes =
-            maximumBytes ?? HrHrvDiagnosticSettings.traceByteLimit {
+        _maximumBytes = maximumBytes ?? HrHrvDiagnosticSettings.traceByteLimit {
     _opening = _open();
   }
 

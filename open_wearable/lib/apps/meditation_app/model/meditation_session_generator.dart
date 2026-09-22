@@ -273,6 +273,11 @@ class AdaptiveMeditationScript implements MeditationScript {
 You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.
 You lead a personalized, ADAPTIVE meditation that unfolds one segment at a time. After each segment I will report the user's live biosignals, and you will adapt the next segment to guide them toward calm.
 
+LANGUAGE — STRICT:
+Write every string you output in English only. The welcomeMessage, the completionMessage, and every instruction must be entirely in English.
+Never use Chinese, Japanese, Korean, or any other language, and never include CJK or other non-Latin characters, not even a single word, name, or decorative character.
+This applies to every turn of the conversation, not only the first.
+
 $userContext
 
 MEDITATION TYPE: $meditationType
@@ -289,8 +294,9 @@ GUIDELINES:
 3. Create natural transitions that build on what you said before. DO NOT signal an ending in a segment.
 4. Speak slowly; use soothing language and natural pauses marked with ellipses (...).
 5. Approximately ${OverallMeditationConfig.standardPromptApproximateWordsPerSegment} words per segment.
+6. Write in English. Every word spoken to the user is English.
 
-OUTPUT FORMAT — valid JSON only, no markdown, no commentary.
+OUTPUT FORMAT — valid JSON only, no markdown, no commentary. All string values must be written in English.
 
 On the FIRST turn, output:
 {
@@ -321,6 +327,11 @@ Remember: you're creating a calming, safe space for someone who may be stressed.
 You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.
 You lead a meditation that unfolds one segment at a time for a short conference demonstration.
 
+LANGUAGE - STRICT:
+Write every string you output in English only. The welcomeMessage, the completionMessage, and every instruction must be entirely in English.
+Never use Chinese, Japanese, Korean, or any other language, and never include CJK or other non-Latin characters, not even a single word, name, or decorative character.
+This applies to every turn of the conversation, not only the first.
+
 SESSION-ONLY PREFERENCES:
 - Meditation type: $meditationType
 - Imagery environment: $environment
@@ -335,8 +346,9 @@ GUIDELINES:
 3. Create natural transitions that build on what you said before. DO NOT signal an ending in a segment.
 4. Speak slowly; use soothing language and natural pauses marked with ellipses (...).
 5. Fit the spoken guidance naturally into approximately $_durationSeconds seconds.
+6. Write in English. Every word spoken to the participant is English.
 
-OUTPUT FORMAT - valid JSON only, no markdown, no commentary.
+OUTPUT FORMAT - valid JSON only, no markdown, no commentary. All string values must be written in English.
 
 On the FIRST turn, output:
 {
@@ -375,12 +387,13 @@ Create a calming and safe experience while respecting the privacy requirements.'
     if (!_promptPolicy.includePhysiologicalInformation) {
       return 'The participant has finished segment $_emitted. Generate '
           'segment $next as a single segment JSON object, continuing the '
-          'calming progression using only the session preferences.';
+          'calming progression using only the session preferences. '
+          '$_englishOnlyReminder';
     }
     if (b == null) {
       return 'The user has finished segment $_emitted. No biosignals are '
           'available. Generate segment $next as a single segment JSON object, '
-          'continuing the calming progression.';
+          'continuing the calming progression. $_englishOnlyReminder';
     }
     final hr = b.heartRate.toStringAsFixed(0);
     final rmssdDescription = b.rmssd == null
@@ -388,8 +401,17 @@ Create a calming and safe experience while respecting the privacy requirements.'
         : 'HRV (RMSSD) is ${b.rmssd!.toStringAsFixed(0)} ms';
     return 'The user has finished segment $_emitted. Their current heart rate '
         'is $hr bpm and their $rmssdDescription. Adapt accordingly and '
-        'generate segment $next as a single segment JSON object.';
+        'generate segment $next as a single segment JSON object. '
+        '$_englishOnlyReminder';
   }
+
+  /// Repeated on every segment turn, not only in the system prompt. The
+  /// observed failure is occasional, appearing partway through a session
+  /// rather than at its start, which is the signature of drift across a long
+  /// conversation rather than of the instruction being missed outright.
+  static const String _englishOnlyReminder =
+      'Write the instruction in English only; no Chinese or other non-Latin '
+      'characters.';
 }
 
 class _Fallback {

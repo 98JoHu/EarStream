@@ -1633,6 +1633,56 @@ void main() {
       expect(opening.firstSegment.durationSeconds, 0);
     });
 
+    test('constrains every turn to English in both prompt policies', () async {
+      for (final policy in MeditationPromptPolicy.values) {
+        final requestBodies = <String>[];
+        var call = 0;
+        final client = MockClient((request) async {
+          requestBodies.add(request.body);
+          final content = call++ == 0
+              ? jsonEncode({
+                  'welcomeMessage': 'Welcome.',
+                  'completionMessage': 'Well done.',
+                  'segment': {'segmentId': 1, 'instruction': 'Breathe in.'},
+                })
+              : jsonEncode({'segmentId': 2, 'instruction': 'Breathe out.'});
+          return http.Response(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {'content': content},
+                },
+              ],
+            }),
+            200,
+          );
+        });
+        final script = AdaptiveMeditationScript(
+          account: UserAccount(deepseekApiKey: 'service-key'),
+          maxSegments: 2,
+          promptPolicy: policy,
+          client: client,
+        );
+        addTearDown(script.dispose);
+
+        await script.begin();
+        await script.nextSegment(null);
+
+        // DeepSeek occasionally emitted Chinese characters partway through a
+        // session, so the constraint has to survive into later turns rather
+        // than sitting only in the system prompt.
+        expect(requestBodies, hasLength(2));
+        for (final body in requestBodies) {
+          expect(
+            body,
+            contains('English'),
+            reason: 'policy ${policy.name} lost the language constraint',
+          );
+        }
+        expect(requestBodies.last, contains('English only'));
+      }
+    });
+
     test('describes unavailable RMSSD without serializing null as a value',
         () async {
       final requestBodies = <String>[];
