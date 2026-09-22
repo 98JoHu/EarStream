@@ -11,7 +11,17 @@ abstract final class DemoModeConfig {
   static const Duration hrvMinimumWindow = Duration(seconds: 30);
   static const Duration guaranteedMeditationDelay = Duration(minutes: 2);
   // Welcome and completion messages remain outside this generated count.
-  static const int biosignalAdaptiveMeditationSegmentCount = 1;
+  //
+  // This is a cap, not a fixed length. The demo ends adaptively on the same
+  // HR-only rule as the regular mode: after each segment, measured heart rate
+  // at or below the baseline completes the meditation. A participant who
+  // settles quickly hears one segment; one who does not hears up to three.
+  //
+  // Note the interaction with guaranteedMeditationDelay below. A meditation
+  // started by that deadline rather than by stress detection begins with heart
+  // rate already at or near baseline, so it will often satisfy the recovery
+  // rule after the first segment.
+  static const int biosignalAdaptiveMeditationSegmentCount = 3;
   static const Duration meditationSegmentDuration = Duration(seconds: 30);
   static const bool useBestEffortEstimates = true;
   static const bool allowStressSimulation = false;

@@ -1058,7 +1058,7 @@ void main() {
       expect(demo.metricWindowDuration, const Duration(seconds: 30));
       expect(demo.guaranteedMeditationDelay, const Duration(minutes: 2));
       expect(demo.useBestEffortEstimates, isTrue);
-      expect(demo.meditationSegmentCount, 1);
+      expect(demo.meditationSegmentCount, 3);
       expect(demo.meditationSegmentDuration, const Duration(seconds: 30));
       expect(demo.promptPolicy, MeditationPromptPolicy.conferenceDemo);
       expect(demo.allowStressSimulation, isFalse);
@@ -1730,20 +1730,25 @@ void main() {
       expect(requestBodies.last, isNot(contains('null ms')));
     });
 
-    test('biosignal-adaptive demo has one generated segment between messages',
-        () async {
+    test('biosignal-adaptive demo caps generated segments at three', () async {
       var requestCount = 0;
       final client = MockClient((request) async {
         requestCount++;
-        final content = jsonEncode({
-          'welcomeMessage': 'Welcome to the demo.',
-          'completionMessage': 'The demo is complete.',
-          'segment': {
-            'segmentId': 1,
-            'instruction': 'Breathe slowly for this short demonstration.',
-            'durationSeconds': 30,
-          },
-        });
+        final content = requestCount == 1
+            ? jsonEncode({
+                'welcomeMessage': 'Welcome to the demo.',
+                'completionMessage': 'The demo is complete.',
+                'segment': {
+                  'segmentId': 1,
+                  'instruction': 'Breathe slowly for this demonstration.',
+                  'durationSeconds': 30,
+                },
+              })
+            : jsonEncode({
+                'segmentId': requestCount,
+                'instruction': 'Keep breathing.',
+                'durationSeconds': 30,
+              });
         return http.Response(
           jsonEncode({
             'choices': [
@@ -1766,14 +1771,19 @@ void main() {
       addTearDown(script.dispose);
 
       final opening = await script.begin();
-      final followingSegment = await script.nextSegment(null);
+      final second = await script.nextSegment(null);
+      final third = await script.nextSegment(null);
+      final fourth = await script.nextSegment(null);
 
       expect(opening.welcomeMessage, 'Welcome to the demo.');
       expect(opening.firstSegment.segmentId, 1);
       expect(opening.firstSegment.durationSeconds, 30);
-      expect(followingSegment, isNull);
+      expect(second, isNotNull);
+      expect(third, isNotNull);
+      // The cap holds; ending earlier than this is the recovery rule's job.
+      expect(fourth, isNull);
       expect(opening.completionMessage, 'The demo is complete.');
-      expect(requestCount, 1);
+      expect(requestCount, 3);
     });
   });
 

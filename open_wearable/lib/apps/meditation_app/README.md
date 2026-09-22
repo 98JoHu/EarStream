@@ -50,7 +50,7 @@ to start with a null sensor.
 | --- | --- | ---: | --- | --- |
 | Regular biosignal-adaptive | PPG + accelerometer + gyroscope | Up to 10 | About 280 words; narration-driven | Yes |
 | Timed | None | 3 | About 280 words; narration-driven | Yes |
-| Demo: biosignal-adaptive | PPG + accelerometer + gyroscope | Exactly 1 | About 30 seconds | No |
+| Demo: biosignal-adaptive | PPG + accelerometer + gyroscope | Up to 3 | About 30 seconds each | No |
 | Demo: personalized only | None | 3 | About 30 seconds each | No |
 
 Welcome and completion messages are separate from the generated-segment counts.
@@ -176,9 +176,14 @@ with `BioAdaptiveSessionConfig.conferenceDemo`.
 - No simulated/recorded stress control.
 - A meditation starts when stress is detected or, if no intervention has
   started, after two minutes in the monitoring phase.
-- Meditation structure: welcome message, exactly one generated 30-second
-  segment, completion message.
-- The one-segment cap applies regardless of the participant's stress level.
+- Meditation structure: welcome message, up to three generated 30-second
+  segments, completion message.
+- The segment count is a cap, not a fixed length. The demo ends on the same
+  HR-only recovery rule as the regular mode: after each segment, measured heart
+  rate at or below baseline completes the meditation.
+- A meditation started by the two-minute guarantee rather than by stress
+  detection begins with heart rate already at or near baseline, so it will
+  often satisfy that rule after the first segment.
 
 ### Personalized-meditation-only demo
 
@@ -775,7 +780,7 @@ flutter run
 
 The focused test suite covers configuration alignment, calibration isolation,
 demo deadline estimates, provider/region parsing, voice selection, demo privacy,
-stress playback, HR-only recovery, one-segment demo behavior, presentation,
+stress playback, HR-only recovery, demo segment capping, presentation,
 weekly analytics, Tencent signing/chunking, sensor-axis disambiguation, stale
 credential checks, prompt formatting, and demographic-baseline isolation.
 
