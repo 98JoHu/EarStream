@@ -344,6 +344,9 @@ class UserAccount {
     account.elevenLabsVoiceId = serviceConfiguration.elevenLabsVoiceId;
     account.hasValidElevenLabsKey = serviceConfiguration.hasValidElevenLabsKey;
     account.hasValidTencentKey = serviceConfiguration.hasValidTencentKey;
+    // The local model belongs to the build, not to the attendee, so the demo
+    // account inherits it like the cloud credentials.
+    account.hasValidKokoroModel = serviceConfiguration.hasValidKokoroModel;
     account.availableElevenLabsVoices =
         serviceConfiguration.availableElevenLabsVoices == null
             ? null

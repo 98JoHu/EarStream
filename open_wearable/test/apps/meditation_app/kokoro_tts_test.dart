@@ -69,6 +69,22 @@ void main() {
       expect(TtsProviderOption.tencent.isLocal, isFalse);
     });
 
+    test('a demo account inherits the bundled model', () {
+      // The model belongs to the build, not the attendee, so a demo session
+      // must not report the local voice as missing the way it would for
+      // profile data that is deliberately not copied.
+      final configured = UserAccount(ttsProvider: TtsProviderOption.kokoro)
+        ..hasValidKokoroModel = true;
+
+      final demo = UserAccount.forConferenceDemo(
+        serviceConfiguration: configured,
+      );
+
+      expect(demo.ttsProvider, TtsProviderOption.kokoro);
+      expect(demo.hasValidKokoroModel, isTrue);
+      expect(demo.hasValidSelectedTtsProvider, isTrue);
+    });
+
     test('the local voice is usable without any API key', () {
       final account = UserAccount(ttsProvider: TtsProviderOption.kokoro);
       expect(account.hasValidSelectedTtsProvider, isFalse);

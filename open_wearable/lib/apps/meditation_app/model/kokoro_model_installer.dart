@@ -36,7 +36,10 @@ abstract final class KokoroModelInstaller {
   static Future<Map<String, Object?>> Function(String method)? invokeOverride;
 
   @visibleForTesting
-  static void resetForTesting() => invokeOverride = null;
+  static void resetForTesting() {
+    invokeOverride = null;
+    lastPlatformError = null;
+  }
 
   static bool get isSupported {
     if (invokeOverride != null) return true;
@@ -69,18 +72,29 @@ abstract final class KokoroModelInstaller {
     return directory;
   }
 
+  /// Why the last platform call failed, if it did.
+  ///
+  /// Failures are swallowed so a broken local model is never worse than an
+  /// unconfigured one, but "no model" and "the channel is not registered" look
+  /// identical to the caller otherwise. The settings page appends this so the
+  /// difference is visible without a log.
+  static String? lastPlatformError;
+
   static Future<Map<String, Object?>> _invoke(String method) async {
     final override = invokeOverride;
     if (override != null) return override(method);
-    if (!isSupported) return const {};
+    if (!isSupported) {
+      lastPlatformError = 'not running on Android';
+      return const {};
+    }
     try {
       final result = await _channel.invokeMapMethod<String, Object?>(method);
+      lastPlatformError = null;
       return result ?? const {};
     } on TimeoutException {
       rethrow;
     } catch (error) {
-      // A missing or broken local model must never be worse than not having
-      // configured it: the caller treats this as "no local voice".
+      lastPlatformError = '$method: $error';
       debugPrint('Kokoro model $method failed: $error');
       return const {};
     }

@@ -202,9 +202,11 @@ class KokoroTtsManager extends ConnectionManager {
 
     final engine = await KokoroTtsEngine.shared();
     if (engine == null) {
+      final platformError = KokoroModelInstaller.lastPlatformError;
       throw Exception(
         'No bundled Kokoro model was found. See the in-app README for how to '
-        'add it to android/app/src/main/assets.',
+        'add it to android/app/src/main/assets.'
+        '${platformError == null ? '' : ' Platform reported: $platformError'}',
       );
     }
 
