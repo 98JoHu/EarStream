@@ -655,6 +655,10 @@ endpoints are unreachable.
   voice list and move if the model is swapped for another build.
 - Speaking speed maps onto Kokoro's own multiplier, where 1.0 is the model's
   natural pace. This is not the normalized 0.0-1.0 scale `flutter_tts` uses.
+  All four settings sit below 1.0 (0.50/0.60/0.70/0.80): Kokoro's natural pace
+  is a reading pace and is too brisk for guided meditation. Note that
+  ElevenLabs sends no speed parameter at all, so the same setting has no effect
+  there.
 - Synthesis runs in a worker isolate: the native engine handle never leaves it
   and only finished audio comes back, so a segment that takes tens of seconds
   does not freeze the UI. The narration pipeline above overlaps that cost with

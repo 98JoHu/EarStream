@@ -127,14 +127,30 @@ void main() {
     });
 
     test('speaking speed maps onto Kokoro\'s own multiplier', () async {
-      // Not the normalized 0-1 scale flutter_tts uses: 1.0 is natural pace.
-      final slow = await _synthesizeWith(speakingSpeed: SpeakingSpeed.verySlow);
-      expect(slow.speed, OverallMeditationConfig.kokoroVerySlowSpeechRate);
-      expect(slow.speed, lessThan(1.0));
+      // Kokoro's multiplier, not the normalized 0-1 scale flutter_tts uses.
+      final speeds = <SpeakingSpeed, double>{};
+      for (final setting in SpeakingSpeed.values) {
+        speeds[setting] = (await _synthesizeWith(speakingSpeed: setting)).speed;
+      }
 
-      final fast = await _synthesizeWith(speakingSpeed: SpeakingSpeed.fast);
-      expect(fast.speed, OverallMeditationConfig.kokoroFastSpeechRate);
-      expect(fast.speed, greaterThan(1.0));
+      expect(
+        speeds[SpeakingSpeed.verySlow],
+        OverallMeditationConfig.kokoroVerySlowSpeechRate,
+      );
+      expect(
+        speeds[SpeakingSpeed.fast],
+        OverallMeditationConfig.kokoroFastSpeechRate,
+      );
+
+      // The four settings stay ordered and stay below Kokoro's natural pace,
+      // which is a reading pace and too brisk for guided meditation.
+      final ordered = SpeakingSpeed.values.map((s) => speeds[s]!).toList();
+      for (var i = 1; i < ordered.length; i++) {
+        expect(ordered[i], greaterThan(ordered[i - 1]));
+      }
+      expect(ordered.last, lessThan(1.0));
+      // Kokoro is not normally driven below this.
+      expect(ordered.first, greaterThanOrEqualTo(0.5));
 
       // No explicit choice keeps the recommended slow pace.
       final unset = await _synthesizeWith();

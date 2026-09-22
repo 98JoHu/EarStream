@@ -88,10 +88,17 @@ abstract final class OverallMeditationConfig {
   static const int kokoroMaxSentencesPerBatch = 2;
   // Kokoro's own speed factor, where 1.0 is the model's natural pace. It is a
   // multiplier, not the normalized 0-1 scale flutter_tts uses.
-  static const double kokoroVerySlowSpeechRate = 0.70;
-  static const double kokoroSlowSpeechRate = 0.85;
-  static const double kokoroMediumSpeechRate = 1.0;
-  static const double kokoroFastSpeechRate = 1.15;
+  //
+  // The whole scale sits below 1.0 on purpose: Kokoro's natural pace is a
+  // reading pace, which is too brisk for guided meditation. These are the
+  // original ratios scaled by 0.7 after listening on the demo phone, so the
+  // relative steps between the four settings are unchanged. "Very slow" would
+  // land at 0.49; it is held at 0.50, the lowest rate Kokoro is normally
+  // driven at.
+  static const double kokoroVerySlowSpeechRate = 0.50;
+  static const double kokoroSlowSpeechRate = 0.60;
+  static const double kokoroMediumSpeechRate = 0.70;
+  static const double kokoroFastSpeechRate = 0.80;
   static const Duration kokoroModelInstallTimeout = Duration(minutes: 10);
   static const Duration kokoroEngineStartTimeout = Duration(minutes: 2);
   static const Duration kokoroSynthesisTimeout = Duration(minutes: 5);
