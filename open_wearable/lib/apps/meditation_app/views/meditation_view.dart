@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
 import '../model/meditation_analytics.dart';
+import '../model/screen_wakelock.dart';
 import 'pages/drawer_page.dart';
 import 'pages/meditation_page.dart';
 import 'pages/profile_page.dart';
@@ -43,6 +46,9 @@ class _MeditationViewState extends State<MeditationView> {
     super.initState();
     _userAccount = UserAccount.fromEnvironment(dotenv.env);
     _analyticsStore = MeditationAnalyticsStore()..load();
+    // A session waits minutes on DeepSeek and text-to-speech with no touch
+    // input; Android suspends those requests once the screen turns off.
+    unawaited(ScreenWakelock.acquire());
   }
 
   List<DrawerPage> get _pages => [
@@ -66,6 +72,7 @@ class _MeditationViewState extends State<MeditationView> {
 
   @override
   void dispose() {
+    unawaited(ScreenWakelock.release());
     _analyticsStore.dispose();
     super.dispose();
   }

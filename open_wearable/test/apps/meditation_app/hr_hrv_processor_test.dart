@@ -16,6 +16,7 @@ import 'package:open_wearable/apps/meditation_app/configs/timed_mode_config.dart
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_processor.dart';
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_diagnostics.dart';
 import 'package:open_wearable/apps/meditation_app/model/audio_route_diagnostics.dart';
+import 'package:open_wearable/apps/meditation_app/model/screen_wakelock.dart';
 import 'package:open_wearable/apps/meditation_app/model/pulse_interval_rmssd.dart';
 import 'package:open_wearable/apps/meditation_app/model/activity_tracker.dart';
 import 'package:open_wearable/apps/meditation_app/model/bio_adaptive_session_config.dart';
@@ -2202,6 +2203,45 @@ void main() {
       phase.complete(context);
       expect(account.baselineHeartRate, 62);
       expect(account.baselineRMSSD, 48);
+    });
+  });
+
+  group('screen wakelock', () {
+    late List<bool> calls;
+
+    setUp(() {
+      calls = <bool>[];
+      ScreenWakelock.resetForTesting();
+      ScreenWakelock.toggle = (enable) async => calls.add(enable);
+    });
+
+    tearDown(ScreenWakelock.resetForTesting);
+
+    test('holds the screen awake while the in-app is open', () async {
+      await ScreenWakelock.acquire();
+      expect(calls, [true]);
+      expect(ScreenWakelock.isHeld, isTrue);
+
+      await ScreenWakelock.release();
+      expect(ScreenWakelock.isHeld, isFalse);
+      // Released because the host app's own setting is off by default.
+      expect(calls, [true, false]);
+    });
+
+    test('paired calls cannot get out of step', () async {
+      await ScreenWakelock.acquire();
+      await ScreenWakelock.acquire();
+      expect(calls, [true], reason: 'a second acquire must be a no-op');
+
+      await ScreenWakelock.release();
+      await ScreenWakelock.release();
+      expect(calls, [true, false], reason: 'a second release must be a no-op');
+    });
+
+    test('a platform failure never propagates to the caller', () async {
+      ScreenWakelock.toggle = (enable) async => throw StateError('no wakelock');
+      await expectLater(ScreenWakelock.acquire(), completes);
+      await expectLater(ScreenWakelock.release(), completes);
     });
   });
 

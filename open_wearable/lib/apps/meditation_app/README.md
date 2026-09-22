@@ -514,6 +514,21 @@ narration. The replay harness prints each snapshot next to the PPG rate
 measured around it, which is what distinguishes "the route changed" from "the
 route was always the earbud and something else gave way".
 
+## Keeping the screen awake
+
+A meditation waits minutes on DeepSeek and the text-to-speech service with no
+touch input. When Android turns the display off it suspends those requests and
+the session stalls partway through, so `MeditationView` holds a wakelock for as
+long as the in-app is open: acquired in `initState`, released in `dispose`.
+
+This only prevents the idle timeout. It is not background execution, and it does
+not stop someone deliberately pressing the power button.
+
+The host app already exposes a global **keep app in foreground** setting driving
+the same wakelock, so `ScreenWakelock.release()` restores whatever that setting
+asks for rather than switching it off. A failure to set the lock is logged and
+ignored; it must never prevent a meditation from starting.
+
 ## Activity handling
 
 `ActivityTracker` classifies resting, light, moderate, vigorous, and intense
