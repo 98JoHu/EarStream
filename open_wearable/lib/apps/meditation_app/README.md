@@ -579,6 +579,62 @@ If the opening generation fails, the whole session switches to the static
 local script. If generation of a later adaptive segment fails, that segment is
 replaced with the static fallback text and the remaining session can continue.
 
+### Backup narration when DeepSeek is unreachable
+
+Generation can drop out in three places, and all three resolve through
+`createFallbackScript`:
+
+1. no valid DeepSeek key, so `createMeditationScript` never builds an adaptive
+   script at all;
+2. the opening request fails, which `Meditation._run` catches; and
+3. a later segment request fails, which `AdaptiveMeditationScript` catches
+   internally.
+
+Regular and timed sessions fall back to one generic paragraph, which is
+acceptable for a session the user can restart. The conference demo cannot be
+restarted gracefully with an attendee already wearing the earbuds, so it falls
+back to pre-written narration in `model/demo_fallback_script.dart` instead,
+chosen by `MeditationPromptPolicy.conferenceDemo`.
+
+That script covers every combination an attendee can select: four meditation
+types by five environments, each with its own welcome, completion message and
+three segments.
+
+The texts are not hand-written. They were captured from DeepSeek by driving
+`AdaptiveMeditationScript` with the real conference-demo prompts once per
+combination, so a fallback session reads exactly like a live one rather than
+noticeably flatter. Regenerate them with:
+
+```powershell
+# 1. capture, by running the real demo prompts once per combination
+flutter test test/apps/meditation_app/demo_fallback_generator_test.dart `
+  --dart-define=GENERATE_DEMO_FALLBACK=true
+# 2. bake the captured text into Dart constants
+dart run tool/bake_demo_fallback.dart
+dart format lib/apps/meditation_app/model/demo_fallback_script.dart
+```
+
+Both halves are committed, so the narration can be reviewed as a diff and
+rebuilt without guesswork: the captured text in `tool/demo_fallback.json`, and
+the two steps that turn it into `demo_fallback_script.dart`. That file is
+generated — edit the JSON and re-bake rather than editing it by hand.
+
+The capture step is skipped by default and is the only test that reaches the
+network, so a normal `flutter test` run never calls DeepSeek. Only the two
+session preferences reach the prompt, so the captured text contains nothing
+personal. Rerun it after changing the demo prompts or the selectable
+preferences.
+
+Segment indices past the written three wrap around, so raising the demo segment
+cap keeps producing usable narration. The biosignal-adaptive demo can end after
+any segment once heart rate has returned to baseline, and the completion
+message closes the session from wherever it stopped.
+
+The texts are Dart constants rather than a bundled asset: they exist for the
+case where things are already failing, and a constant cannot fail to load,
+parse, or be left out of a build. Speaking speed and voice gender do not affect
+them — those are delivery settings, applied by the TTS provider.
+
 ### Narration pipeline
 
 Generation and speech synthesis used to happen in the gap between segments, so
@@ -896,6 +952,7 @@ meditation_app/
 |   |-- activity_tracker.dart
 |   |-- bio_adaptive_session_config.dart
 |   |-- biometric_source.dart
+|   |-- demo_fallback_script.dart
 |   |-- elevenlabs_api.dart
 |   |-- hr_hrv_diagnostics.dart
 |   |-- hr_hrv_processor.dart

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../configs/overall_config.dart';
+import 'demo_fallback_script.dart';
 import 'user_account.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
 import 'meditation_prompt_policy.dart';
@@ -73,9 +74,44 @@ MeditationScript createMeditationScript({
       promptPolicy: promptPolicy,
     );
   }
-  return StaticMeditationScript.fallback(
-    segmentCount: maxSegments,
+  return createFallbackScript(
+    account: account,
+    maxSegments: maxSegments,
     segmentDuration: segmentDuration,
+    promptPolicy: promptPolicy,
+  );
+}
+
+/// The script used when generation is unavailable, either because there is no
+/// key or because a request failed.
+///
+/// The conference demo gets narration written for the attendee's chosen
+/// meditation type and environment; every other mode gets the single generic
+/// script, which a user can simply restart into a working session.
+MeditationScript createFallbackScript({
+  required UserAccount account,
+  required int maxSegments,
+  Duration? segmentDuration,
+  MeditationPromptPolicy promptPolicy = MeditationPromptPolicy.standard,
+}) {
+  if (promptPolicy != MeditationPromptPolicy.conferenceDemo) {
+    return StaticMeditationScript.fallback(
+      segmentCount: maxSegments,
+      segmentDuration: segmentDuration,
+    );
+  }
+
+  return StaticMeditationScript(
+    welcome: DemoFallbackScript.welcomeFor(account),
+    completion: DemoFallbackScript.completionFor(account),
+    segments: List.generate(
+      maxSegments,
+      (i) => DemoFallbackScript.segmentFor(
+        account: account,
+        index: i + 1,
+        duration: segmentDuration,
+      ),
+    ),
   );
 }
 
@@ -207,6 +243,13 @@ class AdaptiveMeditationScript implements MeditationScript {
       debugPrint('Adaptive segment failed, using fallback: $e');
       _history.removeLast();
       _emitted++;
+      if (_promptPolicy == MeditationPromptPolicy.conferenceDemo) {
+        return DemoFallbackScript.segmentFor(
+          account: _account,
+          index: _emitted,
+          duration: _minimumDuration,
+        );
+      }
       return _Fallback.segment(_emitted, _segmentDuration);
     }
   }

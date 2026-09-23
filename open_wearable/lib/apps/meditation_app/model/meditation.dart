@@ -142,9 +142,11 @@ class Meditation {
       }
       debugPrint('Error generating meditation opening: $e');
       _script!.dispose();
-      _script = StaticMeditationScript.fallback(
-        segmentCount: maxSegments,
+      _script = createFallbackScript(
+        account: userAccount,
+        maxSegments: maxSegments,
         segmentDuration: meditationSegmentDuration,
+        promptPolicy: promptPolicy,
       );
       opening = await _script!.begin();
     }
