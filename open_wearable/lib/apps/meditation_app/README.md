@@ -15,7 +15,8 @@ does not describe the older `lib/apps/meditation` prototype.
   personalized meditation without biosignal adaptation.
 - Local PPG-derived heart-rate and RMSSD processing.
 - Accelerometer/gyroscope activity classification and movement-aware stress
-  suppression.
+  suppression. The angular-rate unit is read from `Sensor.axisUnits` rather
+  than assumed, since the thresholds are in degrees/s.
 - Physiological-only baseline measurement in both biosignal-adaptive modes.
 - Stress onset based jointly on elevated HR and reduced RMSSD.
 - Meditation recovery based only on HR returning to baseline or below.
@@ -804,6 +805,20 @@ The TTS route is selected once when a meditation object is created.
   card. It does not switch voices in the middle of a meditation. Kokoro is a
   selectable provider, not an automatic fallback for a failing cloud voice;
   swapping the narrator mid-session is what this rule exists to prevent.
+
+Pausing suspends narration in place rather than stopping it, so resuming
+continues the segment instead of speaking it again from the first word. The
+on-device `flutter_tts` fallback offers no dependable resume, so that one route
+is stopped and replayed.
+
+Pausing the EarStreAM session pauses a running meditation with it. It used to
+stop and dispose the session, so resuming brought back nothing and analytics
+recorded an abandoned meditation every time the user paused.
+
+The background player and the voice service are created on first use. A
+scheduled meditation can sit queued for hours, and building them at schedule
+time held a native audio player - and, with Kokoro selected, potentially a
+loaded voice model - for a session that had not started.
 
 Other unexpected playback/session failures also stop both narration and
 ambience and show a dismissible interruption card. Failure handling belongs to

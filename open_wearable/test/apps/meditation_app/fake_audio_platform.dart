@@ -23,14 +23,19 @@ class FakeAudioPlatform {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final Set<String> _players = {};
   final Set<String> _stopped = {};
+  bool _mockAssets = true;
 
-  void install() {
+  /// [mockAssets] also intercepts asset loading, which the background-music
+  /// player needs. Leave it off in files whose widget tests load real assets.
+  void install({bool mockAssets = true}) {
+    _mockAssets = mockAssets;
     _messenger.setMockMethodCallHandler(_methodChannel, _handle);
     _messenger.setMockMethodCallHandler(_globalChannel, (_) async => null);
     _messenger.setMockMethodCallHandler(
       _pathProvider,
       (_) async => Directory.systemTemp.path,
     );
+    if (!mockAssets) return;
     // The background-music asset is 200+ MB of WAV on disk; the player never
     // decodes it here, so a stub of a few bytes is enough.
     _messenger.setMockMessageHandler(
@@ -43,7 +48,7 @@ class FakeAudioPlatform {
     _messenger.setMockMethodCallHandler(_methodChannel, null);
     _messenger.setMockMethodCallHandler(_globalChannel, null);
     _messenger.setMockMethodCallHandler(_pathProvider, null);
-    _messenger.setMockMessageHandler('flutter/assets', null);
+    if (_mockAssets) _messenger.setMockMessageHandler('flutter/assets', null);
     for (final playerId in _players) {
       _messenger.setMockMethodCallHandler(
         MethodChannel(_eventChannelName(playerId)),
@@ -72,6 +77,9 @@ class FakeAudioPlatform {
         _stopped.remove(playerId);
         _emit(playerId!, const {'event': 'audio.onPrepared', 'value': true});
       case 'resume':
+        // Pausing suspends the pending completion; resuming re-arms it, the
+        // way a real player continues where it left off.
+        _stopped.remove(playerId);
         _resumeAndComplete(playerId!);
       case 'stop':
       case 'pause':

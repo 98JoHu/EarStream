@@ -48,8 +48,17 @@ import 'package:open_wearable/apps/meditation_app/widgets/custom_dropdown.dart';
 import 'package:open_wearable/apps/meditation_app/widgets/meditation_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'fake_audio_platform.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // Constructing a Meditation builds AudioPlayers, which need the audioplayers
+  // channels even when nothing is ever played. Asset loading is left alone so
+  // the widget tests in this file still see real assets.
+  final audio = FakeAudioPlatform();
+  setUpAll(() => audio.install(mockAssets: false));
+  tearDownAll(audio.uninstall);
 
   group('opt-in HR/RMSSD diagnostic trace', () {
     test('writes JSONL events and flushes when closed immediately', () async {
@@ -311,6 +320,24 @@ void main() {
   });
 
   group('activity classification and stress gating', () {
+    test('the angular-rate unit comes from the device, not an assumption', () {
+      // Thresholds are in degrees/s. Scaling a stream that is already in
+      // degrees/s by 57 classified everything as intense, which in the
+      // regular mode suppresses stress detection for good.
+      expect(ActivityTracker.degreesPerSecondScaleFor('deg/s'), 1.0);
+      expect(ActivityTracker.degreesPerSecondScaleFor('DPS'), 1.0);
+      expect(ActivityTracker.degreesPerSecondScaleFor('°/s'), 1.0);
+
+      final radians = ActivityTracker.degreesPerSecondScaleFor('rad/s');
+      expect(radians, closeTo(57.2957, 0.001));
+
+      // Unknown or absent units keep the long-standing radians assumption, so
+      // hardware that already worked is untouched.
+      expect(ActivityTracker.degreesPerSecondScaleFor(null), radians);
+      expect(ActivityTracker.degreesPerSecondScaleFor(''), radians);
+      expect(ActivityTracker.degreesPerSecondScaleFor('mystery'), radians);
+    });
+
     test('converts the three-second window to sensor timestamp ticks', () {
       expect(ActivityTracker.classificationWindowTicksFor(-3), 3000);
       expect(ActivityTracker.classificationWindowTicksFor(-6), 3000000);
@@ -1458,8 +1485,74 @@ void main() {
   });
 
   group('meditation session presentation', () {
+    test('metric streams keep their identity across rebuilds', () {
+      // StreamBuilder compares stream instances. A getter that re-mapped on
+      // every build made it resubscribe and flash back to the baseline label.
+      final measurement = Measurement.recordedStress(
+        userAccount: UserAccount(),
+        restingActivityLevel: ActivityLevel.resting,
+      );
+      addTearDown(measurement.dispose);
+
+      expect(identical(measurement.heartRate, measurement.heartRate), isTrue);
+      expect(identical(measurement.rmssd, measurement.rmssd), isTrue);
+      expect(measurement.heartRate.isBroadcast, isTrue);
+      expect(measurement.rmssd.isBroadcast, isTrue);
+    });
+
+    test('pausing the session suspends the meditation instead of ending it',
+        () {
+      final measurement = Measurement.recordedStress(
+        userAccount: UserAccount(),
+        restingActivityLevel: ActivityLevel.resting,
+      );
+      addTearDown(measurement.dispose);
+
+      final session = BiometricMeditation(
+        userAccount: UserAccount(),
+        measurement: measurement,
+      );
+      measurement.meditation.value = session;
+
+      measurement.pause();
+      // It used to be stopped and disposed here, so resuming brought back
+      // nothing and analytics recorded an abandoned session.
+      expect(measurement.meditation.value, same(session));
+      expect(session.isPaused.value, isTrue);
+      expect(session.isStopped, isFalse);
+
+      measurement.resume();
+      expect(measurement.meditation.value, same(session));
+      expect(session.isPaused.value, isFalse);
+      expect(session.isStopped, isFalse);
+    });
+
     test('timed meditations use three segments', () {
       expect(ScheduledMeditation.segmentCount, 3);
+    });
+
+    test('a scheduled meditation holds no audio resources until it runs', () {
+      // Scheduling used to build an AudioPlayer and a TtsService immediately,
+      // so a queued meditation held a native player - and now potentially a
+      // loaded local voice model - for hours before it started.
+      var voicesBuilt = 0;
+      final scheduled = _CountingMeditation(
+        onCreateTtsService: () => voicesBuilt++,
+      );
+      addTearDown(scheduled.dispose);
+
+      expect(voicesBuilt, 0);
+
+      // Touching the session's audio is what brings it into existence.
+      expect(scheduled.ttsService, isNotNull);
+      expect(voicesBuilt, 1);
+      expect(scheduled.ttsService, same(scheduled.ttsService));
+    });
+
+    test('disposing an unstarted meditation creates nothing', () {
+      var voicesBuilt = 0;
+      _CountingMeditation(onCreateTtsService: () => voicesBuilt++).dispose();
+      expect(voicesBuilt, 0);
     });
 
     test('a delayed poll still recognizes an overdue scheduled meditation', () {
@@ -2863,4 +2956,18 @@ class _TestElevenLabsManager extends ElevenLabsManager {
   _TestElevenLabsManager({required super.userAccount});
 
   void applyVoices(Map<String, dynamic> response) => updateUser(response);
+}
+
+/// A meditation that reports when its voice service is actually built.
+class _CountingMeditation extends Meditation {
+  final void Function() onCreateTtsService;
+
+  _CountingMeditation({required this.onCreateTtsService})
+      : super(userAccount: UserAccount());
+
+  @override
+  TtsService createTtsService() {
+    onCreateTtsService();
+    return super.createTtsService();
+  }
 }

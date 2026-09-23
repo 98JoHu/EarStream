@@ -34,8 +34,16 @@ enum MeditationPhase {
 
 class Meditation {
   final UserAccount userAccount;
-  final AudioPlayer musicPlayer = AudioPlayer();
-  late final TtsService ttsService;
+  AudioPlayer? _musicPlayer;
+  TtsService? _ttsService;
+
+  /// Both are created on first use. A scheduled meditation can sit for hours
+  /// before it runs, and building them at construction time held a native
+  /// audio player and a voice service - now possibly a loaded local model -
+  /// for every meditation merely queued.
+  AudioPlayer get musicPlayer => _musicPlayer ??= AudioPlayer();
+
+  TtsService get ttsService => _ttsService ??= createTtsService();
   final int maxSegments;
   Duration? meditationSegmentDuration;
   final MeditationPromptPolicy promptPolicy;
@@ -69,12 +77,22 @@ class Meditation {
           'Analytics store and mode must either both be set or both be null.',
         ) {
     phase = ValueNotifier<MeditationPhase>(MeditationPhase.preparing);
-    ttsService = createTtsService();
   }
 
   /// The narration route for this session, fixed for its whole duration.
   @protected
   TtsService createTtsService() => TtsService(userAccount: userAccount);
+
+  /// Publishes a phase, unless this session has already been disposed.
+  ///
+  /// `_run` resumes after awaiting narration playback, and a stop from the UI
+  /// disposes the session in between. Writing to a disposed ValueNotifier
+  /// throws, and `start` would catch that and present it as an unexpected
+  /// meditation failure, which is not what happened.
+  void _setPhase(MeditationPhase next) {
+    if (_isDisposed) return;
+    phase.value = next;
+  }
 
   // This method can be overridden in subclasses to implement early exit conditions.
   bool checkEarlyExit() => false;
@@ -93,7 +111,7 @@ class Meditation {
   Future<void> start() async {
     if (_isDisposed) return;
     isStopped = false;
-    phase.value = MeditationPhase.preparing;
+    _setPhase(MeditationPhase.preparing);
     failureTitle = null;
     failureMessage = null;
     _analyticsStartedAt = DateTime.now();
@@ -155,7 +173,7 @@ class Meditation {
 
     // Speak the welcome message. Nothing precedes it, so this synthesis is the
     // one wait that cannot be overlapped.
-    phase.value = MeditationPhase.welcome;
+    _setPhase(MeditationPhase.welcome);
     final welcome = await _prepareNarration(opening.welcomeMessage);
     if (isStopped) return _endRun();
 
@@ -169,16 +187,16 @@ class Meditation {
     await _playRespectingPause(welcome);
 
     // Run through the meditation segments
-    phase.value = MeditationPhase.segment;
+    _setPhase(MeditationPhase.segment);
     await _runSegments(await firstSegment);
 
     // Speak the completion message
     if (isStopped) return _endRun();
-    phase.value = MeditationPhase.completion;
+    _setPhase(MeditationPhase.completion);
     await _playRespectingPause(await completion);
 
     // Mark the meditation as finished
-    phase.value = MeditationPhase.finished;
+    _setPhase(MeditationPhase.finished);
     _endRun();
     await _recordAnalytics(completed: true);
   }
@@ -204,17 +222,29 @@ class Meditation {
   void resume() {
     if (_isDisposed) return;
     isPaused.value = false;
-    unawaited(
-      musicPlayer.resume().catchError(
-        (Object error, StackTrace stackTrace) {
-          _logPlaybackError(
-            'resuming background music',
-            error,
-            stackTrace,
-          );
-        },
-      ),
-    );
+    final music = _musicPlayer;
+    if (music != null) {
+      unawaited(
+        music.resume().catchError(
+          (Object error, StackTrace stackTrace) {
+            _logPlaybackError(
+              'resuming background music',
+              error,
+              stackTrace,
+            );
+          },
+        ),
+      );
+    }
+    if (_ttsService?.canPauseNarration ?? false) {
+      unawaited(
+        ttsService.resume().catchError(
+          (Object error, StackTrace stackTrace) {
+            _logPlaybackError('resuming narration', error, stackTrace);
+          },
+        ),
+      );
+    }
     _resumeCompleter?.complete();
     _resumeCompleter = null;
   }
@@ -227,18 +257,21 @@ class Meditation {
     _resumeCompleter = null;
 
     _endRun();
-    unawaited(
-      musicPlayer.dispose().catchError(
-        (Object error, StackTrace stackTrace) {
-          _logPlaybackError(
-            'disposing background music',
-            error,
-            stackTrace,
-          );
-        },
-      ),
-    );
-    ttsService.dispose();
+    final music = _musicPlayer;
+    if (music != null) {
+      unawaited(
+        music.dispose().catchError(
+          (Object error, StackTrace stackTrace) {
+            _logPlaybackError(
+              'disposing background music',
+              error,
+              stackTrace,
+            );
+          },
+        ),
+      );
+    }
+    _ttsService?.dispose();
     isPaused.dispose();
     phase.dispose();
     unawaited(_recordAnalytics(completed: false));
@@ -476,7 +509,7 @@ class Meditation {
     if (!_isDisposed) {
       failureTitle = title;
       failureMessage = message;
-      phase.value = MeditationPhase.failed;
+      _setPhase(MeditationPhase.failed);
     }
     await _stopPlayback();
     _endRun();
@@ -485,12 +518,22 @@ class Meditation {
 
   Future<void> _pausePlayback() async {
     try {
-      await musicPlayer.pause();
+      await _musicPlayer?.pause();
     } catch (error, stackTrace) {
       _logPlaybackError('pausing background music', error, stackTrace);
     }
+    final narration = _ttsService;
+    if (narration == null) return;
     try {
-      await ttsService.stop();
+      // Suspending keeps the narration's position, so resuming continues the
+      // segment instead of speaking it again from its first word. The device
+      // fallback cannot resume, so that route is stopped and replayed by
+      // _playRespectingPause.
+      if (narration.canPauseNarration) {
+        await narration.pause();
+      } else {
+        await narration.stop();
+      }
     } catch (error, stackTrace) {
       _logPlaybackError('pausing narration', error, stackTrace);
     }
@@ -498,12 +541,12 @@ class Meditation {
 
   Future<void> _stopPlayback() async {
     try {
-      await musicPlayer.stop();
+      await _musicPlayer?.stop();
     } catch (error, stackTrace) {
       _logPlaybackError('stopping background music', error, stackTrace);
     }
     try {
-      await ttsService.stop();
+      await _ttsService?.stop();
     } catch (error, stackTrace) {
       _logPlaybackError('stopping narration', error, stackTrace);
     }

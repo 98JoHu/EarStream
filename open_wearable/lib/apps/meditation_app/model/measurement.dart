@@ -125,8 +125,12 @@ class Measurement {
   }
 
   // Publish the heart rate and RMSSD
-  Stream<int> get heartRate => _source.biometrics.map((b) => b.heartRate);
-  Stream<double?> get rmssd => _source.biometrics.map((b) => b.rmssd);
+  // Mapped once rather than per access: a getter handed StreamBuilder a new
+  // Stream object on every rebuild, so it resubscribed, fell back to
+  // ConnectionState.waiting, and the tile flashed its baseline label. The
+  // underlying controllers are broadcast, so several listeners are fine.
+  late final Stream<int> heartRate = _source.biometrics.map((b) => b.heartRate);
+  late final Stream<double?> rmssd = _source.biometrics.map((b) => b.rmssd);
 
   // The latest values stay local and are only included in a cloud prompt when
   // the session's explicit prompt policy permits it.
@@ -195,7 +199,10 @@ class Measurement {
     metricsFresh.value = false;
     _source.pause();
     _phaseController.pause();
-    _stopMeditation();
+    // A running meditation is suspended along with the rest of the session,
+    // not ended. Stopping it here meant resume() could not bring it back and
+    // analytics recorded an abandoned session every time the user paused.
+    meditation.value?.pause();
   }
 
   void resume() {
@@ -203,6 +210,7 @@ class Measurement {
     _startFreshnessTimer();
     _phaseController.resume();
     _meditationDeadline.resume();
+    meditation.value?.resume();
   }
 
   void dispose() {
@@ -278,11 +286,6 @@ class Measurement {
     meditation.value = session;
 
     unawaited(session.start());
-  }
-
-  void _stopMeditation() {
-    final session = meditation.value;
-    if (session != null) dismissMeditation(session);
   }
 
   /// Removes a completed or manually stopped meditation from the UI and

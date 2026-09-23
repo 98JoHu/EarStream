@@ -354,6 +354,27 @@ class TtsService {
     await play(await prepare(text));
   }
 
+  /// Whether narration can be suspended and later continued in place.
+  ///
+  /// The on-device fallback speaks through the platform engine, which offers
+  /// no dependable resume, so that route has to be stopped and spoken again
+  /// from the start.
+  bool get canPauseNarration => !_usesDeviceFallback;
+
+  /// Suspends playback without discarding it, so [resume] continues from where
+  /// the narration had reached. Deliberately does not advance the playback
+  /// generation: the in-flight [play] must stay awaiting its own completion.
+  Future<void> pause() async {
+    if (_isDisposed || _usesDeviceFallback) return;
+    await _player.pause();
+  }
+
+  /// Continues playback suspended by [pause].
+  Future<void> resume() async {
+    if (_isDisposed || _usesDeviceFallback) return;
+    await _player.resume();
+  }
+
   Future<void> stop() async {
     _playbackGeneration++;
     if (_isDisposed) return;

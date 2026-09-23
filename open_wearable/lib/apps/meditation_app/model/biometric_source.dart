@@ -256,6 +256,11 @@ class SensorBiometricSource implements BiometricSource {
       gyroscopeStream: gyroscopeStream,
       timestampExponentAccelerometer: accelerometerSensor.timestampExponent,
       timestampExponentGyroscope: gyroscopeSensor.timestampExponent,
+      // The firmware reports its own angular-rate unit; the tracker converts
+      // from it rather than assuming radians.
+      gyroscopeUnit: gyroscopeSensor.axisUnits.isEmpty
+          ? null
+          : gyroscopeSensor.axisUnits.first,
     );
 
     // Subscribe to the streams and start processing

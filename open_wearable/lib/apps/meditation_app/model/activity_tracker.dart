@@ -91,12 +91,34 @@ class ActivityTracker {
   static const double _intenseSuppressionRatio =
       BioAdaptiveModeConfig.intenseActivitySuppressionRatio;
 
+  /// Converts the device's angular rate into the degrees/s the thresholds are
+  /// expressed in.
+  final double _gyroscopeToDegreesPerSecond;
+
   ActivityTracker({
     required this.accelerometerStream,
     required this.gyroscopeStream,
     required this.timestampExponentAccelerometer,
     required this.timestampExponentGyroscope,
-  });
+    String? gyroscopeUnit,
+  }) : _gyroscopeToDegreesPerSecond = degreesPerSecondScaleFor(gyroscopeUnit);
+
+  /// The factor turning [unit] into degrees per second.
+  ///
+  /// The activity thresholds are in degrees/s, and this used to assume the
+  /// stream was radians/s without checking. If a device reported degrees/s
+  /// instead, every sample was scaled by about 57 and classified as intense -
+  /// which in the regular mode would suppress stress detection permanently.
+  /// The firmware reports its own unit through `Sensor.axisUnits`, so it is
+  /// read rather than assumed. An absent or unrecognised unit keeps the
+  /// long-standing radians assumption, so known-good hardware is unaffected.
+  @visibleForTesting
+  static double degreesPerSecondScaleFor(String? unit) {
+    final normalized = unit?.trim().toLowerCase() ?? '';
+    const degreeMarkers = ['deg', '°', 'dps'];
+    if (degreeMarkers.any(normalized.contains)) return 1;
+    return 180 / pi;
+  }
 
   void start() {
     _accelerometerSubscription?.cancel();
@@ -169,12 +191,12 @@ class ActivityTracker {
   }
 
   void _processGyroscopeData(PpgMotionSample sample) {
-    // Convert to degrees/s units
+    // Convert to the degrees/s the thresholds use.
     sample = PpgMotionSample(
       timestamp: sample.timestamp,
-      x: sample.x * 180 / pi,
-      y: sample.y * 180 / pi,
-      z: sample.z * 180 / pi,
+      x: sample.x * _gyroscopeToDegreesPerSecond,
+      y: sample.y * _gyroscopeToDegreesPerSecond,
+      z: sample.z * _gyroscopeToDegreesPerSecond,
     );
 
     // Add the sample to the window and remove old samples
