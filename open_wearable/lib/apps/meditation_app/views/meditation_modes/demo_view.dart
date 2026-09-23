@@ -10,19 +10,17 @@ import '../../model/bio_adaptive_session_config.dart';
 import '../../model/meditation_prompt_policy.dart';
 import '../../widgets/custom_dropdown.dart';
 import '../../widgets/meditation_tile.dart';
-import '../../widgets/seal_check.dart';
 import '../../widgets/api_warning.dart';
 import 'bio_adaptive_view.dart' show BioAdaptiveView;
 import 'package:provider/provider.dart';
 
 enum Step {
   settings,
-  sealCheck,
   meditation,
 }
 
 enum DemoMode {
-  biosignalAdaptive(steps: [Step.settings, Step.sealCheck, Step.meditation]),
+  biosignalAdaptive(steps: [Step.settings, Step.meditation]),
   personalizedOnly(steps: [Step.settings, Step.meditation]);
 
   final List<Step> steps;
@@ -34,14 +32,12 @@ abstract class DemoStepView extends StatefulWidget {
   final UserAccount userAccount;
   final VoidCallback onBack;
   final VoidCallback onContinue;
-  final VoidCallback? onSkip;
 
   const DemoStepView({
     super.key,
     required this.userAccount,
     required this.onBack,
     required this.onContinue,
-    this.onSkip,
   });
 }
 
@@ -104,14 +100,6 @@ class _DemoViewState extends State<DemoView> {
         _currentStepIndex++;
       });
       _startPersonalizedMeditationIfNeeded();
-    }
-  }
-
-  void _skip() {
-    if (_currentStep == Step.sealCheck) {
-      setState(() {
-        _currentStepIndex++;
-      });
     }
   }
 
@@ -189,14 +177,6 @@ class _DemoViewState extends State<DemoView> {
           userAccount: _demoAccount,
           onBack: _back,
           onContinue: _continue,
-          onSkip: _skip,
-        );
-      case Step.sealCheck:
-        return SealCheckView(
-          userAccount: _demoAccount,
-          onBack: _back,
-          onContinue: _continue,
-          onSkip: _skip,
         );
       case Step.meditation:
         if (_selectedMode == DemoMode.biosignalAdaptive) {
@@ -324,14 +304,12 @@ class DemoSelection extends StatelessWidget {
 class DemoNavBar extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onContinue;
-  final VoidCallback? onSkip;
   final bool canContinue;
 
   const DemoNavBar({
     super.key,
     required this.onBack,
     required this.onContinue,
-    this.onSkip,
     this.canContinue = true,
   });
 
@@ -344,8 +322,6 @@ class DemoNavBar extends StatelessWidget {
           onPressed: onBack,
           child: const Text('Back'),
         ),
-        if (onSkip != null)
-          OutlinedButton(onPressed: onSkip, child: const Text('Skip')),
         ElevatedButton(
           onPressed: canContinue ? onContinue : null,
           child: const Text('Continue'),
@@ -361,7 +337,6 @@ class SettingsView extends DemoStepView {
     required super.userAccount,
     required super.onBack,
     required super.onContinue,
-    super.onSkip,
   });
 
   @override
@@ -517,112 +492,9 @@ class _SettingsViewState extends State<SettingsView> {
               _savePreferences();
               widget.onContinue();
             },
-            onSkip: null, // No skip option for settings
           ),
         ],
       ),
-    );
-  }
-}
-
-class SealCheckView extends DemoStepView {
-  const SealCheckView({
-    super.key,
-    required super.userAccount,
-    required super.onBack,
-    required super.onContinue,
-    super.onSkip,
-  });
-
-  @override
-  State<SealCheckView> createState() => _SealCheckViewState();
-}
-
-class _SealCheckViewState extends State<SealCheckView> {
-  bool _isCheckCompleted = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final Wearable? wearable = context.read<Wearable?>();
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.verified_outlined,
-                color: Theme.of(context).colorScheme.primary,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'Seal Check',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ),
-          ],
-        ),
-        const Divider(height: 24),
-        Text(
-          'Confirm the earable has a good acoustic seal before calibration starts.',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                height: 1.5,
-              ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Icon(
-              Icons.hearing_outlined,
-              color: Theme.of(context).colorScheme.primary,
-              size: 24,
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Run the seal check',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'Put on the OpenEarable, then tap the button below. A short tone will be played and analysed to confirm a good acoustic seal.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-        ),
-        const SizedBox(height: 16),
-        SealCheck(
-          wearable: wearable,
-          onSealCheckCompleted: () {
-            setState(() {
-              _isCheckCompleted = true;
-            });
-          },
-          showResponsePoints: false,
-        ),
-        const SizedBox(height: 24),
-        DemoNavBar(
-          onBack: widget.onBack,
-          onContinue: widget.onContinue,
-          onSkip: widget.onSkip,
-          canContinue:
-              _isCheckCompleted, // Enable continue only if check is completed
-        ),
-      ],
     );
   }
 }

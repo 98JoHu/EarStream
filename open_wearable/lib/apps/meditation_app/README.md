@@ -143,6 +143,11 @@ in demo mode.
 
 ## Demo mode
 
+Both demo experiences are two steps: attendee preferences, then the
+meditation. The seal check is reachable from the drawer whenever it is needed,
+but it is deliberately not part of the demo flow, which is kept as short as an
+attendee can walk through unaided.
+
 Demo mode creates a fresh attendee-scoped `UserAccount` whenever a demo starts
 or finishes. It copies only cloud-service configuration and the voice choice
 from the main account. Permanent profile fields, stored baselines, stress
@@ -161,7 +166,6 @@ This is the condensed version of the regular biosignal pipeline; it uses the
 same `Measurement`, `HrHrvProcessor`, `StressDetector`, and meditation classes
 with `BioAdaptiveSessionConfig.conferenceDemo`.
 
-- Optional seal-check step before sensing.
 - 30-second filter calibration with no displayed metrics.
 - 30-second physiological baseline.
 - HR and RMSSD both use 30-second metric/history windows in this mode.
@@ -810,15 +814,16 @@ The in-app drawer contains:
 
 - **Meditation Mode**: mode selection and current session;
 - **Profile**: name, age, gender, and fitness level;
-- **Meditation Preferences**: speaking speed, meditation type, environment,
-  additional text preference, and regular stress sensitivity;
+- **Meditation Preferences**: voice gender, speaking speed, meditation type,
+  environment, additional text preference, and regular stress sensitivity;
 - **Weekly Analytics**;
 - **Seal Check**; and
 - **API Keys**: provider, voice, Tencent region, credentials, and live service
   checks.
 
-Voice/provider settings exist only on API Keys. Speaking speed remains a
-meditation-delivery preference.
+Provider, region and credential settings exist only on API Keys. Voice gender
+and speaking speed are meditation-delivery preferences and are editable in
+Meditation Preferences and in the demo attendee preferences as well.
 
 When no sensor baseline exists, profile-derived HR/RMSSD estimates can provide
 context outside the live baseline workflow. These estimates are calculated on

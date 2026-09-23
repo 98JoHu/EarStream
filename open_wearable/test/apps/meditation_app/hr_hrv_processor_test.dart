@@ -35,7 +35,12 @@ import 'package:open_wearable/apps/meditation_app/model/tencent_tts_client.dart'
 import 'package:open_wearable/apps/meditation_app/model/tts_service.dart';
 import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'package:open_wearable/apps/meditation_app/views/meditation_modes/bio_adaptive_view.dart';
-import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_view.dart';
+// Material exports a `Step` too, so the demo's own one is reached as
+// `demo.Step` and hidden from the unprefixed import.
+import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_view.dart'
+    hide Step;
+import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_view.dart'
+    as demo_view;
 import 'package:open_wearable/apps/meditation_app/views/pages/api_keys_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/preferences_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/weekly_analytics_page.dart';
@@ -1048,6 +1053,16 @@ void main() {
   });
 
   group('conference demo configuration', () {
+    test('both demo experiences go straight from settings to meditation', () {
+      // The seal check is available from the main menu when it is needed; it
+      // is deliberately not a step in the demo, to keep the flow an attendee
+      // walks through as short as possible.
+      const expected = [demo_view.Step.settings, demo_view.Step.meditation];
+      expect(demo_view.DemoMode.biosignalAdaptive.steps, expected);
+      expect(demo_view.DemoMode.personalizedOnly.steps, expected);
+      expect(demo_view.Step.values, expected);
+    });
+
     test('applies the paper parameters without changing standard defaults', () {
       const demo = BioAdaptiveSessionConfig.conferenceDemo;
       const standard = BioAdaptiveSessionConfig.standard;
