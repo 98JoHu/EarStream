@@ -1880,8 +1880,6 @@ class _AdaptiveOpticalChannelSelector {
   bool _isCommitted = false;
   String? _committedChannel;
 
-  /// Whether the channel choice has been frozen for the measurement.
-  bool get isCommitted => _isCommitted;
   String? get committedChannel => _committedChannel;
 
   /// Modulation relative to DC, the comparable measure of pulse strength.

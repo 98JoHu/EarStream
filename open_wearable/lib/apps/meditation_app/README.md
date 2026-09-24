@@ -944,7 +944,10 @@ The shared session lifecycle and mode-specific meditation subclasses live in
 in `model/kokoro_tts_engine.dart` and `model/kokoro_model_installer.dart`. Credential verification is similarly kept in
 `model/service_connection_manager.dart`, while `widgets/status_field.dart`
 only renders its state. Sensor-name interpretation is isolated in
-`model/sensor_axis_mapping.dart`. Labels, icons, and colors for monitoring,
+`model/sensor_axis_mapping.dart`, and the translation from an SDK reading to
+the pipeline's own sample types in `model/sensor_sample_decoding.dart` - pure
+functions, so the optical-channel and axis handling is testable without a
+device. Labels, icons, and colors for monitoring,
 stress, and activity states remain in the bio-adaptive view rather than the
 domain models.
 
@@ -982,6 +985,7 @@ meditation_app/
 |   |-- monitoring_meditation_deadline.dart
 |   |-- pulse_interval_rmssd.dart
 |   |-- sensor_axis_mapping.dart
+|   |-- sensor_sample_decoding.dart
 |   |-- service_connection_manager.dart
 |   |-- stress_detector.dart
 |   |-- tencent_tts_client.dart

@@ -71,7 +71,6 @@ abstract final class OverallMeditationConfig {
   // this needs no network and no account, which is what makes it usable where
   // the cloud endpoints are unreachable. The model is a bundled Android asset
   // that is copied to app storage once; see the in-app README.
-  static const String kokoroModelDirectoryName = 'kokoro-en-v0_19';
   static const String kokoroModelFileName = 'model.onnx';
   static const String kokoroVoicesFileName = 'voices.bin';
   static const String kokoroTokensFileName = 'tokens.txt';

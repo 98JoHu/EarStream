@@ -8,24 +8,8 @@ import 'package:flutter/foundation.dart';
 import '../configs/bio_adaptive_mode_config.dart';
 import 'hr_hrv_processor.dart';
 import 'hr_hrv_diagnostics.dart';
-import 'sensor_axis_mapping.dart';
+import 'sensor_sample_decoding.dart';
 import 'activity_tracker.dart';
-
-class PpgOpticalSample {
-  final int timestamp;
-  final double red;
-  final double ir;
-  final double green;
-  final double ambient;
-
-  const PpgOpticalSample({
-    required this.timestamp,
-    required this.red,
-    required this.ir,
-    required this.green,
-    required this.ambient,
-  });
-}
 
 abstract interface class BiometricSource {
   // The stream of HR/HRV samples, needs to be broadcasted
@@ -154,11 +138,11 @@ class SensorBiometricSource implements BiometricSource {
     // Create the streams for PPG, accelerometer and gyroscope data
     _ppgStream = ppgSensor.sensorStream
         .map<PpgOpticalSample?>((data) {
-          final values = _sensorValuesAsDoubles(data);
+          final values = sensorValuesAsDoubles(data);
           if (values == null) {
             return null;
           }
-          return _extractPpgOpticalSample(ppgSensor, data, values);
+          return extractPpgOpticalSample(ppgSensor, data, values);
         })
         .where((sample) => sample != null)
         .cast<PpgOpticalSample>()
@@ -166,11 +150,11 @@ class SensorBiometricSource implements BiometricSource {
 
     _accelerometerStream = accelerometerSensor.sensorStream
         .map<PpgMotionSample?>((data) {
-          final values = _sensorValuesAsDoubles(data);
+          final values = sensorValuesAsDoubles(data);
           if (values == null) {
             return null;
           }
-          return _extractImuMotionSample(
+          return extractImuMotionSample(
             accelerometerSensor,
             data,
             values,
@@ -182,11 +166,11 @@ class SensorBiometricSource implements BiometricSource {
 
     final gyroscopeStream = gyroscopeSensor.sensorStream
         .map<PpgMotionSample?>((data) {
-          final values = _sensorValuesAsDoubles(data);
+          final values = sensorValuesAsDoubles(data);
           if (values == null) {
             return null;
           }
-          return _extractImuMotionSample(
+          return extractImuMotionSample(
             gyroscopeSensor,
             data,
             values,
@@ -477,7 +461,7 @@ class SensorBiometricSource implements BiometricSource {
       ..sort();
     SensorConfigurationValue? appliedValue;
     if (values.isNotEmpty) {
-      appliedValue = _selectBestConfigurationValue(
+      appliedValue = selectBestConfigurationValue(
         values,
         targetFrequencyHz: targetFrequencyHz,
       );
@@ -500,141 +484,6 @@ class SensorBiometricSource implements BiometricSource {
     }
 
     return fallbackFrequency;
-  }
-
-  SensorConfigurationValue _selectBestConfigurationValue(
-    List<SensorConfigurationValue> values, {
-    required int targetFrequencyHz,
-  }) {
-    final frequencyValues =
-        values.whereType<SensorFrequencyConfigurationValue>().toList();
-    if (frequencyValues.isEmpty) {
-      return values.first;
-    }
-
-    SensorFrequencyConfigurationValue? nextBigger;
-    SensorFrequencyConfigurationValue? maxValue;
-    for (final value in frequencyValues) {
-      if (maxValue == null || value.frequencyHz > maxValue.frequencyHz) {
-        maxValue = value;
-      }
-      if (value.frequencyHz >= targetFrequencyHz &&
-          (nextBigger == null || value.frequencyHz < nextBigger.frequencyHz)) {
-        nextBigger = value;
-      }
-    }
-
-    return nextBigger ?? maxValue ?? values.first;
-  }
-
-  List<double>? _sensorValuesAsDoubles(SensorValue data) {
-    if (data is SensorDoubleValue) {
-      return data.values;
-    }
-    if (data is SensorIntValue) {
-      return data.values
-          .map((value) => value.toDouble())
-          .toList(growable: false);
-    }
-    return null;
-  }
-
-  PpgOpticalSample? _extractPpgOpticalSample(
-    Sensor sensor,
-    SensorValue data,
-    List<double> values,
-  ) {
-    if (values.isEmpty) {
-      return null;
-    }
-
-    double valueAt(int? index, double fallback) {
-      if (index != null && index >= 0 && index < values.length) {
-        return values[index];
-      }
-      return fallback;
-    }
-
-    final fallbackRed = values[0];
-    final fallbackIr = values.length > 1 ? values[1] : fallbackRed;
-    final fallbackGreen = values.length > 2 ? values[2] : fallbackRed;
-    final fallbackAmbient = values.length > 3 ? values[3] : 0.0;
-
-    // Usually channels are [red, ir, green, ambient], but we prefer axis-name
-    // matching when available to avoid firmware-order mismatches.
-    final red = valueAt(
-      findOpticalSensorAxisIndex(
-        sensor.axisNames,
-        OpticalSensorChannel.red,
-      ),
-      fallbackRed,
-    );
-    final ir = valueAt(
-      findOpticalSensorAxisIndex(
-        sensor.axisNames,
-        OpticalSensorChannel.infrared,
-      ),
-      fallbackIr,
-    );
-    final green = valueAt(
-      findOpticalSensorAxisIndex(
-        sensor.axisNames,
-        OpticalSensorChannel.green,
-      ),
-      fallbackGreen,
-    );
-    final ambient = valueAt(
-      findOpticalSensorAxisIndex(
-        sensor.axisNames,
-        OpticalSensorChannel.ambient,
-      ),
-      fallbackAmbient,
-    );
-
-    return PpgOpticalSample(
-      timestamp: data.timestamp,
-      red: red,
-      ir: ir,
-      green: green,
-      ambient: ambient,
-    );
-  }
-
-  PpgMotionSample _extractImuMotionSample(
-    Sensor sensor,
-    SensorValue data,
-    List<double> values,
-  ) {
-    double valueAt(int? index, double fallback) {
-      if (index != null && index >= 0 && index < values.length) {
-        return values[index];
-      }
-      return fallback;
-    }
-
-    final fallbackX = values.isNotEmpty ? values[0] : 0.0;
-    final fallbackY = values.length > 1 ? values[1] : 0.0;
-    final fallbackZ = values.length > 2 ? values[2] : 0.0;
-
-    final x = valueAt(
-      findCartesianSensorAxisIndex(sensor.axisNames, 'x'),
-      fallbackX,
-    );
-    final y = valueAt(
-      findCartesianSensorAxisIndex(sensor.axisNames, 'y'),
-      fallbackY,
-    );
-    final z = valueAt(
-      findCartesianSensorAxisIndex(sensor.axisNames, 'z'),
-      fallbackZ,
-    );
-
-    return PpgMotionSample(
-      timestamp: data.timestamp,
-      x: x,
-      y: y,
-      z: z,
-    );
   }
 
   void _turnOffSensor(Sensor sensor) {

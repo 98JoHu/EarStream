@@ -21,10 +21,9 @@ import java.util.concurrent.Executors
  * memory in one piece. `AssetManager` can walk the tree and stream each file,
  * so this copy runs in constant memory.
  *
- * The copy happens once. Files already present with the expected size are
- * skipped, so later launches only pay for a directory walk. Everything runs
- * off the main thread; a build without the asset directory simply reports that
- * nothing is bundled.
+ * The copy happens once, and a completion marker lets later launches skip even
+ * the directory walk. Everything runs off the main thread; a build without the
+ * asset directory simply reports that nothing is bundled.
  */
 class KokoroModelInstaller(
   private val context: Context,
@@ -33,7 +32,12 @@ class KokoroModelInstaller(
   companion object {
     const val CHANNEL = "edu.kit.teco.open_wearable/kokoro_model"
 
-    /** Matches OverallMeditationConfig.kokoroModelDirectoryName. */
+    /**
+     * The directory name inside src/main/assets, and the name it keeps in
+     * app storage. Dart never needs it: [install] hands back the resolved
+     * absolute path, and the file names within it live in
+     * OverallMeditationConfig.
+     */
     private const val MODEL_DIRECTORY = "kokoro-en-v0_19"
 
     private const val COPY_BUFFER_BYTES = 256 * 1024
