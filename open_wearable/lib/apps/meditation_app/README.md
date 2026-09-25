@@ -73,8 +73,14 @@ phases.
 ### 2. Baseline
 
 - Duration: at least 5 minutes.
-- Computation: physiological data only; profile-derived values are not blended
-  into the measured baseline.
+- Computation: the running mean of measured HR and RMSSD, blended with the
+  profile's population-level estimate while too little has been measured for
+  the measurement to stand alone. Nothing is published during the first
+  minute; from there the prior's share falls linearly from 70% at one minute
+  to 30% at five. It applies only when the profile carries age, gender **and**
+  fitness level together - a missing field would leave a generic population
+  default standing in for it - and only in this mode. The conference demo
+  keeps a sensor-only baseline.
 - The phase advances only after at least one valid HR and one valid RMSSD value
   have been measured. If either is unavailable at the five-minute point, the
   phase waits for valid sensor-derived data.
@@ -535,6 +541,25 @@ the same wakelock, so `ScreenWakelock.release()` restores whatever that setting
 asks for rather than switching it off. A failure to set the lock is logged and
 ignored; it must never prevent a meditation from starting.
 
+## Losing the sensor
+
+The in-app is pushed as its own route, so a disconnected earbud leaves the
+screen underneath rebuilding while the session on top keeps running against a
+device that is no longer there. Two mechanisms cover that:
+
+- `WearableConnection` follows the SDK's disconnect listener. Starting an
+  EarStreAM session or choosing a demo mode while disconnected is refused with
+  an explanation rather than beginning a measurement that can never complete.
+- `SensorBiometricSource` watches PPG arrival and publishes `signalAlive`. At
+  200 Hz a five-second silence is never signal quality, so the session says so
+  instead of leaving a full progress bar with no explanation. The streams also
+  carry `onError`/`onDone` handlers, which previously had none: a stream that
+  ended simply stopped delivering, silently and permanently.
+
+This matters most in the baseline. The demo's guaranteed-meditation timer only
+arms once monitoring is reached, so a dead sensor during the baseline would
+otherwise strand the session with the safety net disarmed.
+
 ## Activity handling
 
 `ActivityTracker` classifies resting, light, moderate, vigorous, and intense
@@ -799,6 +824,9 @@ The TTS route is selected once when a meditation object is created.
   meditation uses on-device Flutter TTS. For Kokoro "valid" means the model is
   bundled in this build, which is probed when the in-app opens rather than
   entered by the user.
+- The speaking-speed preference reaches every provider: Tencent's own scale,
+  Kokoro's multiplier, and ElevenLabs' `voice_settings.speed` (0.7-1.2, where
+  1.0 is the voice's natural pace).
 - If a selected provider is initially available but later fails, the app
   retries it three times (immediately, after one second, and after two seconds).
 - After those failures, the meditation stops and shows a voice-service failure

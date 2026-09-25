@@ -5,6 +5,7 @@ import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../../configs/demo_mode_config.dart';
 import '../../model/user_account.dart';
+import '../../model/wearable_connection.dart';
 import '../../model/meditation.dart';
 import '../../model/bio_adaptive_session_config.dart';
 import '../../model/meditation_prompt_policy.dart';
@@ -86,6 +87,20 @@ class _DemoViewState extends State<DemoView> {
   }
 
   void _selectMode(DemoMode mode) {
+    // Both demo experiences speak through the earbud, and the biosignal one
+    // also measures with it. Starting an attendee on either without it
+    // connected leaves them waiting on something that cannot arrive.
+    if (!context.read<WearableConnection>().isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The demo needs the OpenEarable connected. Reconnect it, then '
+            'choose a mode again.',
+          ),
+        ),
+      );
+      return;
+    }
     _discardPersonalizedMeditation();
     _createFreshDemoAccount();
     setState(() {

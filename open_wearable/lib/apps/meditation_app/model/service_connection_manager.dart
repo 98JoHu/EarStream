@@ -192,6 +192,25 @@ class KokoroTtsManager extends ConnectionManager {
     userAccount.hasValidKokoroModel = await KokoroModelInstaller.isBundled();
   }
 
+  /// Probes as [probe] does, then unpacks and loads the model when it is the
+  /// selected voice.
+  ///
+  /// The first use costs a ~340 MB copy out of the APK plus a model load. Left
+  /// to happen lazily that lands on the session's welcome message, with the
+  /// attendee already wearing the earbuds. Doing it when the in-app opens
+  /// moves the wait to a screen nobody is waiting on. Failures stay silent:
+  /// this is a warm-up, and the session still has its own fallback.
+  static Future<void> prewarm(UserAccount userAccount) async {
+    await probe(userAccount);
+    if (!userAccount.hasValidKokoroModel) return;
+    if (userAccount.ttsProvider != TtsProviderOption.kokoro) return;
+    try {
+      await KokoroTtsEngine.shared();
+    } catch (error) {
+      debugPrint('Kokoro warm-up did not finish: $error');
+    }
+  }
+
   @override
   Future<Object?> verifyCredentials() async {
     if (!KokoroModelInstaller.isSupported) {

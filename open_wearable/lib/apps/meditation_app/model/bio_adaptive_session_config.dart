@@ -21,6 +21,10 @@ class BioAdaptiveSessionConfig {
   final bool allowStressSimulation;
   final bool suppressStressDetectionDuringActivity;
 
+  /// Whether the baseline may blend the profile's demographic estimate with
+  /// what has been measured so far. See BioAdaptiveModeConfig.
+  final bool blendDemographicBaseline;
+
   const BioAdaptiveSessionConfig({
     required this.includeCalibration,
     required this.calibrationDuration,
@@ -35,6 +39,7 @@ class BioAdaptiveSessionConfig {
     required this.promptPolicy,
     required this.allowStressSimulation,
     required this.suppressStressDetectionDuringActivity,
+    required this.blendDemographicBaseline,
   });
 
   /// Full-length production behaviour. It uses the same sensor-only baseline
@@ -56,6 +61,7 @@ class BioAdaptiveSessionConfig {
     allowStressSimulation: BioAdaptiveModeConfig.allowStressSimulation,
     suppressStressDetectionDuringActivity:
         BioAdaptiveModeConfig.suppressStressDetectionDuringActivity,
+    blendDemographicBaseline: BioAdaptiveModeConfig.blendDemographicBaseline,
   );
 
   /// Time-condensed conference cycle described in the demo paper.
@@ -75,5 +81,6 @@ class BioAdaptiveSessionConfig {
     allowStressSimulation: DemoModeConfig.allowStressSimulation,
     suppressStressDetectionDuringActivity:
         DemoModeConfig.suppressStressDetectionDuringActivity,
+    blendDemographicBaseline: DemoModeConfig.blendDemographicBaseline,
   );
 }

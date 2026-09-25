@@ -21,6 +21,14 @@ abstract interface class BiometricSource {
   // Whether stress detection should be suppressed (e.g. due to high activity)
   bool get suppressStressDetection;
 
+  /// Whether sensor samples are still arriving.
+  ///
+  /// Goes false when the stream stops delivering, whether the earbud dropped,
+  /// the BLE link stalled, or the sensor was turned off. Without it a dead
+  /// link is indistinguishable from a poor signal: the session keeps counting
+  /// down a baseline it can never finish.
+  ValueListenable<bool> get signalAlive;
+
   /// Resolves the strongest baseline estimate available at the end of a
   /// time-constrained measurement. Sensor implementations may use retained
   /// conditioned signal that is intentionally not part of the live stream.
@@ -257,6 +265,10 @@ class SensorBiometricSource implements BiometricSource {
   void pause() {
     if (!_started) return;
     _diagnosticsRecorder?.record({'event': 'stream_paused'});
+    // A paused session is not a lost signal; stop watching rather than
+    // reporting the deliberate silence as a dropped earbud.
+    _signalWatchdog?.cancel();
+    _lastPpgSampleAt = null;
     _stopPpgDeliveryTrace();
     _stopPpgRateLog();
     _ppgSubscription?.cancel();
@@ -285,6 +297,8 @@ class SensorBiometricSource implements BiometricSource {
 
   @override
   void dispose() {
+    _signalWatchdog?.cancel();
+    _signalAlive.dispose();
     _stopPpgDeliveryTrace();
     _stopPpgRateLog();
     _ppgSubscription?.cancel();
@@ -313,50 +327,105 @@ class SensorBiometricSource implements BiometricSource {
     });
   }
 
+  /// Flipped by [_signalWatchdog] when no PPG sample has arrived recently.
+  final ValueNotifier<bool> _signalAlive = ValueNotifier(true);
+  DateTime? _lastPpgSampleAt;
+  Timer? _signalWatchdog;
+
+  @override
+  ValueListenable<bool> get signalAlive => _signalAlive;
+
+  void _startSignalWatchdog() {
+    _signalWatchdog?.cancel();
+    _lastPpgSampleAt = DateTime.now();
+    _signalAlive.value = true;
+    _signalWatchdog = Timer.periodic(
+      BioAdaptiveModeConfig.sensorSignalCheckInterval,
+      (_) => _evaluateSignalLiveness(),
+    );
+  }
+
+  void _evaluateSignalLiveness() {
+    final last = _lastPpgSampleAt;
+    if (last == null) return;
+    final silentFor = DateTime.now().difference(last);
+    final alive = silentFor < BioAdaptiveModeConfig.sensorSignalTimeout;
+    if (alive == _signalAlive.value) return;
+    _signalAlive.value = alive;
+    recordDiagnosticEvent(
+      alive ? 'sensor_signal_restored' : 'sensor_signal_lost',
+      {'silent_ms': silentFor.inMilliseconds},
+    );
+  }
+
+  /// A stream that ends or errors delivers nothing further, so the watchdog
+  /// would eventually notice anyway; saying so immediately avoids the wait.
+  void _onSensorStreamEnded(String sensor, [Object? error]) {
+    debugPrint('Meditation $sensor stream ended${error == null ? '' : ': '
+        '$error'}');
+    recordDiagnosticEvent('sensor_stream_ended', {
+      'sensor': sensor,
+      'error_type': error?.runtimeType.toString(),
+    });
+    if (sensor != 'ppg') return;
+    _signalAlive.value = false;
+  }
+
   void _subscribe() {
+    _startSignalWatchdog();
     _startPpgDeliveryTrace();
     _startPpgRateLog();
     _ppgSubscription?.cancel();
-    _ppgSubscription = _ppgStream.listen((data) {
-      final clock = _ppgDeliveryClock;
-      final startedUs = clock?.elapsedMicroseconds;
-      _rawPpgCapture?.add(
-        data.timestamp,
-        [data.red, data.ir, data.green, data.ambient],
-      );
-      _processor.processPpgSample(
-        data.timestamp,
-        data.red,
-        data.ir,
-        data.green,
-        data.ambient,
-      );
-      if (_ppgRateClock != null) {
-        _ppgRateFirstTimestamp ??= data.timestamp;
-        _ppgRateLastTimestamp = data.timestamp;
-        _ppgRateSampleCount++;
-      }
-      if (clock != null && startedUs != null) {
-        final processingUs = clock.elapsedMicroseconds - startedUs;
-        _ppgDeliveredCount++;
-        _ppgProcessingTotalUs += processingUs;
-        if (processingUs > _ppgProcessingMaximumUs) {
-          _ppgProcessingMaximumUs = processingUs;
+    _ppgSubscription = _ppgStream.listen(
+      (data) {
+        _lastPpgSampleAt = DateTime.now();
+        if (!_signalAlive.value) _evaluateSignalLiveness();
+        final clock = _ppgDeliveryClock;
+        final startedUs = clock?.elapsedMicroseconds;
+        _rawPpgCapture?.add(
+          data.timestamp,
+          [data.red, data.ir, data.green, data.ambient],
+        );
+        _processor.processPpgSample(
+          data.timestamp,
+          data.red,
+          data.ir,
+          data.green,
+          data.ambient,
+        );
+        if (_ppgRateClock != null) {
+          _ppgRateFirstTimestamp ??= data.timestamp;
+          _ppgRateLastTimestamp = data.timestamp;
+          _ppgRateSampleCount++;
         }
-        _ppgLastDeliveredTimestamp = data.timestamp;
-      }
-    });
+        if (clock != null && startedUs != null) {
+          final processingUs = clock.elapsedMicroseconds - startedUs;
+          _ppgDeliveredCount++;
+          _ppgProcessingTotalUs += processingUs;
+          if (processingUs > _ppgProcessingMaximumUs) {
+            _ppgProcessingMaximumUs = processingUs;
+          }
+          _ppgLastDeliveredTimestamp = data.timestamp;
+        }
+      },
+      onError: (Object error) => _onSensorStreamEnded('ppg', error),
+      onDone: () => _onSensorStreamEnded('ppg'),
+    );
 
     _accelSubscription?.cancel();
-    _accelSubscription = _accelerometerStream.listen((data) {
-      _rawMotionCapture?.add(data.timestamp, [data.x, data.y, data.z]);
-      _processor.processAccelerometerSample(
-        data.timestamp,
-        data.x,
-        data.y,
-        data.z,
-      );
-    });
+    _accelSubscription = _accelerometerStream.listen(
+      (data) {
+        _rawMotionCapture?.add(data.timestamp, [data.x, data.y, data.z]);
+        _processor.processAccelerometerSample(
+          data.timestamp,
+          data.x,
+          data.y,
+          data.z,
+        );
+      },
+      onError: (Object error) => _onSensorStreamEnded('accelerometer', error),
+      onDone: () => _onSensorStreamEnded('accelerometer'),
+    );
   }
 
   /// Session events share the same local, debug-only trace as the PPG data.
@@ -537,6 +606,13 @@ class RecordedStressBiometricSource implements BiometricSource {
   bool _relaxationActive = false;
   double _relaxationStartHr = peakHeartRate;
   double _relaxationStartHrv = peakRmssd;
+
+  /// The scripted source generates its own samples, so its signal is only
+  /// absent once it has been stopped.
+  final ValueNotifier<bool> _signalAlive = ValueNotifier(true);
+
+  @override
+  ValueListenable<bool> get signalAlive => _signalAlive;
 
   @override
   Stream<HeartRateSample> get biometrics => _controller.stream;

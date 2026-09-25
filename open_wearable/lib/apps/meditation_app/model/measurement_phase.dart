@@ -56,6 +56,11 @@ class CalibrationPhase extends MonitoringPhase {
 class BaselinePhase extends MonitoringPhase {
   final UserAccount userAccount;
   final bool useBestEffortAtDeadline;
+
+  /// Whether the profile's demographic estimate may inform the baseline while
+  /// too little has been measured for the measurement to stand alone.
+  final bool blendDemographicPrior;
+
   @override
   final Duration duration;
 
@@ -65,12 +70,76 @@ class BaselinePhase extends MonitoringPhase {
   double _rmssdTotal = 0;
   BiometricSource? _source;
   HeartRateSample? _deadlineEstimate;
+  final Stopwatch _elapsed = Stopwatch();
 
   BaselinePhase({
     required this.userAccount,
     Duration? duration,
     this.useBestEffortAtDeadline = false,
+    this.blendDemographicPrior = false,
   }) : duration = duration ?? BioAdaptiveModeConfig.baselineDuration;
+
+  /// The demographic estimate's share of the published baseline after
+  /// [elapsed] of measurement, or null while it is too early to publish one.
+  ///
+  /// Falls linearly from 70% at one minute to 30% at five, and holds there.
+  static double? demographicPriorWeight(Duration elapsed) {
+    const start = BioAdaptiveModeConfig.demographicBlendStart;
+    const end = BioAdaptiveModeConfig.demographicBlendEnd;
+    const startWeight = BioAdaptiveModeConfig.demographicBlendStartWeight;
+    const endWeight = BioAdaptiveModeConfig.demographicBlendEndWeight;
+
+    if (elapsed < start) return null;
+    if (elapsed >= end) return endWeight;
+    final progress =
+        (elapsed - start).inMilliseconds / (end - start).inMilliseconds;
+    return startWeight + ((endWeight - startWeight) * progress);
+  }
+
+  /// One value on the schedule: the prior's share plus the measurement's.
+  @visibleForTesting
+  static double blendValue(
+    double prior,
+    double measured,
+    double priorWeight,
+  ) =>
+      (prior * priorWeight) + (measured * (1 - priorWeight));
+
+  /// Writes the baseline the rest of the session compares against.
+  ///
+  /// Without blending this is the plain running mean, exactly as before. With
+  /// it, the measured mean is weighted against the profile's estimate on the
+  /// schedule above, and nothing is published during the first minute: there
+  /// is too little measurement to blend, and publishing the prior alone would
+  /// present a population estimate as if it had been measured.
+  void _publishBaseline() {
+    final measuredHeartRate =
+        _heartRateCount > 0 ? _heartRateTotal / _heartRateCount : null;
+    final measuredRmssd = _rmssdCount > 0 ? _rmssdTotal / _rmssdCount : null;
+
+    final prior =
+        blendDemographicPrior ? userAccount.demographicBaseline : null;
+    if (prior == null) {
+      if (measuredHeartRate != null) {
+        userAccount.baselineHeartRate = measuredHeartRate.round();
+      }
+      if (measuredRmssd != null) {
+        userAccount.baselineRMSSD = measuredRmssd;
+      }
+      return;
+    }
+
+    final weight = demographicPriorWeight(_elapsed.elapsed);
+    if (weight == null) return;
+
+    if (measuredHeartRate != null) {
+      userAccount.baselineHeartRate =
+          blendValue(prior.$1.toDouble(), measuredHeartRate, weight).round();
+    }
+    if (measuredRmssd != null) {
+      userAccount.baselineRMSSD = blendValue(prior.$2, measuredRmssd, weight);
+    }
+  }
 
   @override
   bool get canAdvance => useBestEffortAtDeadline
@@ -97,23 +166,30 @@ class BaselinePhase extends MonitoringPhase {
     PhaseContext ctx,
   ) {
     _source = ctx.source;
+    _elapsed
+      ..reset()
+      ..start();
     ctx.source.beginMeasurement();
     return ctx.source.biometrics.listen((data) {
       _heartRateTotal += data.heartRate;
       _heartRateCount++;
-      userAccount.baselineHeartRate =
-          (_heartRateTotal / _heartRateCount).round();
 
       if (data.rmssd != null) {
         _rmssdTotal += data.rmssd!;
         _rmssdCount++;
-        userAccount.baselineRMSSD = _rmssdTotal / _rmssdCount;
       }
+
+      _publishBaseline();
     });
   }
 
   @override
   void complete(PhaseContext ctx) {
+    // Pin the schedule at the value the phase actually ended on, so the stored
+    // baseline is not a few seconds stale in its weighting.
+    _publishBaseline();
+    _elapsed.stop();
+
     if (!useBestEffortAtDeadline) return;
     final estimate = _deadlineEstimate;
     final rmssd = estimate?.rmssd;

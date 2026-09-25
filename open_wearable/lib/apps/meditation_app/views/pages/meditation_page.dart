@@ -4,6 +4,7 @@ import 'drawer_page.dart';
 import 'package:flutter/material.dart';
 import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
+import '../../model/wearable_connection.dart';
 import '../meditation_modes/bio_adaptive_view.dart';
 import '../meditation_modes/demo_view.dart';
 import '../meditation_modes/timer_view.dart';
@@ -69,6 +70,7 @@ class MeditationPage extends StatelessWidget implements DrawerPage {
   final UserAccount userAccount;
   final MeditationAnalyticsStore analyticsStore;
   final Wearable? wearable;
+  final WearableConnection wearableConnection;
 
   /// The mode being shown, or null for the picker. Owned by the parent so that
   /// re-selecting this page in the drawer can send it back to the picker —
@@ -87,6 +89,7 @@ class MeditationPage extends StatelessWidget implements DrawerPage {
     required this.selectedMode,
     required this.onModeSelected,
     this.wearable,
+    required this.wearableConnection,
   });
 
   @override
@@ -109,6 +112,9 @@ class MeditationPage extends StatelessWidget implements DrawerPage {
       providers: [
         Provider<UserAccount>.value(value: userAccount),
         Provider<Wearable?>.value(value: wearable),
+        ChangeNotifierProvider<WearableConnection>.value(
+          value: wearableConnection,
+        ),
       ],
       child: SingleChildScrollView(
         child: Padding(

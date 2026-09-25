@@ -47,6 +47,13 @@ abstract final class OverallMeditationConfig {
   static const String elevenLabsMaleVoiceId = 'CwhRBWXzGAHq8TQ4Fs17';
   static const String elevenLabsFemaleVoiceId = 'hpp4J3VqNfWAUOO0d1Us';
   static const Duration elevenLabsRequestTimeout = Duration(seconds: 20);
+  // ElevenLabs accepts 0.7-1.2 and recommends staying near 0.8-1.1, where 1.0
+  // is the voice's natural pace. Same shape as the Tencent mapping: medium is
+  // natural, slow is below it, fast above.
+  static const double elevenLabsVerySlowSpeechRate = 0.75;
+  static const double elevenLabsSlowSpeechRate = 0.85;
+  static const double elevenLabsMediumSpeechRate = 1.0;
+  static const double elevenLabsFastSpeechRate = 1.10;
 
   // Tencent TextToVoice. International and Mainland China use different API
   // hosts and account/service activations; the active choice still comes from
@@ -110,7 +117,13 @@ abstract final class OverallMeditationConfig {
   static const double kokoroFastSpeechRate = 0.80;
   static const Duration kokoroModelInstallTimeout = Duration(minutes: 10);
   static const Duration kokoroEngineStartTimeout = Duration(minutes: 2);
-  static const Duration kokoroSynthesisTimeout = Duration(minutes: 5);
+
+  /// A demo segment is roughly 15-80 seconds of speech, and Kokoro runs at
+  /// well under real time on the demo phone, so a normal synthesis finishes
+  /// in tens of seconds. This bounds a wedged worker without cutting off
+  /// legitimate work; five minutes only meant a stalled engine took three
+  /// retries' worth of it before the session gave up.
+  static const Duration kokoroSynthesisTimeout = Duration(seconds: 90);
   static const String kokoroCredentialCheckText =
       'The local voice is ready for this session.';
 

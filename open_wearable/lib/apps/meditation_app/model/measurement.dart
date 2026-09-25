@@ -91,6 +91,7 @@ class Measurement {
           userAccount: userAccount,
           duration: sessionConfig.baselineDuration,
           useBestEffortAtDeadline: sessionConfig.useBestEffortEstimates,
+          blendDemographicPrior: sessionConfig.blendDemographicBaseline,
         ),
         StressMonitoringPhase(),
       ],
@@ -125,6 +126,10 @@ class Measurement {
   }
 
   // Publish the heart rate and RMSSD
+  /// Whether sensor samples are still arriving. False means the link is gone,
+  /// not that the signal is poor - a session cannot recover on its own.
+  ValueListenable<bool> get sensorSignalAlive => _source.signalAlive;
+
   // Mapped once rather than per access: a getter handed StreamBuilder a new
   // Stream object on every rebuild, so it resubscribed, fell back to
   // ConnectionState.waiting, and the tile flashed its baseline label. The

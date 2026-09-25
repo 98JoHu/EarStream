@@ -142,11 +142,26 @@ class ElevenLabsTtsProvider implements TtsProvider {
   final String? _apiKey;
   final bool _isAvailable;
   final String voiceId;
+  final double _speed;
 
   ElevenLabsTtsProvider(UserAccount account)
       : _apiKey = account.elevenLabsApiKey,
         _isAvailable = account.hasValidElevenLabsKey,
-        voiceId = resolveVoiceId(account);
+        voiceId = resolveVoiceId(account),
+        _speed = _elevenLabsSpeed(account.speakingSpeed);
+
+  /// The speaking-speed preference on ElevenLabs' own scale, where 1.0 is the
+  /// voice's natural pace.
+  static double _elevenLabsSpeed(SpeakingSpeed? speed) {
+    return switch (speed ?? SpeakingSpeed.slow) {
+      SpeakingSpeed.verySlow =>
+        OverallMeditationConfig.elevenLabsVerySlowSpeechRate,
+      SpeakingSpeed.slow => OverallMeditationConfig.elevenLabsSlowSpeechRate,
+      SpeakingSpeed.medium =>
+        OverallMeditationConfig.elevenLabsMediumSpeechRate,
+      SpeakingSpeed.fast => OverallMeditationConfig.elevenLabsFastSpeechRate,
+    };
+  }
 
   static String resolveVoiceId(UserAccount account) {
     final selected = account.elevenLabsVoiceId?.trim();
@@ -174,6 +189,10 @@ class ElevenLabsTtsProvider implements TtsProvider {
           body: jsonEncode({
             'text': text,
             'model_id': OverallMeditationConfig.elevenLabsModel,
+            // The speaking-speed preference used to reach Tencent and Kokoro
+            // but not ElevenLabs, so it silently did nothing on the default
+            // provider.
+            'voice_settings': {'speed': _speed},
           }),
         )
         .timeout(OverallMeditationConfig.elevenLabsRequestTimeout);

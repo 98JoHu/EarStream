@@ -1315,6 +1315,68 @@ void main() {
   });
 
   group('physiological-only baseline', () {
+    test('the regular baseline stays silent through the first blend step',
+        () async {
+      // With a prior available nothing is published until there is enough
+      // measurement to blend it with; publishing early would present a
+      // population estimate as a measurement.
+      final account = UserAccount(
+        age: 30,
+        gender: Gender.male,
+        fitnessLevel: FitnessLevel.moderate,
+      );
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        blendDemographicPrior: true,
+      );
+      final subscription = phase.activate(
+        PhaseContext(source: source, detector: detector),
+      );
+
+      source.add(const HeartRateSample(heartRate: 80, rmssd: 40));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(account.baselineHeartRate, isNull);
+      expect(account.baselineRMSSD, isNull);
+      // The measurement is still counted, so the phase can still advance.
+      expect(phase.canAdvance, isTrue);
+
+      await subscription.cancel();
+      detector.dispose();
+    });
+
+    test('a profile with no demographics keeps the purely measured baseline',
+        () async {
+      final account = UserAccount();
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        blendDemographicPrior: true,
+      );
+      final subscription = phase.activate(
+        PhaseContext(source: source, detector: detector),
+      );
+
+      source.add(const HeartRateSample(heartRate: 80, rmssd: 40));
+      await Future<void>.delayed(Duration.zero);
+
+      // No prior to blend, so this behaves exactly as it did before.
+      expect(account.baselineHeartRate, 80);
+      expect(account.baselineRMSSD, 40);
+
+      await subscription.cancel();
+      detector.dispose();
+    });
+
     test('profile estimates are not cached as measured baselines', () {
       final account = UserAccount(age: 20);
 
@@ -2887,8 +2949,12 @@ class _TestBiometricSource implements BiometricSource {
   int measurementStarts = 0;
   int finalizeCalls = 0;
   HeartRateSample? bestEstimate;
+  final ValueNotifier<bool> signalAliveNotifier = ValueNotifier(true);
   @override
   final bool suppressStressDetection;
+
+  @override
+  ValueListenable<bool> get signalAlive => signalAliveNotifier;
 
   _TestBiometricSource({this.suppressStressDetection = false});
 

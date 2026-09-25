@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../configs/bio_adaptive_mode_config.dart';
 import '../../model/measurement.dart';
+import '../../model/wearable_connection.dart';
 import '../../model/bio_adaptive_session_config.dart';
 import '../../model/meditation_analytics.dart';
 import '../../model/measurement_phase.dart'
@@ -127,6 +128,12 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
   }
 
   void _startEarstream(UserAccount account) {
+    // A session with no earbud attached measures nothing: the baseline can
+    // never complete, so it would sit at a full progress bar indefinitely.
+    if (!context.read<WearableConnection>().isConnected) {
+      _reportSensorUnavailable();
+      return;
+    }
     _measurement?.dispose();
     final measurement = Measurement.live(
       ppgSensor: widget.ppgSensor,
@@ -157,6 +164,17 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
       _measurement = null;
       _earstreamState = EarstreamState.idle;
     });
+  }
+
+  void _reportSensorUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'EarStreAM needs the OpenEarable connected. Reconnect it, then '
+          'start again.',
+        ),
+      ),
+    );
   }
 
   void _playRecordedStress(UserAccount account) {
@@ -236,6 +254,16 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
           Offstage(
             offstage: completed,
             child: BioAdaptiveContent(measurement: measurement),
+          ),
+        if (isRunning && measurement != null && !completed)
+          ValueListenableBuilder<bool>(
+            valueListenable: measurement.sensorSignalAlive,
+            builder: (context, alive, _) => alive
+                ? const SizedBox.shrink()
+                : const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: SensorSignalLostBanner(),
+                  ),
           ),
         if (isRunning && !completed && !userAccount.hasValidDeepseekKey) ...[
           SizedBox(height: 16),
@@ -1020,6 +1048,56 @@ class _HeartRateChartState extends State<HeartRateChart> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when sensor samples stop arriving mid-session.
+///
+/// Without it a dropped earbud looks identical to a weak pulse: the phase
+/// progress simply stops advancing, with nothing to say why.
+class SensorSignalLostBanner extends StatelessWidget {
+  const SensorSignalLostBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      color: theme.colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              Icons.sensors_off_outlined,
+              color: theme.colorScheme.onErrorContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No sensor signal',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                  Text(
+                    'EarStreAM has stopped receiving data from the '
+                    'OpenEarable. Check that it is worn and connected; '
+                    'measurement continues automatically once samples return.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

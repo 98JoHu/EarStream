@@ -7,6 +7,22 @@ abstract final class BioAdaptiveModeConfig {
   static const bool includeCalibration = true;
   static const Duration calibrationDuration = Duration(seconds: 30);
   static const Duration baselineDuration = Duration(minutes: 5);
+
+  /// Blends the profile's population-level estimate into the measured baseline
+  /// while too little has been measured to stand on its own.
+  ///
+  /// Nothing is published before [demographicBlendStart]: there is not yet
+  /// enough measurement to blend. From there the prior's share falls linearly
+  /// from [demographicBlendStartWeight] to [demographicBlendEndWeight] at
+  /// [demographicBlendEnd], i.e. 70/30 after one minute through 30/70 after
+  /// five. It applies only when the profile carries age, gender and fitness
+  /// level; otherwise the baseline stays purely measured. The conference demo
+  /// keeps a sensor-only baseline.
+  static const bool blendDemographicBaseline = true;
+  static const Duration demographicBlendStart = Duration(minutes: 1);
+  static const Duration demographicBlendEnd = Duration(minutes: 5);
+  static const double demographicBlendStartWeight = 0.7;
+  static const double demographicBlendEndWeight = 0.3;
   static const double? stressThresholdOverride = null;
   // Null keeps regular segments narration-driven instead of applying the
   // demo's 30-second target.
@@ -105,6 +121,12 @@ abstract final class BioAdaptiveModeConfig {
   static const Duration processorWarmupDuration = Duration(seconds: 10);
   static const Duration metricEmitInterval = Duration(seconds: 3);
   static const Duration metricStaleAfter = Duration(seconds: 12);
+
+  /// How long the PPG stream may go silent before the session reports that it
+  /// has lost the sensor. At 200 Hz a gap this long is never signal quality;
+  /// it means the earbud, the link or the sensor has gone away.
+  static const Duration sensorSignalTimeout = Duration(seconds: 5);
+  static const Duration sensorSignalCheckInterval = Duration(seconds: 1);
   static const Duration phaseProgressUpdateInterval =
       Duration(milliseconds: 100);
 

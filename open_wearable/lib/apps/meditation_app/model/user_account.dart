@@ -354,12 +354,38 @@ class UserAccount {
     return account;
   }
 
+  /// The population-level estimate for this profile, or null when the profile
+  /// is not complete enough to produce one.
+  ///
+  /// Requires age, gender and fitness level together: each contributes an
+  /// additive adjustment, so a missing field silently leaves a generic
+  /// population default in its place. That is fine as a last-resort fallback
+  /// for [baselineBiometrics], but not as a prior that the measured baseline
+  /// is deliberately blended with.
+  (int heartRate, double rmssd)? get demographicBaseline {
+    if (age == null || gender == null || fitnessLevel == null) return null;
+    return _demographicEstimate();
+  }
+
   (int heartRate, double rmssd) get baselineBiometrics {
     // if values have been determined return them
     if (baselineHeartRate != null && baselineRMSSD != null) {
       return (baselineHeartRate!, baselineRMSSD!);
     }
 
+    final (defaultHeartRate, defaultRMSSD) = _demographicEstimate();
+
+    // Demographic defaults are estimates for contexts that have no measured
+    // baseline (for example a timed session). Do not persist them as if they
+    // were sensor measurements; doing so would also make later profile edits
+    // return stale estimates.
+    return (
+      baselineHeartRate ?? defaultHeartRate,
+      baselineRMSSD ?? defaultRMSSD,
+    );
+  }
+
+  (int heartRate, double rmssd) _demographicEstimate() {
     // refer to the default values if not set
     int defaultHeartRate = 72;
     double defaultRMSSD = 42.0;
@@ -435,14 +461,7 @@ class UserAccount {
       OverallMeditationConfig.minimumProfileBaselineRmssd,
     );
 
-    // Demographic defaults are estimates for contexts that have no measured
-    // baseline (for example a timed session). Do not persist them as if they
-    // were sensor measurements; doing so would also make later profile edits
-    // return stale estimates.
-    return (
-      baselineHeartRate ?? defaultHeartRate,
-      baselineRMSSD ?? defaultRMSSD,
-    );
+    return (defaultHeartRate, defaultRMSSD);
   }
 
   /// Thresholds derived from the baseline biometrics and a sensitivity

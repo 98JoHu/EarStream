@@ -8,6 +8,7 @@ import '../model/user_account.dart';
 import '../model/meditation_analytics.dart';
 import '../model/kokoro_tts_engine.dart';
 import '../model/screen_wakelock.dart';
+import '../model/wearable_connection.dart';
 import '../model/service_connection_manager.dart';
 import 'pages/drawer_page.dart';
 import 'pages/meditation_page.dart';
@@ -42,18 +43,20 @@ class _MeditationViewState extends State<MeditationView> {
   MeditationMode? _selectedMode;
   late final UserAccount _userAccount;
   late final MeditationAnalyticsStore _analyticsStore;
+  late final WearableConnection _wearableConnection;
 
   @override
   void initState() {
     super.initState();
     _userAccount = UserAccount.fromEnvironment(dotenv.env);
     _analyticsStore = MeditationAnalyticsStore()..load();
+    _wearableConnection = WearableConnection(widget.wearable);
     // A session waits minutes on DeepSeek and text-to-speech with no touch
     // input; Android suspends those requests once the screen turns off.
     unawaited(ScreenWakelock.acquire());
-    // Cheap check for the bundled local voice, so it can be selected without
-    // first opening the API Keys page. It does not unpack anything.
-    unawaited(KokoroTtsManager.probe(_userAccount));
+    // Checks for the bundled local voice, and loads it here rather than on the
+    // first narration when it is the selected one.
+    unawaited(KokoroTtsManager.prewarm(_userAccount));
   }
 
   List<DrawerPage> get _pages => [
@@ -65,6 +68,7 @@ class _MeditationViewState extends State<MeditationView> {
           userAccount: _userAccount,
           analyticsStore: _analyticsStore,
           wearable: widget.wearable,
+          wearableConnection: _wearableConnection,
           selectedMode: _selectedMode,
           onModeSelected: (mode) => setState(() => _selectedMode = mode),
         ),
@@ -83,6 +87,7 @@ class _MeditationViewState extends State<MeditationView> {
     // released only on the way out. A no-op when it was never started.
     unawaited(KokoroTtsEngine.shutdownShared());
     _analyticsStore.dispose();
+    _wearableConnection.dispose();
     super.dispose();
   }
 

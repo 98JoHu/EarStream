@@ -6,6 +6,10 @@ abstract final class DemoModeConfig {
   static const bool includeCalibration = true;
   static const Duration calibrationDuration = Duration(seconds: 30);
   static const Duration baselineDuration = Duration(seconds: 30);
+  // The demo baseline stays sensor-only: it is 30 seconds long, so the
+  // blending schedule would never leave its first step, and the attendee
+  // account deliberately carries no profile to draw a prior from.
+  static const bool blendDemographicBaseline = false;
   static const double stressThreshold = 0.03;
   static const Duration metricWindowDuration = Duration(seconds: 30);
   static const Duration hrvMinimumWindow = Duration(seconds: 30);
