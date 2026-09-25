@@ -74,20 +74,34 @@ abstract final class OverallMeditationConfig {
   static const String tencentCodec = 'mp3';
   static const bool tencentEnableSubtitle = false;
 
-  // Kokoro-82M, run locally through sherpa-onnx. Unlike the two cloud voices
-  // this needs no network and no account, which is what makes it usable where
-  // the cloud endpoints are unreachable. The model is a bundled Android asset
-  // that is copied to app storage once; see the in-app README.
+  // Kokoro, run locally through sherpa-onnx. Unlike the two cloud voices this
+  // needs no network and no account, which is what makes it usable where the
+  // cloud endpoints are unreachable. The model is a bundled Android asset that
+  // is copied to app storage once; see the in-app README.
+  //
+  // v1.0 rather than the earlier v0.19: same two voices, but trained on
+  // several hundred hours instead of under a hundred, which is what the
+  // remaining synthetic edge came from.
   static const String kokoroModelFileName = 'model.onnx';
   static const String kokoroVoicesFileName = 'voices.bin';
   static const String kokoroTokensFileName = 'tokens.txt';
   static const String kokoroEspeakDataDirectoryName = 'espeak-ng-data';
-  // Speaker ids within kokoro-en-v0_19. The order is the model's own voice
-  // list, so these move if the model directory is swapped for another build.
+
+  /// Word-to-phoneme dictionary shipped with the model, consulted before
+  /// espeak-ng's own letter-to-sound rules.
+  ///
+  /// The British list, to match the two British voices. The model also ships
+  /// American and Chinese lists; the narration is English-only by prompt rule,
+  /// so neither is loaded.
+  static const String kokoroLexiconFileName = 'lexicon-gb-en.txt';
+
+  /// Speaker ids within kokoro-multi-lang-v1_0. They are positions in that
+  /// model's own voice list and move if the model is swapped: the same two
+  /// voices were 8 and 10 in the older kokoro-en-v0_19.
   static const String kokoroFemaleVoiceName = 'bf_isabella';
-  static const int kokoroFemaleSpeakerId = 8;
+  static const int kokoroFemaleSpeakerId = 22;
   static const String kokoroMaleVoiceName = 'bm_lewis';
-  static const int kokoroMaleSpeakerId = 10;
+  static const int kokoroMaleSpeakerId = 27;
   static const int kokoroThreadCount = 4;
 
   /// Multiplies pauses after synthesis: 1.0 leaves them as the model produced
@@ -99,9 +113,13 @@ abstract final class OverallMeditationConfig {
   /// pauses are the point. This is the knob for narration rhythm; Kokoro has
   /// no pitch or style control to go with it.
   static const double kokoroSilenceScale = 1.5;
-  // Kokoro synthesizes one sentence at a time internally; batching a couple of
-  // them cuts the per-call overhead without a large latency step.
-  static const int kokoroMaxSentencesPerBatch = 2;
+
+  /// sherpa-onnx ignores this for Kokoro: its batch size is hard-coded to one,
+  /// and anything other than 1 only earns a warning in the log. Kept at 1 so
+  /// the configuration says what actually happens. It also means every
+  /// sentence already gets the style row matched to its own token length,
+  /// which is the per-sentence prosody this was once expected to buy.
+  static const int kokoroMaxSentencesPerBatch = 1;
   // Kokoro's own speed factor, where 1.0 is the model's natural pace. It is a
   // multiplier, not the normalized 0-1 scale flutter_tts uses.
   //

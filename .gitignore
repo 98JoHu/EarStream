@@ -169,4 +169,4 @@ CLAUDE.md
 # Bundled on-device Kokoro voice model (~340 MB, fetched from the sherpa-onnx
 # releases). See open_wearable/lib/apps/meditation_app/README.md; drop the
 # extracted directory here before building the demo APK.
-open_wearable/android/app/src/main/assets/kokoro-en-v0_19/
+open_wearable/android/app/src/main/assets/kokoro-multi-lang-v1_0/

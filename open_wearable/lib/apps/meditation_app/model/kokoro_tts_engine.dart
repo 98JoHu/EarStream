@@ -326,6 +326,7 @@ sherpa.OfflineTtsConfig configFor(String directory) {
         voices: at(OverallMeditationConfig.kokoroVoicesFileName),
         tokens: at(OverallMeditationConfig.kokoroTokensFileName),
         dataDir: at(OverallMeditationConfig.kokoroEspeakDataDirectoryName),
+        lexicon: at(OverallMeditationConfig.kokoroLexiconFileName),
       ),
       numThreads: OverallMeditationConfig.kokoroThreadCount,
       debug: false,

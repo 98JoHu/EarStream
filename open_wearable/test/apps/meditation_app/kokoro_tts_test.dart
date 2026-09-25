@@ -98,11 +98,14 @@ void main() {
 
   group('voice and speed mapping', () {
     test('the two configured voices are the ones the model ships', () {
-      // Speaker ids are positions in kokoro-en-v0_19's own voice list.
+      // Positions in kokoro-multi-lang-v1_0's own voice list, taken from the
+      // sherpa-onnx generator that builds voices.bin. They differ from the
+      // 8 and 10 the same two voices had in kokoro-multi-lang-v1_0, so a model swap
+      // that forgets them would silently pick a different speaker.
       expect(OverallMeditationConfig.kokoroFemaleVoiceName, 'bf_isabella');
-      expect(OverallMeditationConfig.kokoroFemaleSpeakerId, 8);
+      expect(OverallMeditationConfig.kokoroFemaleSpeakerId, 22);
       expect(OverallMeditationConfig.kokoroMaleVoiceName, 'bm_lewis');
-      expect(OverallMeditationConfig.kokoroMaleSpeakerId, 10);
+      expect(OverallMeditationConfig.kokoroMaleSpeakerId, 27);
     });
 
     test('the default voice setting picks the speaker', () async {
@@ -160,15 +163,17 @@ void main() {
 
   group('engine configuration', () {
     test('points at the files the model directory actually contains', () {
-      final config = configFor('/data/user/0/app/files/kokoro-en-v0_19');
+      final config = configFor('/data/user/0/app/files/kokoro-multi-lang-v1_0');
 
       expect(config.model.kokoro.model, endsWith('/model.onnx'));
       expect(config.model.kokoro.voices, endsWith('/voices.bin'));
       expect(config.model.kokoro.tokens, endsWith('/tokens.txt'));
       expect(config.model.kokoro.dataDir, endsWith('/espeak-ng-data'));
+      // The British list, matching the two British voices.
+      expect(config.model.kokoro.lexicon, endsWith('/lexicon-gb-en.txt'));
       expect(
         config.model.kokoro.model,
-        startsWith('/data/user/0/app/files/kokoro-en-v0_19'),
+        startsWith('/data/user/0/app/files/kokoro-multi-lang-v1_0'),
       );
       // Only the Kokoro family is configured.
       expect(config.model.vits.model, isEmpty);
@@ -304,7 +309,7 @@ void main() {
         calls.add(method);
         return switch (method) {
           'status' => const {'bundled': true},
-          'install' => const {'directory': '/data/app/kokoro-en-v0_19'},
+          'install' => const {'directory': '/data/app/kokoro-multi-lang-v1_0'},
           _ => const {},
         };
       };
@@ -312,7 +317,7 @@ void main() {
       expect(await KokoroModelInstaller.isBundled(), isTrue);
       expect(
         await KokoroModelInstaller.ensureInstalled(),
-        '/data/app/kokoro-en-v0_19',
+        '/data/app/kokoro-multi-lang-v1_0',
       );
       expect(calls, ['status', 'install']);
     });

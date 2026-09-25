@@ -742,10 +742,20 @@ the TTS Provider dropdown on the **API Keys** page. It needs no API key, no
 account, and no network request, which is what makes it usable where the cloud
 endpoints are unreachable.
 
-- Model: `kokoro-en-v0_19` (Kokoro-82M) run through `sherpa_onnx`.
-- Voices: `bf_isabella` (speaker 8) and `bm_lewis` (speaker 10), chosen by the
+- Model: `kokoro-multi-lang-v1_0` (Kokoro v1.0, 82M) run through
+  `sherpa_onnx`. The earlier `kokoro-en-v0_19` was trained on under a hundred
+  hours against v1.0's several hundred, which is where its remaining synthetic
+  edge came from; v1.0 keeps both voices.
+- Voices: `bf_isabella` (speaker 22) and `bm_lewis` (speaker 27), chosen by the
   **Default Voice** setting. The speaker ids are positions in that model's own
-  voice list and move if the model is swapped for another build.
+  voice list and move if the model is swapped - the same two voices were 8 and
+  10 under v0.19.
+- Pronunciation uses the bundled `lexicon-gb-en.txt`, matching the British
+  voices, with espeak-ng as the fallback for anything not in it. The model also
+  ships American and Chinese lexicons, a Chinese dictionary and Chinese
+  normalisation FSTs; the narration is English-only by prompt rule, so none of
+  them are loaded. They can be deleted from the asset directory to save about
+  22 MB, and a re-extract restores them.
 - Speaking speed maps onto Kokoro's own multiplier, where 1.0 is the model's
   natural pace. This is not the normalized 0.0-1.0 scale `flutter_tts` uses.
   All four settings sit below 1.0 (0.50/0.60/0.70/0.80): Kokoro's natural pace
@@ -782,12 +792,13 @@ fall back to the device voice exactly as they do for an unverified API key.
 ```powershell
 # From the repository root. Requires the tar bundled with Windows 11.
 curl.exe -L -o kokoro.tar.bz2 `
-  https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
 tar -xf kokoro.tar.bz2 -C open_wearable/android/app/src/main/assets/
 ```
 
-That leaves `android/app/src/main/assets/kokoro-en-v0_19/` containing
-`model.onnx`, `voices.bin`, `tokens.txt`, and `espeak-ng-data/`. Rebuild the
+That leaves `android/app/src/main/assets/kokoro-multi-lang-v1_0/` containing
+`model.onnx`, `voices.bin`, `tokens.txt`, `lexicon-gb-en.txt`, and
+`espeak-ng-data/`. Rebuild the
 APK, then press **Prepare On-Device Voice** on the API Keys page once per
 phone.
 

@@ -38,7 +38,7 @@ class KokoroModelInstaller(
      * absolute path, and the file names within it live in
      * OverallMeditationConfig.
      */
-    private const val MODEL_DIRECTORY = "kokoro-en-v0_19"
+    private const val MODEL_DIRECTORY = "kokoro-multi-lang-v1_0"
 
     private const val COPY_BUFFER_BYTES = 256 * 1024
 
@@ -47,7 +47,7 @@ class KokoroModelInstaller(
      * reinstall after the bundled model is replaced with a different one.
      */
     private const val COMPLETION_MARKER = ".installed"
-    private const val MARKER_CONTENTS = "kokoro-en-v0_19/1"
+    private const val MARKER_CONTENTS = "kokoro-multi-lang-v1_0/1"
   }
 
   private val worker = Executors.newSingleThreadExecutor()
