@@ -1187,7 +1187,9 @@ void main() {
         ),
       );
 
-      expect(find.text('Play Recorded Stress'), findsOneWidget);
+      expect(find.text('Simulate Stress'), findsOneWidget);
+      // Earlier names for the same control, kept as regression guards.
+      expect(find.text('Play Recorded Stress'), findsNothing);
       expect(find.text('Play Stress'), findsNothing);
     });
   });

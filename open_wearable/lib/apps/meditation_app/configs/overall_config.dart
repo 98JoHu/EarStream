@@ -123,16 +123,19 @@ abstract final class OverallMeditationConfig {
   // Kokoro's own speed factor, where 1.0 is the model's natural pace. It is a
   // multiplier, not the normalized 0-1 scale flutter_tts uses.
   //
-  // The whole scale sits below 1.0 on purpose: Kokoro's natural pace is a
-  // reading pace, which is too brisk for guided meditation. These are the
-  // original ratios scaled by 0.7 after listening on the demo phone, so the
-  // relative steps between the four settings are unchanged. "Very slow" would
-  // land at 0.49; it is held at 0.50, the lowest rate Kokoro is normally
-  // driven at.
-  static const double kokoroVerySlowSpeechRate = 0.50;
-  static const double kokoroSlowSpeechRate = 0.60;
-  static const double kokoroMediumSpeechRate = 0.70;
-  static const double kokoroFastSpeechRate = 0.80;
+  // Meditation pacing is carried by [kokoroSilenceScale], not by dragging the
+  // words out. An earlier pass pushed this scale far below 1.0 while pauses
+  // were still being compressed to a fifth of their length; once the pauses
+  // were restored the two compounded and the delivery crawled. Stretching
+  // Kokoro's duration predictor that far also smears vowels, which reads as
+  // synthetic - the opposite of what the slow rate was for.
+  //
+  // Same shape as the ElevenLabs and Tencent mappings: medium is the voice's
+  // natural pace, slow sits below it, fast above.
+  static const double kokoroVerySlowSpeechRate = 0.75;
+  static const double kokoroSlowSpeechRate = 0.85;
+  static const double kokoroMediumSpeechRate = 1.0;
+  static const double kokoroFastSpeechRate = 1.10;
   static const Duration kokoroModelInstallTimeout = Duration(minutes: 10);
   static const Duration kokoroEngineStartTimeout = Duration(minutes: 2);
 

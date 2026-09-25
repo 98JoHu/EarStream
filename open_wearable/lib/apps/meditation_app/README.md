@@ -131,7 +131,7 @@ Activity handling below.
 
 ### Recorded stress control
 
-The regular mode exposes a **Play Recorded Stress** control for development
+The regular mode exposes a **Simulate Stress** control for development
 and demonstration. It uses `RecordedStressBiometricSource`, not randomly
 generated sensor values and not the live sensor stream.
 

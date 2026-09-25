@@ -145,15 +145,17 @@ void main() {
         OverallMeditationConfig.kokoroFastSpeechRate,
       );
 
-      // The four settings stay ordered and stay below Kokoro's natural pace,
-      // which is a reading pace and too brisk for guided meditation.
+      // The four settings stay ordered and stay in the range Kokoro is
+      // sensibly driven at. Pacing a meditation is the silence scale's job;
+      // stretching the duration predictor far below 1.0 smears vowels.
       final ordered = SpeakingSpeed.values.map((s) => speeds[s]!).toList();
       for (var i = 1; i < ordered.length; i++) {
         expect(ordered[i], greaterThan(ordered[i - 1]));
       }
-      expect(ordered.last, lessThan(1.0));
-      // Kokoro is not normally driven below this.
-      expect(ordered.first, greaterThanOrEqualTo(0.5));
+      expect(ordered.first, greaterThanOrEqualTo(0.7));
+      expect(ordered.last, lessThanOrEqualTo(1.2));
+      // Medium is the voice's natural pace, as on the other providers.
+      expect(speeds[SpeakingSpeed.medium], 1.0);
 
       // No explicit choice keeps the recommended slow pace.
       final unset = await _synthesizeWith();
