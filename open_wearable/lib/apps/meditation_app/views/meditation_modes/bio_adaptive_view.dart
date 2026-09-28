@@ -114,6 +114,11 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
   EarstreamState _earstreamState = EarstreamState.idle;
   Measurement? _measurement;
 
+  /// Stands in for a meditation's phase while none is running, so the phase
+  /// listener above never has to be added or removed from the tree.
+  final ValueNotifier<MeditationPhase> _idleMeditationPhase =
+      ValueNotifier(MeditationPhase.preparing);
+
   @override
   void initState() {
     super.initState();
@@ -203,6 +208,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _measurement?.dispose();
+    _idleMeditationPhase.dispose();
     super.dispose();
   }
 
@@ -212,28 +218,35 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
         widget.userAccount ?? context.read<UserAccount>();
     final measurement = _measurement;
 
-    if (_earstreamState != EarstreamState.running || measurement == null) {
-      return _layout(userAccount, measurement, completed: false);
+    if (measurement == null) {
+      return _layout(userAccount, null, completed: false);
     }
 
-    // A finished meditation takes over the view, matching the
-    // meditation-only demo: the success card is the result of the session, not
-    // a footnote under a measurement that is still scrolling past above it.
+    // Both listeners stay in the tree for the whole session, including while
+    // no meditation is running.
+    //
+    // They used to be conditional: the Column was returned directly with no
+    // meditation, and wrapped in a phase listener once one started. That
+    // changed the widget type at this slot, so Flutter discarded the element
+    // and rebuilt the subtree from scratch every time a meditation began or
+    // ended - taking the heart-rate chart's accumulated history with it, and
+    // putting each metric tile back into its waiting state, which is what
+    // briefly showed the baseline again instead of the live value.
+    //
+    // A finished meditation takes over the view, matching the meditation-only
+    // demo: the success card is the result of the session, not a footnote
+    // under a measurement that is still scrolling past above it.
     return ValueListenableBuilder<BiometricMeditation?>(
       valueListenable: measurement.meditation,
-      builder: (context, meditation, child) {
-        if (meditation == null) {
-          return _layout(userAccount, measurement, completed: false);
-        }
-        return ValueListenableBuilder<MeditationPhase>(
-          valueListenable: meditation.phase,
-          builder: (context, phase, child) => _layout(
-            userAccount,
-            measurement,
-            completed: phase == MeditationPhase.finished,
-          ),
-        );
-      },
+      builder: (context, meditation, child) =>
+          ValueListenableBuilder<MeditationPhase>(
+        valueListenable: meditation?.phase ?? _idleMeditationPhase,
+        builder: (context, phase, child) => _layout(
+          userAccount,
+          measurement,
+          completed: meditation != null && phase == MeditationPhase.finished,
+        ),
+      ),
     );
   }
 
@@ -247,18 +260,20 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (isRunning && measurement != null)
+        if (measurement != null)
           // Hidden rather than removed: the chart's accumulated history and
-          // its stream subscription survive the card, so dismissing it returns
-          // to a live view instead of an empty one.
+          // its stream subscription survive the card and a pause, so both
+          // return to a live view instead of an empty one.
           Offstage(
-            offstage: completed,
+            offstage: completed || !isRunning,
             child: BioAdaptiveContent(measurement: measurement),
           ),
-        if (isRunning && measurement != null && !completed)
+        if (measurement != null)
+          // Mounted on the same condition as the content above, so appearing
+          // or clearing never shifts the widgets after it.
           ValueListenableBuilder<bool>(
             valueListenable: measurement.sensorSignalAlive,
-            builder: (context, alive, _) => alive
+            builder: (context, alive, _) => alive || completed || !isRunning
                 ? const SizedBox.shrink()
                 : const Padding(
                     padding: EdgeInsets.only(top: 16),
@@ -876,6 +891,25 @@ class _HeartRateChartState extends State<HeartRateChart> {
   @override
   void initState() {
     super.initState();
+    _subscribeToStream();
+  }
+
+  @override
+  void didUpdateWidget(HeartRateChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Identity, not equality: `Measurement` exposes its metric streams as
+    // `late final` for exactly this reason. A getter that re-mapped per call
+    // would hand over a new object on every rebuild and clear the trace each
+    // time.
+    if (identical(oldWidget.heartRateStream, widget.heartRateStream)) return;
+    // A different stream means a different measurement at the same place in
+    // the tree - starting the recorded-stress playback replaces one mid
+    // session. Without this the chart kept listening to the disposed source
+    // and froze on the previous session's trace.
+    setState(() {
+      _spots.clear();
+      _startTime = null;
+    });
     _subscribeToStream();
   }
 

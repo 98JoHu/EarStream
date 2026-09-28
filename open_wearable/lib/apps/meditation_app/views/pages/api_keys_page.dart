@@ -95,7 +95,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Select the male or female voice configured in the app. An explicitly selected ElevenLabs voice overrides this default.',
+                'Select whether the default voice configured in the app should be male or female.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 8),

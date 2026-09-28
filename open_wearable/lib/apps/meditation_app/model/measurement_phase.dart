@@ -33,6 +33,15 @@ sealed class MonitoringPhase {
     PhaseContext ctx,
   );
 
+  /// Called when the session is paused and resumed.
+  ///
+  /// [activate] runs again on resume, so a phase that keeps a clock of its own
+  /// cannot tell the two apart from there; these hooks let it stay aligned
+  /// with the time it was actually measuring.
+  void onPaused() {}
+
+  void onResumed() {}
+
   void complete(PhaseContext ctx) {}
 }
 
@@ -166,9 +175,10 @@ class BaselinePhase extends MonitoringPhase {
     PhaseContext ctx,
   ) {
     _source = ctx.source;
-    _elapsed
-      ..reset()
-      ..start();
+    // Started, not restarted: the controller calls activate() again on every
+    // resume, and resetting here sent the blending schedule back to its first
+    // step each time the session was paused.
+    _elapsed.start();
     ctx.source.beginMeasurement();
     return ctx.source.biometrics.listen((data) {
       _heartRateTotal += data.heartRate;
@@ -182,6 +192,16 @@ class BaselinePhase extends MonitoringPhase {
       _publishBaseline();
     });
   }
+
+  @override
+  void onPaused() => _elapsed.stop();
+
+  @override
+  void onResumed() => _elapsed.start();
+
+  /// The measuring time behind the blending schedule, excluding pauses.
+  @visibleForTesting
+  Duration get elapsedMeasuring => _elapsed.elapsed;
 
   @override
   void complete(PhaseContext ctx) {
@@ -257,10 +277,12 @@ class MonitoringPhaseController {
     _stopwatch.stop();
     _ticker?.cancel();
     _phaseSub?.cancel();
+    current.onPaused();
   }
 
   void resume() {
     _stopwatch.start();
+    current.onResumed();
     _activate();
     if (current.duration != null) _startTicker();
   }

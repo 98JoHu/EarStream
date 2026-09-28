@@ -1352,6 +1352,56 @@ void main() {
       detector.dispose();
     });
 
+    test('pausing the session does not restart the blending schedule',
+        () async {
+      // The controller calls activate() again on resume, so a clock reset
+      // there sent the schedule back to its first step - and with it the
+      // published baseline - every time the user paused.
+      final account = UserAccount(
+        age: 30,
+        gender: Gender.male,
+        fitnessLevel: FitnessLevel.moderate,
+      );
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      final phase = BaselinePhase(
+        userAccount: account,
+        blendDemographicPrior: true,
+      );
+      final first = phase.activate(
+        PhaseContext(source: source, detector: detector),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      final measuredBeforePause = phase.elapsedMeasuring;
+      expect(measuredBeforePause, greaterThan(Duration.zero));
+
+      phase.onPaused();
+      final measuredWhilePaused = phase.elapsedMeasuring;
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(
+        phase.elapsedMeasuring,
+        measuredWhilePaused,
+        reason: 'a pause is not measuring time',
+      );
+
+      phase.onResumed();
+      await first.cancel();
+      final second = phase.activate(
+        PhaseContext(source: source, detector: detector),
+      );
+      expect(
+        phase.elapsedMeasuring,
+        greaterThanOrEqualTo(measuredBeforePause),
+        reason: 'resuming continues the schedule rather than restarting it',
+      );
+
+      await second.cancel();
+      detector.dispose();
+    });
+
     test('a profile with no demographics keeps the purely measured baseline',
         () async {
       final account = UserAccount();

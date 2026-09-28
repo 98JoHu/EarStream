@@ -414,7 +414,13 @@ class Meditation {
               ]);
               continue;
             }
-            final segment = await _script!.nextSegment(readCurrentBiometrics());
+            // _endRun clears the script when the session finishes, and the
+            // producer can still be between checks at that moment. Ending the
+            // loop is the honest response; asserting non-null here turned a
+            // normal shutdown into a caught TypeError.
+            final script = _script;
+            if (script == null) break;
+            final segment = await script.nextSegment(readCurrentBiometrics());
             if (segment == null) break;
             if (isStopped || _isDisposed || stopProducing.isCompleted) break;
             buffer.add(await _prepareSegment(segment));
