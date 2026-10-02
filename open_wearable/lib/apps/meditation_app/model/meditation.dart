@@ -313,11 +313,23 @@ class Meditation {
       if (isPaused.value) await _waitForResume();
       if (isStopped) return;
 
-      diagnosticEventSink?.call('narration_requested', const {});
+      diagnosticEventSink?.call('narration_requested', {
+        'characters': narration.text.length,
+        if (narration.audioDuration != null)
+          'audio_ms': narration.audioDuration!.inMilliseconds,
+      });
       await _recordAudioRoute('audio_route_at_narration');
+      final startedAt = DateTime.now();
       try {
         await ttsService.play(narration);
-        diagnosticEventSink?.call('narration_finished', const {});
+        // Played noticeably shorter than the audio it was given means playback
+        // was cut off; matching durations mean the narration really did end
+        // where it sounded like it ended.
+        diagnosticEventSink?.call('narration_finished', {
+          'played_ms': DateTime.now().difference(startedAt).inMilliseconds,
+          if (narration.audioDuration != null)
+            'audio_ms': narration.audioDuration!.inMilliseconds,
+        });
       } catch (error) {
         diagnosticEventSink?.call('narration_failed', {
           'error_type': error.runtimeType.toString(),

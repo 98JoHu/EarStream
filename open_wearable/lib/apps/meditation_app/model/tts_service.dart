@@ -116,8 +116,13 @@ class KokoroTtsProvider implements TtsProvider {
       speakerId: _speakerId,
       speed: _speed,
     );
+    _lastAudioDuration = wavDuration(wav);
     return [BytesSource(wav, mimeType: 'audio/wav')];
   }
+
+  /// The length of the audio produced by the most recent [synthesize].
+  Duration? get lastAudioDuration => _lastAudioDuration;
+  Duration? _lastAudioDuration;
 
   static double _kokoroSpeed(SpeakingSpeed? speed) {
     return switch (speed ?? SpeakingSpeed.slow) {
@@ -229,7 +234,20 @@ class PreparedNarration {
   final String text;
   final List<Source>? sources;
 
-  const PreparedNarration({required this.text, this.sources});
+  /// How much audio was synthesized, when the provider can tell.
+  ///
+  /// Only the local voice knows: it hands over raw samples, so the length is
+  /// arithmetic. The cloud providers return encoded audio whose duration is
+  /// not known until it is decoded, and the device fallback never produces a
+  /// buffer at all. Used to tell a narration that was cut short from one whose
+  /// text simply ended abruptly.
+  final Duration? audioDuration;
+
+  const PreparedNarration({
+    required this.text,
+    this.sources,
+    this.audioDuration,
+  });
 
   bool get isDeviceSpoken => sources == null;
 }
@@ -309,7 +327,13 @@ class TtsService {
         if (sources.isEmpty) {
           throw StateError('The voice service returned no audio.');
         }
-        return PreparedNarration(text: text, sources: sources);
+        final provider = _provider;
+        return PreparedNarration(
+          text: text,
+          sources: sources,
+          audioDuration:
+              provider is KokoroTtsProvider ? provider.lastAudioDuration : null,
+        );
       } catch (error) {
         lastError = error;
         debugPrint(

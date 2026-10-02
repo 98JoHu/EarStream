@@ -336,6 +336,18 @@ sherpa.OfflineTtsConfig configFor(String directory) {
   );
 }
 
+/// The playing time of a 16-bit mono PCM WAV produced by [encodeWav].
+Duration wavDuration(Uint8List wav) {
+  if (wav.length <= _wavHeaderBytes) return Duration.zero;
+  final sampleRate =
+      ByteData.view(wav.buffer, wav.offsetInBytes).getUint32(24, Endian.little);
+  if (sampleRate <= 0) return Duration.zero;
+  final samples = (wav.length - _wavHeaderBytes) ~/ 2;
+  return Duration(microseconds: (samples * 1000000 / sampleRate).round());
+}
+
+const int _wavHeaderBytes = 44;
+
 /// Wraps float samples as a 16-bit PCM WAV, the form audioplayers can play
 /// from memory without a temporary file.
 @visibleForTesting
@@ -343,7 +355,7 @@ Uint8List encodeWav(Float32List samples, int sampleRate) {
   const channels = 1;
   const bitsPerSample = 16;
   final dataLength = samples.length * 2;
-  final bytes = ByteData(44 + dataLength);
+  final bytes = ByteData(_wavHeaderBytes + dataLength);
 
   void writeTag(int offset, String tag) {
     for (var i = 0; i < tag.length; i++) {

@@ -389,6 +389,27 @@ void main() {
     });
   });
 
+  group('audio duration', () {
+    test('is read back from the encoded wav', () {
+      // Used to tell a narration that was cut off from one whose text simply
+      // ended where it sounded like it ended.
+      final oneSecond = encodeWav(Float32List(24000), 24000);
+      expect(wavDuration(oneSecond).inMilliseconds, 1000);
+
+      final half = encodeWav(Float32List(12000), 24000);
+      expect(wavDuration(half).inMilliseconds, 500);
+
+      // A non-standard rate is taken from the header, not assumed.
+      final slower = encodeWav(Float32List(16000), 16000);
+      expect(wavDuration(slower).inMilliseconds, 1000);
+    });
+
+    test('an empty result has no duration', () {
+      expect(wavDuration(encodeWav(Float32List(0), 24000)), Duration.zero);
+      expect(wavDuration(Uint8List(0)), Duration.zero);
+    });
+  });
+
   group('wav encoding', () {
     test('writes a header audioplayers can read', () {
       final wav = encodeWav(Float32List.fromList([0, 0.5, -0.5]), 24000);
