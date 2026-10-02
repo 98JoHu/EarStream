@@ -1599,6 +1599,24 @@ void main() {
   });
 
   group('meditation session presentation', () {
+    test('the HRV display stream skips samples without an RMSSD', () async {
+      final measurement = Measurement.recordedStress(
+        userAccount: UserAccount(),
+        restingActivityLevel: ActivityLevel.resting,
+      );
+      addTearDown(measurement.dispose);
+
+      final seen = <String>[];
+      final subscription = measurement.rmssdDisplay.listen(seen.add);
+      addTearDown(subscription.cancel);
+
+      // The tile shows one decimal, and a sample with no RMSSD must not clear
+      // the last live reading by arriving as an empty value.
+      expect(seen, isEmpty);
+      await Future<void>.delayed(Duration.zero);
+      expect(seen.every((value) => value.contains('.')), isTrue);
+    });
+
     test('metric streams keep their identity across rebuilds', () {
       // StreamBuilder compares stream instances. A getter that re-mapped on
       // every build made it resubscribe and flash back to the baseline label.
@@ -1610,8 +1628,15 @@ void main() {
 
       expect(identical(measurement.heartRate, measurement.heartRate), isTrue);
       expect(identical(measurement.rmssd, measurement.rmssd), isTrue);
+      // The HRV tile reads the formatted stream. Deriving it in build() is what
+      // made that tile fall back to "Baseline: …" on every rebuild.
+      expect(
+        identical(measurement.rmssdDisplay, measurement.rmssdDisplay),
+        isTrue,
+      );
       expect(measurement.heartRate.isBroadcast, isTrue);
       expect(measurement.rmssd.isBroadcast, isTrue);
+      expect(measurement.rmssdDisplay.isBroadcast, isTrue);
     });
 
     test('pausing the session suspends the meditation instead of ending it',

@@ -545,6 +545,22 @@ the same wakelock, so `ScreenWakelock.release()` restores whatever that setting
 asks for rather than switching it off. A failure to set the lock is logged and
 ignored; it must never prevent a meditation from starting.
 
+## Reading the metric tiles
+
+Entering monitoring deliberately rebuilds the HR and RMSSD tiles so each can
+show the measured baseline, labelled `Baseline: …`, until its first live
+monitoring sample arrives. That label therefore means "no live value yet for
+this metric", not "poor signal".
+
+It is easy to make it appear far more often than intended. `StreamBuilder`
+compares stream *instances*, so a stream derived inside `build` is a new object
+every time and makes it resubscribe, drop to `ConnectionState.waiting` and show
+the baseline again. `Measurement` therefore exposes every tile stream as a
+`late final` - including `rmssdDisplay`, which filters out samples carrying no
+RMSSD and formats the number - rather than letting the view derive them. The
+RMSSD tile is the one that suffers most from getting this wrong, because that
+filtering means the next live value can be a long time coming.
+
 ## Losing the sensor
 
 The in-app is pushed as its own route, so a disconnected earbud leaves the

@@ -137,6 +137,18 @@ class Measurement {
   late final Stream<int> heartRate = _source.biometrics.map((b) => b.heartRate);
   late final Stream<double?> rmssd = _source.biometrics.map((b) => b.rmssd);
 
+  /// RMSSD as the tile displays it: samples carrying no value are skipped, and
+  /// the number is formatted here rather than in `build`.
+  ///
+  /// The view used to derive this inline, which produced a new stream object
+  /// on every rebuild. StreamBuilder compares stream instances, so it
+  /// resubscribed each time, fell back to ConnectionState.waiting and showed
+  /// "Baseline: …" again — and because this stream skips samples without an
+  /// RMSSD, the wait for the next one can be long.
+  late final Stream<String> rmssdDisplay = rmssd
+      .where((value) => value != null)
+      .map((value) => value!.toStringAsFixed(1));
+
   // The latest values stay local and are only included in a cloud prompt when
   // the session's explicit prompt policy permits it.
   HeartRateSample? get latestBiometrics =>

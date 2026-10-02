@@ -474,9 +474,7 @@ class BioAdaptiveContent extends StatelessWidget {
                               iconColor: Colors.blueAccent,
                               backgroundColor:
                                   Colors.blueAccent.withValues(alpha: 0.1),
-                              listenable: measurement.rmssd
-                                  .where((value) => value != null)
-                                  .map((value) => value!.toStringAsFixed(1)),
+                              listenable: measurement.rmssdDisplay,
                               freshness: phase is StressMonitoringPhase
                                   ? measurement.metricsFresh
                                   : null,
