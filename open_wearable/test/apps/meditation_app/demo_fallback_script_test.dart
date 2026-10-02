@@ -53,6 +53,47 @@ void main() {
       expect(seen, hasLength(60));
     });
 
+    test('the narration never counts the breath out', () {
+      // Counted cadence ("in for 4, out for 6") is what the prompts used to
+      // demand. Numerals read especially badly on the local voice, which
+      // speaks them as digits instead of pacing them.
+      final digits = RegExp(r'[0-9]');
+      // The check itself catches what it is meant to.
+      expect(digits.hasMatch('breathe in for 4 counts'), isTrue);
+
+      for (final type in MeditationType.values) {
+        for (final environment in MeditationEnvironment.values) {
+          final account = UserAccount(
+            meditationType: type,
+            meditationEnvironment: environment,
+          );
+          final spoken = [
+            DemoFallbackScript.welcomeFor(account),
+            DemoFallbackScript.completionFor(account),
+            for (var i = 1; i <= 3; i++)
+              DemoFallbackScript.segmentText(
+                index: i,
+                type: type,
+                environment: environment,
+              ),
+          ];
+
+          for (final text in spoken) {
+            expect(
+              digits.hasMatch(text),
+              isFalse,
+              reason: '$type in $environment speaks a numeral: $text',
+            );
+            expect(
+              text.toLowerCase(),
+              isNot(contains('count')),
+              reason: '$type in $environment counts the breath: $text',
+            );
+          }
+        }
+      }
+    });
+
     test('each combination carries its own environment imagery', () {
       // The texts came from DeepSeek, so assert the property rather than any
       // particular wording: every environment reads differently, and each

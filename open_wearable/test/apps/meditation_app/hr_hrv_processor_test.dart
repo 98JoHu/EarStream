@@ -1701,6 +1701,65 @@ void main() {
       expect(find.textContaining('Segment'), findsNothing);
     });
 
+    testWidgets('choosing a mood both completes the session and reports it',
+        (tester) async {
+      // The conference demo hangs ending the run off the mood choice, so it
+      // has to reach the caller as well as completing the session.
+      final meditation = Meditation(userAccount: UserAccount());
+      meditation.phase.value = MeditationPhase.finished;
+      final notifier = ValueNotifier<Meditation?>(meditation);
+      addTearDown(notifier.dispose);
+
+      Meditation? completed;
+      var moodReports = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MeditationTile(
+              meditationNotifier: notifier,
+              onMeditationComplete: (session) => completed = session,
+              onMoodSelected: () => moodReports++,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Serene'));
+      await tester.pump();
+
+      expect(completed, same(meditation));
+      expect(moodReports, 1);
+    });
+
+    testWidgets('dismissing a failure does not report a mood', (tester) async {
+      // A failed session is not a completed run, so it must not end the demo.
+      final meditation = Meditation(userAccount: UserAccount());
+      meditation.failureTitle = 'Voice service interrupted';
+      meditation.failureMessage = 'Stopped rather than switching voices.';
+      meditation.phase.value = MeditationPhase.failed;
+      final notifier = ValueNotifier<Meditation?>(meditation);
+      addTearDown(notifier.dispose);
+
+      var moodReports = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MeditationTile(
+              meditationNotifier: notifier,
+              onMeditationComplete: (_) {},
+              onMoodSelected: () => moodReports++,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Dismiss'));
+      await tester.pump();
+
+      expect(moodReports, 0);
+    });
+
     testWidgets('finished sessions show success and mood feedback',
         (tester) async {
       final meditation = Meditation(userAccount: UserAccount());

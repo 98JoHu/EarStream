@@ -35,10 +35,16 @@ class MeditationTile extends StatelessWidget {
   final ValueNotifier<Meditation?> meditationNotifier;
   final ValueChanged<Meditation>? onMeditationComplete;
 
+  /// Fires when the attendee acknowledges a *finished* session by choosing a
+  /// mood. Deliberately separate from dismissing a failure card, which is not
+  /// the end of a successful run.
+  final VoidCallback? onMoodSelected;
+
   const MeditationTile({
     super.key,
     required this.meditationNotifier,
     this.onMeditationComplete,
+    this.onMoodSelected,
   });
 
   @override
@@ -62,6 +68,7 @@ class MeditationTile extends StatelessWidget {
                 isBiosignalAdaptive: meditation is BiometricMeditation,
                 onMoodSelected: () {
                   _complete(meditation);
+                  onMoodSelected?.call();
                 },
               );
             }

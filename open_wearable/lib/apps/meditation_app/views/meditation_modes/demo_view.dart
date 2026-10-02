@@ -205,6 +205,9 @@ class _DemoViewState extends State<DemoView> {
                 sensorConfigProvider: widget.sensorConfigProvider,
                 userAccount: _demoAccount,
                 sessionConfig: BioAdaptiveSessionConfig.conferenceDemo,
+                // One pass through the demo: rating the session ends it,
+                // matching the meditation-only mode.
+                onMeditationAcknowledged: _finish,
               ),
               const SizedBox(height: 16),
               OutlinedButton(

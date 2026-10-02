@@ -94,6 +94,15 @@ class BioAdaptiveView extends StatefulWidget {
   final UserAccount? userAccount;
   final BioAdaptiveSessionConfig sessionConfig;
   final MeditationAnalyticsStore? analyticsStore;
+
+  /// Called when the attendee picks a mood on the finished-session card.
+  ///
+  /// The conference demo uses it to end the run: there is only one pass
+  /// through it, so acknowledging the session is the end of the demo rather
+  /// than a return to the live measurement. The regular mode leaves it unset
+  /// and goes back to monitoring.
+  final VoidCallback? onMeditationAcknowledged;
+
   const BioAdaptiveView({
     super.key,
     required this.ppgSensor,
@@ -103,6 +112,7 @@ class BioAdaptiveView extends StatefulWidget {
     this.userAccount,
     this.sessionConfig = BioAdaptiveSessionConfig.standard,
     this.analyticsStore,
+    this.onMeditationAcknowledged,
   });
 
   @override
@@ -298,6 +308,7 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
           MeditationTile(
             meditationNotifier: measurement.meditation,
             onMeditationComplete: measurement.dismissMeditation,
+            onMoodSelected: widget.onMeditationAcknowledged,
           ),
         if (isRunning && !completed) const SizedBox(height: 8),
         // Control Buttons

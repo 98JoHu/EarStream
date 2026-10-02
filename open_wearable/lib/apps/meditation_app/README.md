@@ -151,7 +151,11 @@ in demo mode.
 ## Demo mode
 
 Both demo experiences are two steps: attendee preferences, then the
-meditation. The seal check is reachable from the drawer whenever it is needed,
+meditation. Rating the finished session on the mood card ends the demo and
+returns to the mode picker with a fresh attendee account - there is only one
+pass through it. **End Demo** remains available throughout as a way out
+mid-session, and dismissing a *failed* session deliberately does not end the
+run, so the operator can see what happened. The seal check is reachable from the drawer whenever it is needed,
 but it is deliberately not part of the demo flow, which is kept as short as an
 attendee can walk through unaided.
 
@@ -592,6 +596,15 @@ HR-only.
 - temperature: `0.7`;
 - maximum response tokens: `2000`;
 - request timeout: 30 seconds.
+
+Both system prompts require breathing guidance in every segment but forbid
+counting it out: no numerals and no number words for breath timing. The pacing
+is carried by wording and ellipses instead ("let the out-breath run longer than
+the in-breath"). Counted cadence was the earlier instruction, and numerals in
+particular read badly on the local Kokoro voice, which speaks them as digits
+rather than pacing them. Like the English-only rule, it is repeated in every
+segment request, since a constraint stated once in the system prompt drifts as
+the conversation grows.
 
 Standard-mode prompts include profile and meditation context. Biosignal-adaptive
 standard sessions additionally include the latest HR/RMSSD after a segment.

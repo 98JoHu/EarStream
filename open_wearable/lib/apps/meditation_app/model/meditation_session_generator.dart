@@ -332,7 +332,7 @@ HOW TO ADAPT TO BIOSIGNALS (reported after each segment):
 - If the user is clearly calming, you may gently deepen the practice. If not, stay with soothing, stabilizing guidance. Never rush them.
 
 GUIDELINES:
-1. ALWAYS include specific breathing instructions in every segment (e.g. "breathe in for 4 counts... out for 6").
+1. ALWAYS include clear breathing guidance in every segment, and NEVER count it out. Do not use counts, numerals, or number words to time the breath: no "in for 4, out for 6", no "hold for a count of three". Shape the breath with words and pauses instead, for example "breathe in slowly... and let the out-breath run longer than the in-breath... let the last of it go".
 2. Make it PERSONAL: use their name occasionally, reference their environment imagery, adapt to their profile.
 3. Create natural transitions that build on what you said before. DO NOT signal an ending in a segment.
 4. Speak slowly; use soothing language and natural pauses marked with ellipses (...).
@@ -384,7 +384,7 @@ PRIVACY REQUIREMENTS:
 - Use only the two session preferences above to shape the meditation.
 
 GUIDELINES:
-1. ALWAYS include specific breathing instructions in every segment (for example, "breathe in for 4 counts... out for 6").
+1. ALWAYS include clear breathing guidance in every segment, and NEVER count it out. Do not use counts, numerals, or number words to time the breath: no "in for 4, out for 6", no "hold for a count of three". Shape the breath with words and pauses instead, for example "breathe in slowly... and let the out-breath run longer than the in-breath... let the last of it go".
 2. Use the selected imagery environment naturally, without claiming personal knowledge about the participant.
 3. Create natural transitions that build on what you said before. DO NOT signal an ending in a segment.
 4. Speak slowly; use soothing language and natural pauses marked with ellipses (...).
@@ -431,12 +431,13 @@ Create a calming and safe experience while respecting the privacy requirements.'
       return 'The participant has finished segment $_emitted. Generate '
           'segment $next as a single segment JSON object, continuing the '
           'calming progression using only the session preferences. '
-          '$_englishOnlyReminder';
+          '$_noCountingReminder$_englishOnlyReminder';
     }
     if (b == null) {
       return 'The user has finished segment $_emitted. No biosignals are '
           'available. Generate segment $next as a single segment JSON object, '
-          'continuing the calming progression. $_englishOnlyReminder';
+          'continuing the calming progression. '
+          '$_noCountingReminder$_englishOnlyReminder';
     }
     final hr = b.heartRate.toStringAsFixed(0);
     final rmssdDescription = b.rmssd == null
@@ -445,13 +446,20 @@ Create a calming and safe experience while respecting the privacy requirements.'
     return 'The user has finished segment $_emitted. Their current heart rate '
         'is $hr bpm and their $rmssdDescription. Adapt accordingly and '
         'generate segment $next as a single segment JSON object. '
-        '$_englishOnlyReminder';
+        '$_noCountingReminder$_englishOnlyReminder';
   }
 
   /// Repeated on every segment turn, not only in the system prompt. The
   /// observed failure is occasional, appearing partway through a session
   /// rather than at its start, which is the signature of drift across a long
   /// conversation rather than of the instruction being missed outright.
+  /// Repeated every turn for the same reason as [_englishOnlyReminder]: a rule
+  /// stated once in the system prompt drifts as the conversation grows, and
+  /// counted breathing is what the model falls back to by default.
+  static const String _noCountingReminder =
+      'Guide the breath without counting: no numerals and no number words for '
+      'breath timing. ';
+
   static const String _englishOnlyReminder =
       'Write the instruction in English only; no Chinese or other non-Latin '
       'characters.';
