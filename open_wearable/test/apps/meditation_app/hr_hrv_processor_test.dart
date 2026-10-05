@@ -343,6 +343,72 @@ void main() {
       expect(ActivityTracker.classificationWindowTicksFor(-6), 3000000);
     });
 
+    test('a still wearer and a static tilt both read as no movement', () {
+      PpgMotionSample at(int ms, double x, double y, double z) =>
+          PpgMotionSample(timestamp: ms, x: x, y: y, z: z);
+
+      // One g straight down, held: nothing is moving.
+      final still = [for (var i = 0; i < 75; i++) at(i * 40, 0, 0, 1)];
+      expect(ActivityTracker.meanDynamicAcceleration(still), closeTo(0, 1e-9));
+
+      // The same g with the head tilted: still nothing moving, so the tilt
+      // must not read as activity.
+      final tilted = [
+        for (var i = 0; i < 75; i++) at(i * 40, 0.707, 0, 0.707),
+      ];
+      expect(ActivityTracker.meanDynamicAcceleration(tilted), closeTo(0, 1e-9));
+
+      expect(ActivityTracker.meanDynamicAcceleration(const []), 0);
+    });
+
+    test('a rotation is movement even though it keeps gravity at 1 g', () {
+      // Turning the head rotates gravity within the sensor frame without
+      // changing its length, so a metric comparing only magnitudes sees
+      // nothing at all. Every sample here is exactly 1 g.
+      final rotating = <PpgMotionSample>[];
+      for (var i = 0; i < 75; i++) {
+        final angle = 2 * pi * 2.5 * (i * 0.04); // 2.5 Hz
+        rotating.add(
+          PpgMotionSample(
+            timestamp: i * 40,
+            x: sin(angle),
+            y: 0,
+            z: cos(angle),
+          ),
+        );
+      }
+      for (final sample in rotating) {
+        expect(sample.magnitude, closeTo(1.0, 1e-9));
+      }
+
+      expect(
+        ActivityTracker.meanDynamicAcceleration(rotating),
+        greaterThan(0.5),
+      );
+    });
+
+    test('motion across gravity is measured at its true size', () {
+      // 0.3 g of acceleration perpendicular to gravity. Compared as
+      // magnitudes this survived only as sqrt(1 + 0.3^2) - 1 = 0.044 g, nearly
+      // seven times smaller, which is what put real head movement below the
+      // published 0.2 g resting bound.
+      final window = <PpgMotionSample>[];
+      for (var i = 0; i < 75; i++) {
+        final phase = i.isEven ? 0.3 : -0.3;
+        window.add(PpgMotionSample(timestamp: i * 40, x: phase, y: 0, z: 1));
+      }
+
+      expect(
+        ActivityTracker.meanDynamicAcceleration(window),
+        closeTo(0.3, 0.001),
+      );
+      // What the magnitude comparison would have reported instead.
+      final asMagnitudes =
+          window.map((s) => (s.magnitude - 1).abs()).reduce((a, b) => a + b) /
+              window.length;
+      expect(asMagnitudes, closeTo(0.044, 0.001));
+    });
+
     test('uses the documented activity threshold boundaries', () {
       ActivityLevel classify(double acceleration, double gyroscope) {
         return ActivityTracker.classify(

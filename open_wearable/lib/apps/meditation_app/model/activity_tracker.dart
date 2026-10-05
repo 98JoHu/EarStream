@@ -49,7 +49,6 @@ class PpgMotionSample {
   });
 
   double get magnitude => sqrt((x * x) + (y * y) + (z * z));
-  double get deviation => (magnitude - 1.0).abs();
 }
 
 class ActivityTracker {
@@ -229,10 +228,9 @@ class ActivityTracker {
     }
     _lastEmitTime = now;
 
-    // Calculate the average magnitude of the accelerometer and gyroscope data
-    final avgAccelDeviation =
-        _accelWindow.map((s) => s.deviation).reduce((a, b) => a + b) /
-            _accelWindow.length;
+    // Calculate the average deviation from gravity and the average angular
+    // rate over the window.
+    final avgAccelDeviation = meanDynamicAcceleration(_accelWindow);
     final avgGyroMagnitude =
         _gyroWindow.map((s) => s.magnitude).reduce((a, b) => a + b) /
             _gyroWindow.length;
@@ -278,6 +276,49 @@ class ActivityTracker {
   static double classificationWindowTicksFor(int timestampExponent) {
     final ticksPerSecond = pow(10, -timestampExponent).toDouble();
     return _classificationWindow.inMicroseconds / 1000000.0 * ticksPerSecond;
+  }
+
+  /// Mean deviation of the measured acceleration from gravity over a window,
+  /// in g.
+  ///
+  /// Gravity is the only component that stays put over a few seconds, so the
+  /// window's mean vector is taken as the gravity estimate and subtracted. What
+  /// remains is the wearer's own acceleration, at its true size.
+  ///
+  /// This used to compare magnitudes instead, as |‖a‖ - 1 g|. Two things made
+  /// that far less sensitive than the thresholds assume. A rotation cannot
+  /// change the length of the gravity vector, so turning the head was invisible
+  /// to it; and the earbud's own motion, being perpendicular to gravity, adds in
+  /// quadrature, surviving only as sqrt(1 + x^2) - 1, which is about x^2 / 2.
+  /// Real motion of 0.2 g therefore read as 0.02 g - a tenth of its size, and an
+  /// ear-worn sensor could not reach the published bands at all.
+  ///
+  /// A still wearer reads near zero either way, and a static tilt still reads
+  /// zero: only movement separates the two.
+  @visibleForTesting
+  static double meanDynamicAcceleration(List<PpgMotionSample> window) {
+    if (window.isEmpty) return 0;
+
+    var sumX = 0.0;
+    var sumY = 0.0;
+    var sumZ = 0.0;
+    for (final sample in window) {
+      sumX += sample.x;
+      sumY += sample.y;
+      sumZ += sample.z;
+    }
+    final gravityX = sumX / window.length;
+    final gravityY = sumY / window.length;
+    final gravityZ = sumZ / window.length;
+
+    var total = 0.0;
+    for (final sample in window) {
+      final dx = sample.x - gravityX;
+      final dy = sample.y - gravityY;
+      final dz = sample.z - gravityZ;
+      total += sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    }
+    return total / window.length;
   }
 
   /// Classifies a three-second window. A window advances to the next level if
