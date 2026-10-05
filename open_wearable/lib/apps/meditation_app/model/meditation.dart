@@ -374,11 +374,15 @@ class Meditation {
           await _recordAudioRoute('audio_route_after_settling');
         }),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       diagnosticEventSink?.call('audio_start_failed', {
         'error_type': error.runtimeType.toString(),
       });
-      rethrow;
+      // Ambience is atmosphere; the narration is the session. Rethrowing here
+      // meant one environment whose file the device could not decode took the
+      // whole meditation down with a generic "interrupted" card, with nothing
+      // to say which part had failed.
+      _logPlaybackError('starting background music', error, stackTrace);
     }
   }
 

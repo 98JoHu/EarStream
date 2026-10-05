@@ -6,6 +6,7 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import '../configs/overall_config.dart';
 import 'kokoro_model_installer.dart';
+import 'kokoro_narration_pacing.dart';
 
 /// Renders text to 16-bit PCM WAV bytes on the phone.
 ///
@@ -294,12 +295,38 @@ void _workerMain(SendPort boot) {
           return;
         }
         try {
-          final audio = engine.generate(
-            text: text,
-            sid: speakerId,
-            speed: speed,
+          // One pass per phrase, with the pauses placed between them here.
+          // sherpa-onnx would otherwise join its own pieces with no gap and
+          // stretch only the pauses inside them, which puts the rhythm
+          // backwards. Keeping the pieces short also keeps them clear of the
+          // token ceiling that would exit the process.
+          final phrases = splitNarrationIntoPhrases(text);
+          final clips = <Float32List>[];
+          final pauses = <int>[];
+          var sampleRate = 0;
+
+          for (final phrase in phrases) {
+            final audio = engine.generate(
+              text: phrase.text,
+              sid: speakerId,
+              speed: speed,
+            );
+            if (audio.sampleRate > 0) sampleRate = audio.sampleRate;
+            clips.add(audio.samples);
+            pauses.add(
+              (sampleRate * phrase.pause.inMilliseconds / 1000).round(),
+            );
+          }
+
+          if (clips.isEmpty || sampleRate <= 0) {
+            reply.send(const _FailureReply('nothing to speak'));
+            return;
+          }
+          reply.send(
+            _AudioReply(
+              encodeWav(joinPhraseAudio(clips, pauses), sampleRate),
+            ),
           );
-          reply.send(_AudioReply(encodeWav(audio.samples, audio.sampleRate)));
         } catch (error) {
           reply.send(_FailureReply('$error'));
         }

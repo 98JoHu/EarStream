@@ -47,6 +47,20 @@ void main() {
       );
       expect(TtsProviderOption.fromConfig('KOKORO'), TtsProviderOption.kokoro);
       expect(TtsProviderOption.fromConfig('local'), TtsProviderOption.kokoro);
+      // A hand-edited .env often carries quotes. dotenv strips a matched pair,
+      // but an unmatched one must not fall through to the cloud default.
+      expect(
+        TtsProviderOption.fromConfig('"kokoro"'),
+        TtsProviderOption.kokoro,
+      );
+      expect(
+        TtsProviderOption.fromConfig('"kokoro'),
+        TtsProviderOption.kokoro,
+      );
+      expect(
+        TtsProviderOption.fromConfig(" 'kokoro' "),
+        TtsProviderOption.kokoro,
+      );
     });
 
     test('an unknown provider still falls back to ElevenLabs', () {
@@ -184,12 +198,16 @@ void main() {
 
     test('does not leave sherpa-onnx compressing the pauses', () {
       // sherpa-onnx defaults silenceScale to 0.2, which squeezes every pause
-      // longer than 0.2 s down to a fifth. For guided meditation the pauses
-      // are the point, so this must be set explicitly and above 1.0.
+      // longer than 0.2 s down to a fifth. It only ever sees pauses *inside*
+      // one synthesis piece, so the boundary pauses are set in
+      // kokoro_narration_pacing instead and this is left at natural length.
       final config = configFor('/tmp/kokoro');
       expect(config.silenceScale, OverallMeditationConfig.kokoroSilenceScale);
-      expect(config.silenceScale, greaterThan(1.0));
-      expect(config.silenceScale, lessThanOrEqualTo(10.0));
+      expect(config.silenceScale, 1.0);
+      expect(
+        OverallMeditationConfig.kokoroPhrasePause,
+        lessThan(OverallMeditationConfig.kokoroSentencePause),
+      );
     });
   });
 

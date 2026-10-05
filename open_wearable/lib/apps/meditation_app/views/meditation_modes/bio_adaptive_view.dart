@@ -290,6 +290,28 @@ class _BioAdaptiveViewState extends State<BioAdaptiveView>
                     child: SensorSignalLostBanner(),
                   ),
           ),
+        if (measurement != null)
+          // Samples are arriving but the phase cannot finish on them. Mounted
+          // unconditionally for the same reason as the banner above.
+          ValueListenableBuilder<bool>(
+            valueListenable: measurement.awaitingPhaseData,
+            builder: (context, waiting, _) {
+              if (!waiting || completed || !isRunning) {
+                return const SizedBox.shrink();
+              }
+              return ValueListenableBuilder<bool>(
+                valueListenable: measurement.sensorSignalAlive,
+                // The lost-signal banner already explains that case, and says
+                // it better.
+                builder: (context, alive, _) => alive
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 16),
+                        child: _AwaitingSignalQualityHint(),
+                      )
+                    : const SizedBox.shrink(),
+              );
+            },
+          ),
         if (isRunning && !completed && !userAccount.hasValidDeepseekKey) ...[
           SizedBox(height: 16),
           APIWarning(serviceName: "Deepseek"),
@@ -1135,6 +1157,58 @@ class SensorSignalLostBanner extends StatelessWidget {
                     'measurement continues automatically once samples return.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when a phase has run past its nominal length and is still waiting for
+/// a usable reading.
+///
+/// The baseline cannot finish until it has at least one RMSSD it trusts, so a
+/// weak or unsteady pulse leaves the progress bar sitting full. Saying so turns
+/// an apparent hang into something an operator can act on.
+class _AwaitingSignalQualityHint extends StatelessWidget {
+  const _AwaitingSignalQualityHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      color: theme.colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              Icons.hourglass_bottom_outlined,
+              color: theme.colorScheme.onSecondaryContainer,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Still waiting for a steady pulse',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                  Text(
+                    'Samples are arriving, but not yet clean enough to finish '
+                    'this step. Sit still and check that the earbud is seated '
+                    'firmly; it continues on its own once the signal steadies.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSecondaryContainer,
                     ),
                   ),
                 ],

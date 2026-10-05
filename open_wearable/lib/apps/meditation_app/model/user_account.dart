@@ -83,7 +83,14 @@ enum TtsProviderOption {
   const TtsProviderOption({required this.label, required this.isLocal});
 
   static TtsProviderOption fromConfig(String? value) {
-    return switch (value?.trim().toLowerCase()) {
+    // Stray quotes are tolerated. dotenv strips a matched pair, but an
+    // unmatched one would otherwise fall through to the ElevenLabs default
+    // silently, and a demo that quietly starts on a cloud voice it cannot
+    // reach is a bad way to find that out. No provider token contains a
+    // quote, so removing them outright is safe.
+    final normalized =
+        value?.replaceAll('"', '').replaceAll("'", '').trim().toLowerCase();
+    return switch (normalized?.toLowerCase()) {
       OverallMeditationConfig.tencentProviderEnvironmentValue ||
       'tencentcloud' ||
       'tencent_cloud' =>

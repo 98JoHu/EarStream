@@ -893,7 +893,18 @@ ambience and show a dismissible interruption card. Failure handling belongs to
 the shared meditation session, so timed and both demo/regular meditation paths
 behave consistently.
 
-Background ambience loops at volume `0.3`. Cloud narration requests transient
+Background ambience loops at volume `0.3`. A file the device cannot decode is
+logged and the session continues without it: the narration is the meditation,
+and rethrowing there used to abort the whole thing with a generic "Meditation
+interrupted" card that named nothing.
+
+The ambience files are not uniform, and the format matters more than the size:
+`Mountain.wav` arrived as a Broadcast WAV carrying `bext` and `JUNK` metadata
+chunks, which is the shape that failed. It has been re-muxed to the canonical
+`fmt `+`data` layout the other files use, with the PCM samples copied
+unchanged. `Ocean_Beach.wav` is still 32-bit float (`fmt` 3) rather than
+integer PCM, which is the next most likely to be refused, so that environment
+is worth checking explicitly on device. Cloud narration requests transient
 audio ducking so the ambience is lowered rather than stopped during speech.
 
 ## Environment configuration

@@ -126,6 +126,11 @@ class Measurement {
   }
 
   // Publish the heart rate and RMSSD
+  /// Whether the current phase has overrun its duration while still waiting
+  /// for the data it needs to advance. See MonitoringPhaseController.
+  ValueListenable<bool> get awaitingPhaseData =>
+      _phaseController.awaitingPhaseData;
+
   /// Whether sensor samples are still arriving. False means the link is gone,
   /// not that the signal is poor - a session cannot recover on its own.
   ValueListenable<bool> get sensorSignalAlive => _source.signalAlive;

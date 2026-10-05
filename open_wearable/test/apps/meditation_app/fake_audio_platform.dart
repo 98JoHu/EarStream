@@ -25,6 +25,9 @@ class FakeAudioPlatform {
   final Set<String> _stopped = {};
   bool _mockAssets = true;
 
+  /// Makes asset loading fail, as a file the platform cannot decode does.
+  bool failAssetLoading = false;
+
   /// [mockAssets] also intercepts asset loading, which the background-music
   /// player needs. Leave it off in files whose widget tests load real assets.
   void install({bool mockAssets = true}) {
@@ -40,7 +43,9 @@ class FakeAudioPlatform {
     // decodes it here, so a stub of a few bytes is enough.
     _messenger.setMockMessageHandler(
       'flutter/assets',
-      (_) async => ByteData.view(Uint8List.fromList(const [0, 0, 0, 0]).buffer),
+      (_) async => failAssetLoading
+          ? null
+          : ByteData.view(Uint8List.fromList(const [0, 0, 0, 0]).buffer),
     );
   }
 

@@ -247,6 +247,14 @@ class MonitoringPhaseController {
   late final ValueNotifier<MonitoringPhase> phase;
   final ValueNotifier<double?> progress = ValueNotifier(null);
 
+  /// True once a timed phase has run past its duration and still cannot
+  /// advance, i.e. it is waiting on data that has not arrived.
+  ///
+  /// The baseline needs at least one usable RMSSD before monitoring can start.
+  /// Without this the progress bar simply sat full with nothing to say why,
+  /// which in a demo is indistinguishable from the app having hung.
+  final ValueNotifier<bool> awaitingPhaseData = ValueNotifier(false);
+
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _ticker;
   StreamSubscription<HeartRateSample>? _phaseSub;
@@ -264,6 +272,7 @@ class MonitoringPhaseController {
 
   void start() {
     _index = 0;
+    awaitingPhaseData.value = false;
     progress.value = 0;
     phase.value = current;
     _stopwatch
@@ -292,6 +301,7 @@ class MonitoringPhaseController {
     _phaseSub?.cancel();
     phase.dispose();
     progress.dispose();
+    awaitingPhaseData.dispose();
   }
 
   void _startTicker() {
@@ -313,7 +323,11 @@ class MonitoringPhaseController {
             .clamp(0.0, 1.0);
     if (_stopwatch.elapsed >= duration) {
       current.atDeadline(_ctx);
-      if (current.canAdvance) _advance();
+      if (current.canAdvance) {
+        _advance();
+      } else {
+        awaitingPhaseData.value = true;
+      }
     }
   }
 
@@ -321,6 +335,7 @@ class MonitoringPhaseController {
     if (_index >= _phases.length - 1) return; // last phase; stay put
     current.complete(_ctx);
     _phaseSub?.cancel();
+    awaitingPhaseData.value = false;
     _index++;
     _stopwatch
       ..reset()

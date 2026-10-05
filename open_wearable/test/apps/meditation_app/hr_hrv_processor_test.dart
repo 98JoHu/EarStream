@@ -1195,6 +1195,44 @@ void main() {
   });
 
   group('conference monitoring deadline', () {
+    test('a phase that overruns without advancing reports that it is waiting',
+        () async {
+      // The demo baseline needs one usable RMSSD. Without this the progress
+      // bar simply sits full, which looks like the app has hung.
+      final source = _TestBiometricSource();
+      final detector = StressDetector(
+        thresholds: () => (90, 30),
+        baselineHeartRate: () => 70,
+      );
+      addTearDown(detector.dispose);
+
+      final controller = MonitoringPhaseController(
+        ctx: PhaseContext(source: source, detector: detector),
+        phases: [
+          BaselinePhase(
+            userAccount: UserAccount(),
+            duration: const Duration(milliseconds: 20),
+          ),
+          StressMonitoringPhase(),
+        ],
+      );
+      addTearDown(controller.dispose);
+
+      controller.start();
+      expect(controller.awaitingPhaseData.value, isFalse);
+
+      // No samples arrive, so the baseline cannot advance past its deadline.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(controller.awaitingPhaseData.value, isTrue);
+      expect(controller.current, isA<BaselinePhase>());
+
+      // A usable sample lets it move on, and the flag clears with it.
+      source.add(const HeartRateSample(heartRate: 70, rmssd: 35));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(controller.current, isA<StressMonitoringPhase>());
+      expect(controller.awaitingPhaseData.value, isFalse);
+    });
+
     testWidgets('fires once after two minutes of monitoring', (tester) async {
       var triggerCount = 0;
       final deadline = MonitoringMeditationDeadline(

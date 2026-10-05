@@ -112,7 +112,23 @@ abstract final class OverallMeditationConfig {
   /// assistant reading a reply and wrong for guided meditation, where the
   /// pauses are the point. This is the knob for narration rhythm; Kokoro has
   /// no pitch or style control to go with it.
-  static const double kokoroSilenceScale = 1.5;
+  static const double kokoroSilenceScale = 1.0;
+
+  /// Pauses inserted between the pieces Kokoro is asked to speak.
+  ///
+  /// sherpa-onnx concatenates its own pieces with no gap and scales silence
+  /// only *within* a piece, so commas were being stretched while sentence
+  /// endings ran straight on. Setting the boundary pauses here puts the
+  /// structure back the right way round, which is also why the scale above is
+  /// back at 1.0: within a phrase, natural length is what is wanted.
+  static const Duration kokoroPhrasePause = Duration(milliseconds: 350);
+  static const Duration kokoroSentencePause = Duration(milliseconds: 700);
+
+  /// Ceiling on one synthesis piece. Kokoro's style table has a row per token
+  /// length and sherpa-onnx does not clamp the lookup: a longer piece exits the
+  /// process. Generated segments reach 650 characters in one sentence, so this
+  /// is what keeps that from ever being handed over.
+  static const int kokoroMaxPhraseCharacters = 220;
 
   /// sherpa-onnx ignores this for Kokoro: its batch size is hard-coded to one,
   /// and anything other than 1 only earns a warning in the log. Kept at 1 so

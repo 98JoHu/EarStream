@@ -200,6 +200,26 @@ void main() {
       );
     });
 
+    test('ambience that will not play does not stop the session', () async {
+      // One environment shipped a file the platform could not decode, and the
+      // session aborted with a generic failure card. The narration is the
+      // meditation; losing the background audio must not take it with it.
+      audio.failAssetLoading = true;
+      addTearDown(() => audio.failAssetLoading = false);
+
+      final provider = _RecordingTtsProvider();
+      final meditation =
+          _PipelineMeditation(provider: provider, maxSegments: 2);
+      addTearDown(meditation.dispose);
+
+      await meditation.start().timeout(const Duration(seconds: 30));
+
+      expect(meditation.phase.value, MeditationPhase.finished);
+      expect(meditation.failureTitle, isNull);
+      // Welcome, two segments, completion.
+      expect(provider.playedTexts, hasLength(4));
+    });
+
     test('a stopped session neither plays nor keeps producing', () async {
       final provider = _RecordingTtsProvider();
       final meditation = _PipelineMeditation(
