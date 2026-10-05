@@ -133,6 +133,16 @@ class KokoroTtsEngine implements KokoroSynthesizer {
 
   bool get isRunning => _isRunning;
 
+  /// Requests take their turn here rather than inside the worker.
+  ///
+  /// The worker renders one request at a time, and
+  /// [OverallMeditationConfig.kokoroSynthesisTimeout] is meant to bound one
+  /// wedged synthesis. It used to start when a request was *sent*, so a session
+  /// that prepares the next segment and the closing message while one is still
+  /// rendering spent that budget queueing: the last request could time out
+  /// against a healthy engine, and three retries of that end the session.
+  final SerialQueue _turns = SerialQueue();
+
   /// Renders [text] as 16-bit PCM WAV bytes.
   @override
   Future<Uint8List> synthesize({
@@ -140,6 +150,21 @@ class KokoroTtsEngine implements KokoroSynthesizer {
     required int speakerId,
     required double speed,
   }) async {
+    if (!_isRunning) {
+      throw StateError('The local voice engine is no longer running.');
+    }
+    return _turns.run(
+      () => _synthesizeNow(text: text, speakerId: speakerId, speed: speed),
+    );
+  }
+
+  Future<Uint8List> _synthesizeNow({
+    required String text,
+    required int speakerId,
+    required double speed,
+  }) async {
+    // Checked again on this request's turn: the engine may have gone away
+    // while it waited.
     if (!_isRunning) {
       throw StateError('The local voice engine is no longer running.');
     }
@@ -186,6 +211,26 @@ class KokoroTtsEngine implements KokoroSynthesizer {
     } finally {
       reply.close();
     }
+  }
+}
+
+/// Runs tasks one after another, in the order they were handed over.
+///
+/// A failing task does not stop the ones behind it, and its error reaches only
+/// the caller that submitted it.
+class SerialQueue {
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> run<T>(Future<T> Function() task) {
+    final result = Completer<T>();
+    _tail = _tail.then((_) async {
+      try {
+        result.complete(await task());
+      } catch (error, stackTrace) {
+        result.completeError(error, stackTrace);
+      }
+    });
+    return result.future;
   }
 }
 

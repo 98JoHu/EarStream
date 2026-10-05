@@ -6,6 +6,7 @@
 // platform channel through KokoroModelInstaller.invokeOverride. What is
 // exercised for real is everything the app builds on top of them.
 
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -20,6 +21,55 @@ import 'package:open_wearable/apps/meditation_app/model/user_account.dart';
 import 'fake_audio_platform.dart';
 
 void main() {
+  group('taking turns at the engine', () {
+    // The worker renders one request at a time. A session prepares the next
+    // segment and the closing message while one is still rendering, and the
+    // synthesis timeout has to bound the rendering rather than the queueing,
+    // or a healthy engine fails the session.
+    test('tasks run one at a time, in order', () async {
+      final queue = SerialQueue();
+      final running = <int>[];
+      final finished = <int>[];
+      var concurrent = 0;
+      var maxConcurrent = 0;
+
+      Future<void> task(int id) => queue.run(() async {
+            concurrent++;
+            maxConcurrent = max(maxConcurrent, concurrent);
+            running.add(id);
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            concurrent--;
+            finished.add(id);
+          });
+
+      await Future.wait([task(1), task(2), task(3)]);
+
+      expect(maxConcurrent, 1);
+      expect(running, [1, 2, 3]);
+      expect(finished, [1, 2, 3]);
+    });
+
+    test('a failure reaches only its own caller', () async {
+      final queue = SerialQueue();
+      final failing = queue.run<int>(() async => throw StateError('wedged'));
+      final following = queue.run<int>(() async => 7);
+
+      await expectLater(failing, throwsStateError);
+      expect(await following, 7);
+      // The queue still works afterwards.
+      expect(await queue.run<int>(() async => 8), 8);
+    });
+
+    test('each caller receives its own result', () async {
+      final queue = SerialQueue();
+      final results = await Future.wait([
+        queue.run<String>(() async => 'first'),
+        queue.run<String>(() async => 'second'),
+      ]);
+      expect(results, ['first', 'second']);
+    });
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // TtsService builds an AudioPlayer for cloud and local audio alike.
