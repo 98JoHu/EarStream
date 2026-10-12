@@ -1211,6 +1211,37 @@ void main() {
   });
 
   group('recorded stress trajectory', () {
+    testWidgets('publishes samples at the live metric cadence', (tester) async {
+      expect(
+        BioAdaptiveModeConfig.recordedStressSampleInterval,
+        BioAdaptiveModeConfig.metricEmitInterval,
+      );
+
+      final source = RecordedStressBiometricSource(
+        restingActivityLevel: ActivityLevel.resting,
+      );
+      final samples = <HeartRateSample>[];
+      final subscription = source.biometrics.listen(samples.add);
+
+      try {
+        source.start();
+        await tester.pump(
+          BioAdaptiveModeConfig.metricEmitInterval -
+              const Duration(milliseconds: 1),
+        );
+        expect(samples, isEmpty);
+
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(samples, hasLength(1));
+
+        await tester.pump(BioAdaptiveModeConfig.metricEmitInterval);
+        expect(samples, hasLength(2));
+      } finally {
+        source.dispose();
+        unawaited(subscription.cancel());
+      }
+    });
+
     test('preserves every original recording-derived keyframe', () {
       expect(
         RecordedStressBiometricSource.stressTrajectoryAt(Duration.zero),

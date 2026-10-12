@@ -159,7 +159,8 @@ abstract final class BioAdaptiveModeConfig {
   static const double intenseActivitySuppressionRatio = 0.02;
 
   // Recording-derived stress playback used by the regular mode only.
-  static const Duration recordedStressSampleInterval = Duration(seconds: 1);
+  // Keep its chart/data cadence identical to metrics produced from live PPG.
+  static const Duration recordedStressSampleInterval = metricEmitInterval;
   static const double recordedStressBaselineHeartRate = 71;
   static const double recordedStressBaselineRmssd = 80;
   static const double recordedStressBuildUpHeartRate = 80;
