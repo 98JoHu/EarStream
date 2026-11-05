@@ -36,7 +36,6 @@ void main() {
 
       final audioAt = _relativeSecondsOf(events, 'audio_started');
       _reportMarkers(events);
-      _reportAudioRoute(events, audioAt);
       _reportStreamHealth(events, audioAt);
       _reportDetectorComparison(events, audioAt);
       _reportPublishedMetrics(events, audioAt);
@@ -132,56 +131,6 @@ void _reportMarkers(List<Map<String, Object?>> events) {
         if (event[key] != null) '$key=${event[key]}',
     ].join(' ');
     _report('  t=${at?.toStringAsFixed(1).padLeft(7)}s  $name  $detail');
-  }
-}
-
-/// Pairs each audio-route snapshot with the PPG rate around it, which is what
-/// separates "the route changed" from "the route was always the earbud".
-void _reportAudioRoute(
-  List<Map<String, Object?>> events,
-  double? audioAt,
-) {
-  final snapshots = events
-      .where((e) => (e['event'] as String? ?? '').startsWith('audio_route'))
-      .toList();
-  _report('');
-  _report('== audio route ==');
-  if (snapshots.isEmpty) {
-    _report('  none recorded (needs a build including the route diagnostic)');
-    return;
-  }
-  for (final snapshot in snapshots) {
-    final at = _relativeSeconds(events, snapshot);
-    // PPG rate in the nearest stream_health window, for direct comparison.
-    double? nearestRate;
-    var bestGap = double.infinity;
-    for (final event in events) {
-      if (event['event'] != 'stream_health') continue;
-      final t = _relativeSeconds(events, event);
-      final hz = (event['observed_hz'] as num?)?.toDouble();
-      if (t == null || at == null || hz == null) continue;
-      final gap = (t - at).abs();
-      if (gap < bestGap) {
-        bestGap = gap;
-        nearestRate = hz;
-      }
-    }
-    final detail = <String>[
-      for (final key in const [
-        'output_devices',
-        'bluetooth_audio_connected',
-        'a2dp_profile',
-        'le_audio_profile',
-        'communication_device',
-        'music_active',
-        'audio_route_error',
-      ])
-        if (snapshot[key] != null) '$key=${snapshot[key]}',
-    ].join('  ');
-    _report('  t=${at?.toStringAsFixed(1).padLeft(7)}s  '
-        '${(snapshot['event'] as String).padRight(30)}'
-        'ppg=${nearestRate?.toStringAsFixed(0) ?? "?"}Hz');
-    _report('      $detail');
   }
 }
 

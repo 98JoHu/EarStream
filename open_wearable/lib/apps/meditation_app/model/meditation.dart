@@ -12,7 +12,6 @@ import 'meditation_session_generator.dart';
 import 'meditation_prompt_policy.dart';
 import 'meditation_analytics.dart';
 import 'hr_hrv_processor.dart' show HeartRateSample;
-import 'audio_route_diagnostics.dart';
 import 'tts_service.dart';
 
 /// A generated segment together with its already-synthesized narration.
@@ -282,15 +281,6 @@ class Meditation {
     return _resumeCompleter!.future;
   }
 
-  /// Records where Android is actually sending audio. Only does anything while
-  /// the biosignal trace is enabled, and never propagates a failure.
-  Future<void> _recordAudioRoute(String event) async {
-    final sink = diagnosticEventSink;
-    if (sink == null || !AudioRouteDiagnostics.isAvailable) return;
-    final route = await AudioRouteDiagnostics.describe();
-    if (route.isNotEmpty) sink(event, route);
-  }
-
   /// Keeps a future's error from being reported as unhandled while it is
   /// produced ahead of the point where it is awaited.
   Future<T> _observed<T>(Future<T> future) {
@@ -316,7 +306,6 @@ class Meditation {
       diagnosticEventSink?.call('narration_requested', {
         'characters': narration.text.length,
       });
-      await _recordAudioRoute('audio_route_at_narration');
       final startedAt = DateTime.now();
       try {
         await ttsService.play(narration);
@@ -356,17 +345,6 @@ class Meditation {
         ),
       );
       diagnosticEventSink?.call('audio_started', const {});
-      await _recordAudioRoute('audio_route_at_audio_start');
-      // The collapse lands 7-8 seconds after this point in the sessions that
-      // degrade, and never in the ones that do not. Sampling on both sides of
-      // that window is what separates "the route changed" from "the route was
-      // always the earbud and something else gave way".
-      unawaited(
-        Future<void>.delayed(const Duration(seconds: 12), () async {
-          if (_isDisposed || isStopped) return;
-          await _recordAudioRoute('audio_route_after_settling');
-        }),
-      );
     } catch (error, stackTrace) {
       diagnosticEventSink?.call('audio_start_failed', {
         'error_type': error.runtimeType.toString(),

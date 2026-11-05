@@ -15,7 +15,6 @@ import 'package:open_wearable/apps/meditation_app/configs/overall_config.dart';
 import 'package:open_wearable/apps/meditation_app/configs/timed_mode_config.dart';
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_processor.dart';
 import 'package:open_wearable/apps/meditation_app/model/hr_hrv_diagnostics.dart';
-import 'package:open_wearable/apps/meditation_app/model/audio_route_diagnostics.dart';
 import 'package:open_wearable/apps/meditation_app/model/screen_wakelock.dart';
 import 'package:open_wearable/apps/meditation_app/model/pulse_interval_rmssd.dart';
 import 'package:open_wearable/apps/meditation_app/model/activity_tracker.dart';
@@ -2842,61 +2841,6 @@ void main() {
       ScreenWakelock.toggle = (enable) async => throw StateError('no wakelock');
       await expectLater(ScreenWakelock.acquire(), completes);
       await expectLater(ScreenWakelock.release(), completes);
-    });
-  });
-
-  group('audio route diagnostics', () {
-    tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(AudioRouteDiagnostics.channel, null);
-    });
-
-    void mock(Future<Object?> Function(MethodCall call) handler) {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(AudioRouteDiagnostics.channel, handler);
-    }
-
-    test('returns the platform route snapshot', () async {
-      MethodCall? seen;
-      mock((call) async {
-        seen = call;
-        return <String, Object?>{
-          'output_devices': ['ble_headset', 'builtin_speaker'],
-          'music_active': true,
-          'bluetooth_audio_connected': true,
-          'le_audio_profile': 'connected',
-        };
-      });
-
-      final route = await AudioRouteDiagnostics.readRoute();
-      expect(seen?.method, 'describe');
-      expect(route['bluetooth_audio_connected'], isTrue);
-      expect(route['output_devices'], contains('ble_headset'));
-    });
-
-    test('a platform failure never propagates into the meditation', () async {
-      mock((call) async => throw PlatformException(code: 'boom'));
-      final route = await AudioRouteDiagnostics.readRoute();
-      expect(route.keys, ['audio_route_error']);
-    });
-
-    test('a null response is reported as no information', () async {
-      mock((call) async => null);
-      expect(await AudioRouteDiagnostics.readRoute(), isEmpty);
-    });
-
-    test('stays silent unless the biosignal trace is enabled', () async {
-      var invoked = false;
-      mock((call) async {
-        invoked = true;
-        return <String, Object?>{'music_active': true};
-      });
-
-      // The trace is off in a normal build, so a production session must never
-      // reach the platform channel at all.
-      expect(AudioRouteDiagnostics.isAvailable, isFalse);
-      expect(await AudioRouteDiagnostics.describe(), isEmpty);
-      expect(invoked, isFalse);
     });
   });
 

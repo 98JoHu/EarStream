@@ -19,13 +19,6 @@ class MainActivity : FlutterActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
 
-    // Read-only diagnostics for EarStreAM's explicitly enabled HR/HRV trace.
-    // Registration does not read or change audio routing until Dart calls it.
-    AudioRouteDiagnostics(
-      applicationContext,
-      flutterEngine.dartExecutor.binaryMessenger,
-    )
-
     MethodChannel(
       flutterEngine.dartExecutor.binaryMessenger,
       "edu.kit.teco.openWearable/audio_recording",

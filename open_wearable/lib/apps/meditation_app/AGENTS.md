@@ -121,8 +121,6 @@ elsewhere in `open_wearable/`:
   individually as well.
 - Flutter tooling owns the generated Linux, macOS, and Windows plugin
   registrants. Regenerate them through `flutter pub get`; never hand-edit them.
-- `android/app/src/main/kotlin/edu/kit/teco/openwearables/` contains the
-  read-only audio-route diagnostic channel.
 - Android backup/data-extraction XML excludes the secure credential namespace,
   while `ios/Runner/Runner.entitlements` and the Runner Xcode build settings
   contain keychain access configuration.
@@ -351,8 +349,7 @@ flutter test test/apps/meditation_app/trace_replay_test.dart "--dart-define=MEDI
 ```
 
 `MEDITATION_SKIP_BACKGROUND_MUSIC=true` is a trace-only aid for isolating audio
-interaction. The Android audio-route snapshot channel is read-only and is also
-gated by HR/HRV tracing; normal builds must not invoke it.
+interaction and must not change normal production behavior.
 
 ## Validation
 
