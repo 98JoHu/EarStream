@@ -1,10 +1,51 @@
-# EarStreAM engineering guide
+# EarStreAM in-app contributor guide
 
-This file applies to `lib/apps/meditation_app/` and its descendants. It is the
-working reference for coding agents and maintainers who change EarStreAM or
-adapt it to another deployment. The adjacent `README.md` is intentionally a
-short user guide; keep implementation details here instead of expanding the
-README back into internal documentation.
+## Scope and precedence
+
+This file applies to `lib/apps/meditation_app/` and its descendants. EarStreAM
+is a built-in feature module of the OpenWearables App, not a standalone Flutter
+application. It has no independent entry point, router, device connection
+stack, or application lifecycle.
+
+Follow the repository-level `CONTRIBUTING.md` and the architecture guidance in
+`open_wearable/docs/` first. This guide adds EarStreAM-specific ownership,
+privacy, signal-processing, and validation requirements. When instructions
+conflict, the narrower safety or privacy constraint wins; otherwise preserve
+the established OpenWearables pattern.
+
+The adjacent `README.md` is the user guide for the EarStreAM in-app. Keep
+implementation details here rather than expanding that guide into developer
+documentation.
+
+## Place in OpenWearables
+
+OpenWearables owns app startup, top-level routing, global providers, wearable
+connections, device selection, sensor configuration state, application
+lifecycle, and the **Apps** catalogue. EarStreAM owns only its feature-local
+navigation, settings, sessions, signal interpretation, playback, and
+analytics.
+
+The launch boundary is intentional:
+
+1. `lib/apps/widgets/apps_page.dart` advertises EarStreAM and declares its
+   supported device family and capabilities.
+2. OpenWearables' `SelectEarableView` supplies a connected wearable and its
+   existing `SensorConfigurationProvider`.
+3. The catalogue entry resolves the required PPG, accelerometer, and gyroscope
+   sensors and constructs `MeditationView` with those dependencies.
+4. EarStreAM returns control to the existing OpenWearables navigation stack
+   when its view closes.
+
+Do not add an EarStreAM `main()`, top-level route, connection manager, global
+provider tree, or duplicate device selector. Do not make feature code discover
+host state through global singletons when dependencies can cross the launch
+boundary explicitly. EarStreAM's drawer is internal navigation within the
+feature and must not replace or bypass the OpenWearables shell.
+
+Keep changes outside `lib/apps/meditation_app/` as small and reviewable as
+possible. Host-level changes must serve a documented integration need and must
+preserve every existing in-app. Seal Check is a separate official
+OpenWearables in-app; do not reintroduce a private copy inside EarStreAM.
 
 ## Product contract
 
@@ -56,24 +97,30 @@ Keep labels, icons, and presentation state in the views. Keep signal decoding,
 mode decisions, provider routing, and persistence out of widgets so they remain
 testable without a device.
 
-## Integration outside this directory
+## Host integration points
 
-Changes to this subtree can require coordinated changes elsewhere in
-`open_wearable/`:
+Changes to this subtree can require a small number of coordinated changes
+elsewhere in `open_wearable/`:
 
 - `lib/apps/widgets/apps_page.dart` registers EarStreAM, limits it to the
   `OpenEarable` device prefix, locates PPG/accelerometer/gyroscope sensors, and
   constructs `MeditationView`.
-- `pubspec.yaml` declares packages and bundles the EarStreAM assets. The audio
-  directory is included as a parent asset; do not enumerate tracks twice.
+- `pubspec.yaml` declares shared package dependencies and bundles the EarStreAM
+  assets. Any dependency change affects the whole OpenWearables app: justify
+  additions, preserve compatible versions, and avoid unrelated upgrades.
+  Flutter asset directory entries are not recursive, so keep both the
+  top-level asset directory and `assets/audio/`; do not list tracks
+  individually as well.
+- Flutter tooling owns the generated Linux, macOS, and Windows plugin
+  registrants. Regenerate them through `flutter pub get`; never hand-edit them.
 - `android/app/src/main/kotlin/edu/kit/teco/openwearables/` contains the
   read-only audio-route diagnostic channel.
 - Android backup/data-extraction XML excludes the secure credential namespace,
   while `ios/Runner/Runner.entitlements` and the Runner Xcode build settings
   contain keychain access configuration.
 
-When moving EarStreAM into another host app, reproduce these integration points
-explicitly. Do not make the meditation package silently reach into global host
+Treat these as OpenWearables integration contracts, not as a second application
+bootstrap. Do not make the meditation module silently reach into global host
 state.
 
 ## Session and signal invariants
@@ -193,9 +240,9 @@ conversation state.
   `assets/audio/`, use an `.mp3` `MeditationEnvironment.assetPath`, and verify
   decoding on supported platforms. Do not reintroduce WAV or demo-only TTS
   pipelines.
-- EarStreAM acquires its wakelock for the in-app lifetime and restores the host
-  app's desired wakelock state on exit. A wakelock error must never prevent a
-  session from starting.
+- EarStreAM acquires its wakelock only while its feature view is mounted and
+  restores the OpenWearables app's desired wakelock state on exit. A wakelock
+  error must never prevent a session from starting.
 
 ## Privacy, persistence, and secrets
 
@@ -211,9 +258,9 @@ Privacy is a runtime boundary, not just UI text.
 - Profile, preferences, consent, and analytics use app-local preferences. API
   secrets use `flutter_secure_storage`; provider, region, voice, and verified
   state use ordinary preferences.
-- A fresh public installation has no service credentials. Once the device has
-  saved service settings, that snapshot wins, including deliberately cleared
-  keys.
+- A fresh OpenWearables installation has no EarStreAM service credentials.
+  Once the device has saved service settings, that snapshot wins, including
+  deliberately cleared keys.
 - Verification responses are revisioned. Do not let a stale request mark
   edited credentials or a different region as valid.
 - **Delete all EarStreAM data** must clear user settings, service credentials,
@@ -308,6 +355,20 @@ dart analyze lib/apps/meditation_app
 dart analyze test/apps/meditation_app
 flutter test test/apps/meditation_app
 ```
+
+Before handing off a material EarStreAM change, and always after changing the
+app catalogue, dependencies, assets, or platform integration, validate the
+entire OpenWearables app as required by `CONTRIBUTING.md`:
+
+```powershell
+dart format lib test
+flutter analyze
+flutter test
+```
+
+The full-app checks are required because EarStreAM shares the Flutter process,
+dependency graph, plugin registrants, wearable connection, and sensor
+configuration state with every other in-app.
 
 Important suites include:
 
