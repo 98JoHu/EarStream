@@ -66,7 +66,7 @@ MeditationScript createMeditationScript({
   Duration? segmentDuration,
   MeditationPromptPolicy promptPolicy = MeditationPromptPolicy.standard,
 }) {
-  if (account.hasValidDeepseekKey) {
+  if (account.allowsCloudProcessing && account.hasValidDeepseekKey) {
     return AdaptiveMeditationScript(
       account: account,
       maxSegments: maxSegments,

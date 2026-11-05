@@ -6,7 +6,7 @@ import '../../widgets/custom_dropdown.dart';
 
 class PreferencesPage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;
-  final VoidCallback? onSaved;
+  final Future<void> Function()? onSaved;
 
   const PreferencesPage({
     super.key,
@@ -58,7 +58,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
     super.dispose();
   }
 
-  void _saveProfile() {
+  Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         widget.userAccount.voiceGender = _voiceGender;
@@ -69,11 +69,23 @@ class _PreferencesPageState extends State<PreferencesPage> {
             _additionalPreferencesController.text;
         widget.userAccount.stressThreshold = _stressThreshold;
       });
-      widget.onSaved?.call();
+      try {
+        await widget.onSaved?.call();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not save meditation preferences: $error'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return;
+      }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Profile saved successfully!'),
+          content: Text('Meditation preferences saved successfully!'),
           backgroundColor: Colors.green,
         ),
       );

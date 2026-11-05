@@ -854,8 +854,10 @@ need to be tested at the deployment location.
 The `.env` file is bundled as a Flutter asset. It is suitable for controlled
 demos but must not be treated as a secure production secret store because
 packaged application assets can be extracted. Values edited on the API Keys
-page affect the current in-memory app session; this in-app implementation does
-not persist those edited credentials itself.
+page persist across app restarts. API secrets use platform-protected secure
+storage; provider, region, selected voice, and verification state use ordinary
+local preferences. An intentionally cleared key does not fall back to the
+bundled environment on the next launch.
 
 ## Navigation and user settings
 
@@ -868,11 +870,32 @@ The in-app drawer contains:
 - **Weekly Analytics**;
 - **Seal Check**; and
 - **API Keys**: provider, voice, Tencent region, credentials, and live service
-  checks.
+  checks; and
+- **Privacy & Data**: cloud-processing choice, provider privacy links, local
+  storage disclosure, wellness disclaimer, and deletion of EarStreAM data.
 
 Provider, region and credential settings exist only on API Keys. Voice gender
 and speaking speed are meditation-delivery preferences and are editable in
 Meditation Preferences and in the demo attendee preferences as well.
+
+Profile values and meditation preferences persist locally across app restarts.
+A fresh installation begins without an invented name, age, gender, or fitness
+profile. `Gender.unspecified` does not count as a complete demographic profile
+for baseline blending.
+
+Before the in-app navigation is shown for the first time, the user must choose
+between cloud personalization and local-only meditation. Cloud personalization
+allows the standard DeepSeek prompt to include the saved profile, preferences,
+and — in biosignal-adaptive sessions — HR/RMSSD updates. The selected cloud TTS
+provider receives the generated narration, which may contain personalized
+text. Local-only mode centrally disables DeepSeek and cloud TTS while retaining
+the configured credentials for a later opt-in; static guidance, on-device TTS,
+and bundled ambience remain available. The choice can be changed or withdrawn
+from Privacy & Data.
+
+**Delete all EarStreAM data** removes the saved profile, meditation preferences,
+service credentials, cloud choice, current measured baseline, and weekly
+analytics. It affects only this in-app's data.
 
 When no sensor baseline exists, profile-derived HR/RMSSD estimates can provide
 context outside the live baseline workflow. These estimates are calculated on
@@ -955,6 +978,8 @@ meditation_app/
 |   |-- measurement_phase.dart
 |   |-- meditation.dart
 |   |-- meditation_analytics.dart
+|   |-- meditation_service_settings_store.dart
+|   |-- meditation_user_settings_store.dart
 |   |-- meditation_prompt_policy.dart
 |   |-- meditation_session_generator.dart
 |   |-- monitoring_meditation_deadline.dart
@@ -1023,4 +1048,4 @@ voice-outage handling.
 
 ---
 
-Last reviewed against the implementation: September 19, 2026.
+Last reviewed against the implementation: November 5, 2026.

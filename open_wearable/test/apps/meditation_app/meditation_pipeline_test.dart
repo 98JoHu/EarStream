@@ -282,7 +282,7 @@ void main() {
     test('synthesis happens in prepare, not in play', () async {
       final provider = _RecordingTtsProvider();
       final service = TtsService(
-        userAccount: UserAccount(),
+        userAccount: UserAccount(cloudProcessingConsent: true),
         provider: provider,
       );
       addTearDown(service.dispose);
@@ -298,7 +298,7 @@ void main() {
     test('synthesis retries, playback of the result does not', () async {
       final provider = _RecordingTtsProvider(failuresBeforeSuccess: 2);
       final service = TtsService(
-        userAccount: UserAccount(),
+        userAccount: UserAccount(cloudProcessingConsent: true),
         provider: provider,
       );
       addTearDown(service.dispose);
@@ -314,7 +314,7 @@ void main() {
     test('a voice service that never recovers stops the session', () async {
       final provider = _RecordingTtsProvider(failuresBeforeSuccess: 99);
       final service = TtsService(
-        userAccount: UserAccount(),
+        userAccount: UserAccount(cloudProcessingConsent: true),
         provider: provider,
       );
       addTearDown(service.dispose);
@@ -348,7 +348,7 @@ class _PipelineMeditation extends Meditation {
     this.stopAfterSegments,
     void Function(String event)? onEvent,
   }) : super(
-          userAccount: UserAccount(),
+          userAccount: UserAccount(cloudProcessingConsent: true),
           diagnosticEventSink:
               onEvent == null ? null : ((event, _) => onEvent(event)),
         ) {

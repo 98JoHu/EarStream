@@ -215,6 +215,11 @@ class UserAccount {
   String? additionalPreferences;
   double? stressThreshold;
 
+  /// Whether this user has explicitly allowed meditation data to be sent to
+  /// the configured cloud services. `null` means that no choice has been made
+  /// yet; both `null` and `false` keep generation and narration on the device.
+  bool? cloudProcessingConsent;
+
   // API keys and tokens
   String? deepseekApiKey;
   bool hasValidDeepseekKey = false;
@@ -244,6 +249,7 @@ class UserAccount {
     this.meditationEnvironment,
     this.additionalPreferences,
     this.stressThreshold,
+    this.cloudProcessingConsent,
     this.deepseekApiKey,
     this.elevenLabsApiKey,
     this.ttsProvider = TtsProviderOption.elevenLabs,
@@ -259,12 +265,14 @@ class UserAccount {
         TtsProviderOption.tencent => hasValidTencentKey,
       };
 
+  bool get allowsCloudProcessing => cloudProcessingConsent == true;
+
   factory UserAccount.fromEnvironment(
     Map<String, String> environment, {
-    String firstName = 'John',
-    Gender gender = Gender.unspecified,
-    int age = 30,
-    FitnessLevel fitnessLevel = FitnessLevel.moderate,
+    String? firstName,
+    Gender? gender,
+    int? age,
+    FitnessLevel? fitnessLevel,
   }) {
     String? configured(String key) {
       final value = environment[key]?.trim();
@@ -324,6 +332,7 @@ class UserAccount {
       // not attendee profile data. It is used for TTS but never added to the
       // privacy-restricted demo prompt.
       voiceGender: serviceConfiguration.voiceGender,
+      cloudProcessingConsent: serviceConfiguration.cloudProcessingConsent,
       deepseekApiKey: serviceConfiguration.deepseekApiKey,
       elevenLabsApiKey: serviceConfiguration.elevenLabsApiKey,
       ttsProvider: serviceConfiguration.ttsProvider,
@@ -352,7 +361,12 @@ class UserAccount {
   /// for [baselineBiometrics], but not as a prior that the measured baseline
   /// is deliberately blended with.
   (int heartRate, double rmssd)? get demographicBaseline {
-    if (age == null || gender == null || fitnessLevel == null) return null;
+    if (age == null ||
+        gender == null ||
+        gender == Gender.unspecified ||
+        fitnessLevel == null) {
+      return null;
+    }
     return _demographicEstimate();
   }
 

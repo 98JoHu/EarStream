@@ -30,7 +30,8 @@ class TencentTtsProvider implements TtsProvider {
   TencentTtsProvider(UserAccount account, {TencentTtsClient? client})
       : _secretId = account.tencentSecretId,
         _secretKey = account.tencentSecretKey,
-        _isAvailable = account.hasValidTencentKey,
+        _isAvailable =
+            account.allowsCloudProcessing && account.hasValidTencentKey,
         _region = account.tencentTtsRegion,
         _voiceType = account.voiceGender == Gender.male
             ? OverallMeditationConfig.tencentPremiumMaleVoiceType
@@ -87,7 +88,8 @@ class ElevenLabsTtsProvider implements TtsProvider {
 
   ElevenLabsTtsProvider(UserAccount account)
       : _apiKey = account.elevenLabsApiKey,
-        _isAvailable = account.hasValidElevenLabsKey,
+        _isAvailable =
+            account.allowsCloudProcessing && account.hasValidElevenLabsKey,
         voiceId = resolveVoiceId(account),
         _speed = _elevenLabsSpeed(account.speakingSpeed);
 
@@ -201,7 +203,8 @@ class TtsService {
             },
         _fallbackTts = FlutterTts() {
     // A cloud outage must not silently change the voice mid-meditation.
-    _usesDeviceFallback = !_provider.isAvailable;
+    _usesDeviceFallback =
+        !userAccount.allowsCloudProcessing || !_provider.isAvailable;
   }
 
   static const _femaleVoice = OverallMeditationConfig.fallbackFemaleVoice;

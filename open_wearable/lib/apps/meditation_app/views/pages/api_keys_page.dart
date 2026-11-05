@@ -93,6 +93,31 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 'secrets are kept in encrypted platform storage.',
                 style: TextStyle(color: Colors.grey[700], height: 1.4),
               ),
+              if (!widget.userAccount.allowsCloudProcessing) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.phonelink_lock_outlined),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Local-only meditation is active. Credentials can '
+                          'still be stored here, but connection checks and '
+                          'cloud services remain disabled until you allow '
+                          'cloud processing in Privacy & Data.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               const Text(
                 'TTS Provider',

@@ -7,6 +7,7 @@ import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
 import '../model/meditation_analytics.dart';
 import '../model/meditation_service_settings_store.dart';
+import '../model/meditation_user_settings_store.dart';
 import '../model/screen_wakelock.dart';
 import '../model/wearable_connection.dart';
 import 'pages/drawer_page.dart';
@@ -16,6 +17,7 @@ import 'pages/preferences_page.dart';
 import 'pages/weekly_analytics_page.dart';
 import 'pages/seal_check_page.dart';
 import 'pages/api_keys_page.dart';
+import 'pages/privacy_data_page.dart';
 
 class MeditationView extends StatefulWidget {
   final Sensor ppgSensor;
@@ -24,6 +26,7 @@ class MeditationView extends StatefulWidget {
   final SensorConfigurationProvider sensorConfigProvider;
   final Wearable? wearable;
   final MeditationServiceSettingsStore? serviceSettingsStore;
+  final MeditationUserSettingsStore? userSettingsStore;
 
   const MeditationView({
     super.key,
@@ -33,6 +36,7 @@ class MeditationView extends StatefulWidget {
     required this.sensorConfigProvider,
     this.wearable,
     this.serviceSettingsStore,
+    this.userSettingsStore,
   });
 
   @override
@@ -44,9 +48,10 @@ class _MeditationViewState extends State<MeditationView> {
   MeditationMode? _selectedMode;
   late final UserAccount _userAccount;
   late final MeditationServiceSettingsStore _serviceSettingsStore;
+  late final MeditationUserSettingsStore _userSettingsStore;
   late final MeditationAnalyticsStore _analyticsStore;
   late final WearableConnection _wearableConnection;
-  bool _serviceSettingsLoaded = false;
+  bool _settingsLoaded = false;
 
   @override
   void initState() {
@@ -54,17 +59,54 @@ class _MeditationViewState extends State<MeditationView> {
     _userAccount = UserAccount.fromEnvironment(dotenv.env);
     _serviceSettingsStore =
         widget.serviceSettingsStore ?? MeditationServiceSettingsStore();
+    _userSettingsStore =
+        widget.userSettingsStore ?? MeditationUserSettingsStore();
     _analyticsStore = MeditationAnalyticsStore()..load();
     _wearableConnection = WearableConnection(widget.wearable);
-    unawaited(_loadServiceSettings());
+    unawaited(_loadSettings());
     // A session waits minutes on DeepSeek and text-to-speech with no touch
     // input; Android suspends those requests once the screen turns off.
     unawaited(ScreenWakelock.acquire());
   }
 
-  Future<void> _loadServiceSettings() async {
+  Future<void> _loadSettings() async {
     await _serviceSettingsStore.loadInto(_userAccount);
-    if (mounted) setState(() => _serviceSettingsLoaded = true);
+    await _userSettingsStore.loadInto(_userAccount);
+    if (mounted) setState(() => _settingsLoaded = true);
+  }
+
+  Future<void> _saveProfileSettings() => _userSettingsStore.save(_userAccount);
+
+  Future<void> _saveMeditationPreferences() async {
+    await Future.wait<void>([
+      _userSettingsStore.save(_userAccount),
+      _serviceSettingsStore.save(_userAccount),
+    ]);
+  }
+
+  Future<void> _setCloudProcessingConsent(bool enabled) async {
+    final previous = _userAccount.cloudProcessingConsent;
+    _userAccount.cloudProcessingConsent = enabled;
+    try {
+      await _userSettingsStore.save(_userAccount);
+    } catch (_) {
+      _userAccount.cloudProcessingConsent = previous;
+      rethrow;
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deleteAllMeditationData() async {
+    await _userSettingsStore.clear();
+    await _serviceSettingsStore.clear(_userAccount);
+    await _analyticsStore.clear();
+    MeditationUserSettingsStore.clearAccount(_userAccount);
+    if (mounted) {
+      setState(() {
+        _selectedIndex = 0;
+        _selectedMode = null;
+      });
+    }
   }
 
   List<DrawerPage> get _pages => [
@@ -80,18 +122,24 @@ class _MeditationViewState extends State<MeditationView> {
           selectedMode: _selectedMode,
           onModeSelected: (mode) => setState(() => _selectedMode = mode),
         ),
-        ProfilePage(userAccount: _userAccount),
+        ProfilePage(
+          userAccount: _userAccount,
+          onSaved: _saveProfileSettings,
+        ),
         PreferencesPage(
           userAccount: _userAccount,
-          onSaved: () => unawaited(
-            _serviceSettingsStore.save(_userAccount),
-          ),
+          onSaved: _saveMeditationPreferences,
         ),
         WeeklyAnalyticsPage(analyticsStore: _analyticsStore),
         SealCheckPage(wearable: widget.wearable),
         ApiKeysPage(
           userAccount: _userAccount,
           settingsStore: _serviceSettingsStore,
+        ),
+        PrivacyDataPage(
+          userAccount: _userAccount,
+          onCloudChoice: _setCloudProcessingConsent,
+          onDeleteAll: _deleteAllMeditationData,
         ),
       ];
 
@@ -105,10 +153,24 @@ class _MeditationViewState extends State<MeditationView> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_serviceSettingsLoaded) {
+    if (!_settingsLoaded) {
       return const Scaffold(
         body: SafeArea(
           child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    if (_userAccount.cloudProcessingConsent == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('EarStreAM privacy')),
+        body: SafeArea(
+          child: PrivacyDataPage(
+            userAccount: _userAccount,
+            requireChoice: true,
+            onCloudChoice: _setCloudProcessingConsent,
+            onDeleteAll: _deleteAllMeditationData,
+          ),
         ),
       );
     }

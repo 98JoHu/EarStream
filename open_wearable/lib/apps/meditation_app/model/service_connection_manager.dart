@@ -19,8 +19,9 @@ abstract class ConnectionManager extends ChangeNotifier {
   ConnectionManager({
     required this.userAccount,
     bool initiallyValid = false,
-  }) : _status =
-            initiallyValid ? ConnectionStatus.ok : ConnectionStatus.missing;
+  }) : _status = initiallyValid && userAccount.allowsCloudProcessing
+            ? ConnectionStatus.ok
+            : ConnectionStatus.missing;
 
   ConnectionStatus _status;
   ConnectionStatus get status => _status;
@@ -42,6 +43,12 @@ abstract class ConnectionManager extends ChangeNotifier {
 
   Future<void> checkConnection() async {
     if (_isDisposed) return;
+    if (!userAccount.allowsCloudProcessing) {
+      _status = ConnectionStatus.error;
+      _lastError = 'Cloud processing is disabled in Privacy & Data.';
+      notifyListeners();
+      return;
+    }
     final requestRevision = ++_requestRevision;
     _status = ConnectionStatus.checking;
     _lastError = null;

@@ -5,7 +5,13 @@ import '../../widgets/gender_selector.dart';
 
 class ProfilePage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;
-  const ProfilePage({super.key, required this.userAccount});
+  final Future<void> Function()? onSaved;
+
+  const ProfilePage({
+    super.key,
+    required this.userAccount,
+    this.onSaved,
+  });
 
   @override
   String get label => "Profile";
@@ -45,7 +51,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  void _saveProfile() {
+  Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         widget.userAccount.firstName = _nameController.text.trim();
@@ -54,6 +60,20 @@ class _ProfilePageState extends State<ProfilePage> {
         widget.userAccount.fitnessLevel = _fitnessLevel;
       });
 
+      try {
+        await widget.onSaved?.call();
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not save the profile: $error'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Profile saved successfully!'),

@@ -141,6 +141,37 @@ class MeditationServiceSettingsStore {
     return _saveLoop ??= _drainSaves();
   }
 
+  /// Removes all stored credentials and restores neutral service defaults.
+  ///
+  /// An empty initialized snapshot is deliberately retained. Until the legacy
+  /// bundled environment is removed, this prevents deleted demo credentials
+  /// from reappearing on the next launch as first-run defaults.
+  Future<void> clear(UserAccount account) async {
+    _pendingSnapshot = null;
+    final activeSave = _saveLoop;
+    if (activeSave != null) await activeSave;
+    _pendingSnapshot = null;
+
+    clearAccount(account);
+    await _writeSnapshot(_ServiceSettingsSnapshot.fromAccount(account));
+  }
+
+  static void clearAccount(UserAccount account) {
+    account
+      ..deepseekApiKey = null
+      ..hasValidDeepseekKey = false
+      ..elevenLabsApiKey = null
+      ..hasValidElevenLabsKey = false
+      ..elevenLabsVoiceId = null
+      ..availableElevenLabsVoices = null
+      ..voiceGender = null
+      ..ttsProvider = TtsProviderOption.elevenLabs
+      ..tencentSecretId = null
+      ..tencentSecretKey = null
+      ..hasValidTencentKey = false
+      ..tencentTtsRegion = TencentTtsRegion.internationalSingapore;
+  }
+
   Future<void> _drainSaves() async {
     while (_pendingSnapshot != null) {
       final snapshot = _pendingSnapshot!;

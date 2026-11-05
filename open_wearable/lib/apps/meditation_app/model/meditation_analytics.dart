@@ -115,6 +115,14 @@ class MeditationAnalyticsStore extends ChangeNotifier {
     _notifyListenersIfMounted();
   }
 
+  Future<void> clear() async {
+    await load();
+    _records.clear();
+    final preferences = await _preferencesProvider();
+    await preferences.remove(_storageKey);
+    _notifyListenersIfMounted();
+  }
+
   List<MeditationSessionRecord> recordsForWeek(DateTime dateInWeek) {
     final start = startOfWeek(dateInWeek);
     final end = start.add(OverallMeditationConfig.analyticsWeekLength);

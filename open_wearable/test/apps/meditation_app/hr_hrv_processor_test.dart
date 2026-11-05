@@ -27,6 +27,7 @@ import 'package:open_wearable/apps/meditation_app/model/meditation_prompt_policy
 import 'package:open_wearable/apps/meditation_app/model/meditation_analytics.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation.dart';
 import 'package:open_wearable/apps/meditation_app/model/meditation_session_generator.dart';
+import 'package:open_wearable/apps/meditation_app/model/meditation_user_settings_store.dart';
 import 'package:open_wearable/apps/meditation_app/model/monitoring_meditation_deadline.dart';
 import 'package:open_wearable/apps/meditation_app/model/sensor_axis_mapping.dart';
 import 'package:open_wearable/apps/meditation_app/model/service_connection_manager.dart';
@@ -43,6 +44,7 @@ import 'package:open_wearable/apps/meditation_app/views/meditation_modes/demo_vi
     as demo_view;
 import 'package:open_wearable/apps/meditation_app/views/pages/api_keys_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/preferences_page.dart';
+import 'package:open_wearable/apps/meditation_app/views/pages/privacy_data_page.dart';
 import 'package:open_wearable/apps/meditation_app/views/pages/weekly_analytics_page.dart';
 import 'package:open_wearable/apps/meditation_app/widgets/custom_dropdown.dart';
 import 'package:open_wearable/apps/meditation_app/widgets/meditation_tile.dart';
@@ -1120,7 +1122,9 @@ void main() {
 
   group('service connection state', () {
     test('ignores verification results after credentials change', () async {
-      final manager = _DeferredConnectionManager(userAccount: UserAccount());
+      final manager = _DeferredConnectionManager(
+        userAccount: UserAccount(cloudProcessingConsent: true),
+      );
       addTearDown(manager.dispose);
 
       final check = manager.checkConnection();
@@ -1137,7 +1141,9 @@ void main() {
 
     test('ignores verification results after the manager is disposed',
         () async {
-      final manager = _DeferredConnectionManager(userAccount: UserAccount());
+      final manager = _DeferredConnectionManager(
+        userAccount: UserAccount(cloudProcessingConsent: true),
+      );
 
       final check = manager.checkConnection();
       manager.dispose();
@@ -1162,6 +1168,106 @@ void main() {
       expect(account.hasValidElevenLabsKey, isTrue);
       expect(account.elevenLabsVoiceId, isNull);
       expect(account.availableElevenLabsVoices, hasLength(1));
+    });
+  });
+
+  group('persisted profile and cloud privacy', () {
+    test('a fresh account has no invented demographic profile', () {
+      final account = UserAccount.fromEnvironment({
+        'DEEPSEEK_API_KEY': 'configured-key',
+      });
+
+      expect(account.firstName, isNull);
+      expect(account.age, isNull);
+      expect(account.gender, isNull);
+      expect(account.fitnessLevel, isNull);
+      expect(account.demographicBaseline, isNull);
+      expect(account.cloudProcessingConsent, isNull);
+    });
+
+    test('profile, preferences, and cloud choice survive a round trip',
+        () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final store = MeditationUserSettingsStore();
+      final source = UserAccount(
+        firstName: 'Avery',
+        age: 42,
+        gender: Gender.nonBinary,
+        fitnessLevel: FitnessLevel.active,
+        speakingSpeed: SpeakingSpeed.medium,
+        meditationType: MeditationType.bodyScan,
+        meditationEnvironment: MeditationEnvironment.forest,
+        additionalPreferences: 'Use gentle transitions',
+        stressThreshold: 0.15,
+        cloudProcessingConsent: true,
+      );
+
+      await store.save(source);
+      final restored = UserAccount();
+      expect(await store.loadInto(restored), isTrue);
+      expect(restored.firstName, 'Avery');
+      expect(restored.age, 42);
+      expect(restored.gender, Gender.nonBinary);
+      expect(restored.fitnessLevel, FitnessLevel.active);
+      expect(restored.speakingSpeed, SpeakingSpeed.medium);
+      expect(restored.meditationType, MeditationType.bodyScan);
+      expect(restored.meditationEnvironment, MeditationEnvironment.forest);
+      expect(restored.additionalPreferences, 'Use gentle transitions');
+      expect(restored.stressThreshold, 0.15);
+      expect(restored.cloudProcessingConsent, isTrue);
+    });
+
+    test('local-only choice blocks generation, cloud TTS, and checks',
+        () async {
+      final account = UserAccount(
+        cloudProcessingConsent: false,
+        deepseekApiKey: 'deepseek-key',
+        elevenLabsApiKey: 'eleven-key',
+      )
+        ..hasValidDeepseekKey = true
+        ..hasValidElevenLabsKey = true;
+
+      final script = createMeditationScript(account: account, maxSegments: 1);
+      expect(script, isA<StaticMeditationScript>());
+      script.dispose();
+      expect(ElevenLabsTtsProvider(account).isAvailable, isFalse);
+
+      final manager = DeepseekManager(userAccount: account);
+      addTearDown(manager.dispose);
+      await manager.checkConnection();
+      expect(manager.status, ConnectionStatus.error);
+      expect(manager.lastError, contains('Privacy & Data'));
+      expect(account.hasValidDeepseekKey, isTrue);
+    });
+
+    testWidgets('first-use privacy page records a local-only choice',
+        (tester) async {
+      final account = UserAccount();
+      bool? savedChoice;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PrivacyDataPage(
+              userAccount: account,
+              requireChoice: true,
+              onCloudChoice: (enabled) async {
+                account.cloudProcessingConsent = enabled;
+                savedChoice = enabled;
+              },
+              onDeleteAll: () async {},
+            ),
+          ),
+        ),
+      );
+
+      final localOnlyButton = find.text('Use local only');
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      await tester.tap(localOnlyButton);
+      await tester.pump();
+
+      expect(savedChoice, isFalse);
+      expect(account.cloudProcessingConsent, isFalse);
     });
   });
 
