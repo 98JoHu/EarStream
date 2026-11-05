@@ -6,7 +6,13 @@ import '../../widgets/custom_dropdown.dart';
 
 class PreferencesPage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;
-  const PreferencesPage({super.key, required this.userAccount});
+  final VoidCallback? onSaved;
+
+  const PreferencesPage({
+    super.key,
+    required this.userAccount,
+    this.onSaved,
+  });
 
   @override
   String get label => "Meditation Preferences";
@@ -63,6 +69,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
             _additionalPreferencesController.text;
         widget.userAccount.stressThreshold = _stressThreshold;
       });
+      widget.onSaved?.call();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

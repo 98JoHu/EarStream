@@ -16,9 +16,13 @@ abstract class ConnectionManager extends ChangeNotifier {
   @protected
   final UserAccount userAccount;
 
-  ConnectionManager({required this.userAccount});
+  ConnectionManager({
+    required this.userAccount,
+    bool initiallyValid = false,
+  }) : _status =
+            initiallyValid ? ConnectionStatus.ok : ConnectionStatus.missing;
 
-  ConnectionStatus _status = ConnectionStatus.missing;
+  ConnectionStatus _status;
   ConnectionStatus get status => _status;
 
   String? _lastError;
@@ -82,7 +86,8 @@ abstract class ConnectionManager extends ChangeNotifier {
 }
 
 class DeepseekManager extends ConnectionManager {
-  DeepseekManager({required super.userAccount});
+  DeepseekManager({required super.userAccount})
+      : super(initiallyValid: userAccount.hasValidDeepseekKey);
 
   @override
   Future<Object?> verifyCredentials() async {
@@ -121,7 +126,8 @@ class DeepseekManager extends ConnectionManager {
 }
 
 class ElevenLabsManager extends ConnectionManager {
-  ElevenLabsManager({required super.userAccount});
+  ElevenLabsManager({required super.userAccount})
+      : super(initiallyValid: userAccount.hasValidElevenLabsKey);
 
   @override
   Future<Object?> verifyCredentials() async {
@@ -171,7 +177,8 @@ class ElevenLabsManager extends ConnectionManager {
 }
 
 class TencentTtsManager extends ConnectionManager {
-  TencentTtsManager({required super.userAccount});
+  TencentTtsManager({required super.userAccount})
+      : super(initiallyValid: userAccount.hasValidTencentKey);
 
   @override
   Future<Object?> verifyCredentials() async {

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../model/meditation_service_settings_store.dart';
 import '../../model/user_account.dart';
 import '../../model/service_connection_manager.dart';
 import 'drawer_page.dart';
@@ -8,7 +11,13 @@ import '../../widgets/custom_dropdown.dart';
 
 class ApiKeysPage extends StatefulWidget implements DrawerPage {
   final UserAccount userAccount;
-  const ApiKeysPage({super.key, required this.userAccount});
+  final MeditationServiceSettingsStore? settingsStore;
+
+  const ApiKeysPage({
+    super.key,
+    required this.userAccount,
+    this.settingsStore,
+  });
 
   @override
   String get label => "API Keys";
@@ -27,23 +36,35 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
   late final DeepseekManager _deepseekManager;
   late final ElevenLabsManager _elevenLabsManager;
   late final TencentTtsManager _tencentManager;
+  late final MeditationServiceSettingsStore _settingsStore;
 
   @override
   void initState() {
     super.initState();
+    _settingsStore = widget.settingsStore ?? MeditationServiceSettingsStore();
     _deepseekManager = DeepseekManager(userAccount: widget.userAccount);
     _elevenLabsManager = ElevenLabsManager(userAccount: widget.userAccount);
     _tencentManager = TencentTtsManager(userAccount: widget.userAccount);
-    _elevenLabsManager.addListener(_refreshFromServiceState);
+    _deepseekManager.addListener(_serviceStateChanged);
+    _elevenLabsManager.addListener(_serviceStateChanged);
+    _tencentManager.addListener(_serviceStateChanged);
   }
 
-  void _refreshFromServiceState() {
-    if (mounted) setState(() {});
+  void _serviceStateChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _saveSettings();
+  }
+
+  void _saveSettings() {
+    unawaited(_settingsStore.save(widget.userAccount));
   }
 
   @override
   void dispose() {
-    _elevenLabsManager.removeListener(_refreshFromServiceState);
+    _deepseekManager.removeListener(_serviceStateChanged);
+    _elevenLabsManager.removeListener(_serviceStateChanged);
+    _tencentManager.removeListener(_serviceStateChanged);
     _deepseekManager.dispose();
     _elevenLabsManager.dispose();
     _tencentManager.dispose();
@@ -67,7 +88,9 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Credentials loaded from the bundled demo configuration or entered here apply to the current app session. Choose which cloud voice service EarStreAM should use.',
+                'Choose which cloud voice service EarStreAM should use. Your '
+                'selection and credentials are saved on this device; API '
+                'secrets are kept in encrypted platform storage.',
                 style: TextStyle(color: Colors.grey[700], height: 1.4),
               ),
               const SizedBox(height: 24),
@@ -82,6 +105,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 onSelected: (value) {
                   if (value == null) return;
                   setState(() => widget.userAccount.ttsProvider = value);
+                  _saveSettings();
                 },
               ),
               const SizedBox(height: 24),
@@ -124,6 +148,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                     setState(() {
                       widget.userAccount.elevenLabsVoiceId = value;
                     });
+                    _saveSettings();
                   },
                 ),
               ],
@@ -133,7 +158,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 neighbourWidget: SecretField(
                   title: "Deepseek API Key",
                   description:
-                      "Provide a Deepseek API key to enable personalized session generation. Changes apply to the current app session.",
+                      "Provide a Deepseek API key to enable personalized session generation. It is saved securely on this device.",
                   onChanged: (value) {
                     widget.userAccount.deepseekApiKey = value;
                     _deepseekManager.markUnverified();
@@ -147,7 +172,7 @@ class _ApiKeysPageState extends State<ApiKeysPage> {
                 neighbourWidget: SecretField(
                   title: "ElevenLabs API Key",
                   description:
-                      "Provide an ElevenLabs API key to enable voice synthesis. Changes apply to the current app session.",
+                      "Provide an ElevenLabs API key to enable voice synthesis. It is saved securely on this device.",
                   onChanged: (value) {
                     widget.userAccount.elevenLabsApiKey = value;
                     _elevenLabsManager.markUnverified();

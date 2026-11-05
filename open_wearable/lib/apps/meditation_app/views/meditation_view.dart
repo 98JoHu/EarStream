@@ -6,6 +6,7 @@ import 'package:open_earable_flutter/open_earable_flutter.dart';
 import 'package:open_wearable/view_models/sensor_configuration_provider.dart';
 import '../model/user_account.dart';
 import '../model/meditation_analytics.dart';
+import '../model/meditation_service_settings_store.dart';
 import '../model/screen_wakelock.dart';
 import '../model/wearable_connection.dart';
 import 'pages/drawer_page.dart';
@@ -22,6 +23,7 @@ class MeditationView extends StatefulWidget {
   final Sensor gyroscopeSensor;
   final SensorConfigurationProvider sensorConfigProvider;
   final Wearable? wearable;
+  final MeditationServiceSettingsStore? serviceSettingsStore;
 
   const MeditationView({
     super.key,
@@ -30,6 +32,7 @@ class MeditationView extends StatefulWidget {
     required this.gyroscopeSensor,
     required this.sensorConfigProvider,
     this.wearable,
+    this.serviceSettingsStore,
   });
 
   @override
@@ -40,18 +43,28 @@ class _MeditationViewState extends State<MeditationView> {
   int _selectedIndex = 0;
   MeditationMode? _selectedMode;
   late final UserAccount _userAccount;
+  late final MeditationServiceSettingsStore _serviceSettingsStore;
   late final MeditationAnalyticsStore _analyticsStore;
   late final WearableConnection _wearableConnection;
+  bool _serviceSettingsLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _userAccount = UserAccount.fromEnvironment(dotenv.env);
+    _serviceSettingsStore =
+        widget.serviceSettingsStore ?? MeditationServiceSettingsStore();
     _analyticsStore = MeditationAnalyticsStore()..load();
     _wearableConnection = WearableConnection(widget.wearable);
+    unawaited(_loadServiceSettings());
     // A session waits minutes on DeepSeek and text-to-speech with no touch
     // input; Android suspends those requests once the screen turns off.
     unawaited(ScreenWakelock.acquire());
+  }
+
+  Future<void> _loadServiceSettings() async {
+    await _serviceSettingsStore.loadInto(_userAccount);
+    if (mounted) setState(() => _serviceSettingsLoaded = true);
   }
 
   List<DrawerPage> get _pages => [
@@ -68,10 +81,18 @@ class _MeditationViewState extends State<MeditationView> {
           onModeSelected: (mode) => setState(() => _selectedMode = mode),
         ),
         ProfilePage(userAccount: _userAccount),
-        PreferencesPage(userAccount: _userAccount),
+        PreferencesPage(
+          userAccount: _userAccount,
+          onSaved: () => unawaited(
+            _serviceSettingsStore.save(_userAccount),
+          ),
+        ),
         WeeklyAnalyticsPage(analyticsStore: _analyticsStore),
         SealCheckPage(wearable: widget.wearable),
-        ApiKeysPage(userAccount: _userAccount),
+        ApiKeysPage(
+          userAccount: _userAccount,
+          settingsStore: _serviceSettingsStore,
+        ),
       ];
 
   @override
@@ -84,6 +105,14 @@ class _MeditationViewState extends State<MeditationView> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_serviceSettingsLoaded) {
+      return const Scaffold(
+        body: SafeArea(
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
     final pages = _pages;
 
     return Scaffold(
