@@ -21,6 +21,11 @@ requires a connected compatible wearable.
 Keep OpenWearables active during a session. EarStreAM keeps the screen awake
 while it is open, but it does not run as a background service.
 
+EarStreAM is currently exposed by the OpenWearables catalogue on Android, iOS,
+macOS, and Windows. It is hidden on Linux because device text-to-speech is not
+available through the selected Flutter plugin, and on web because the optional
+cloud providers do not offer a dependable browser CORS contract.
+
 ## Meditation modes
 
 ### Biosignal-Adaptive

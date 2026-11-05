@@ -25,6 +25,13 @@ final class PlatformMeditationSecretStorage implements MeditationSecretStorage {
               aOptions: AndroidOptions(
                 storageNamespace: _androidStorageNamespace,
               ),
+              // EarStreAM does not share credentials with another macOS app.
+              // The standard Keychain remains OS-protected and avoids adding
+              // a Keychain Sharing capability to OpenWearables' signing
+              // profile solely for this in-app.
+              mOptions: MacOsOptions(
+                usesDataProtectionKeychain: false,
+              ),
             );
 
   @override

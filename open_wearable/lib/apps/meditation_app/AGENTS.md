@@ -47,6 +47,13 @@ possible. Host-level changes must serve a documented integration need and must
 preserve every existing in-app. Seal Check is a separate official
 OpenWearables in-app; do not reintroduce a private copy inside EarStreAM.
 
+EarStreAM is listed only on Android, iOS, macOS, and Windows. Keep the host
+platform policy centralized in `model/earstream_platform_support.dart`. Linux
+lacks a `flutter_tts` implementation, and direct browser calls to the supported
+cloud APIs have no dependable CORS contract, so do not expose EarStreAM on
+Linux or web without first providing and testing equivalent local speech,
+credential, audio, and cloud behavior.
+
 ## Product contract
 
 EarStreAM has three user-visible modes:
@@ -81,6 +88,7 @@ The main responsibilities are deliberately separated:
 | Mutable session settings and configuration parsing | `model/user_account.dart` |
 | Profile, preference, and consent persistence | `model/meditation_user_settings_store.dart` |
 | Provider and credential persistence | `model/meditation_service_settings_store.dart` |
+| Host-platform availability | `model/earstream_platform_support.dart` |
 | Sensor subscription and recorded-stress sources | `model/biometric_source.dart` |
 | HR/HRV processing and optical-channel selection | `model/hr_hrv_processor.dart` |
 | Phase changes and measurement lifecycle | `model/measurement.dart` |
