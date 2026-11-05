@@ -246,8 +246,9 @@ conversation state.
 - Ambience failure is non-fatal. Log it and continue with narration.
 - Ambience assets are compressed MP3 files. Add new tracks under
   `assets/audio/`, use an `.mp3` `MeditationEnvironment.assetPath`, and verify
-  decoding on supported platforms. Do not reintroduce WAV or demo-only TTS
-  pipelines.
+  decoding on supported platforms. Record each bundled track and its exact
+  redistribution license in `ASSET_LICENSES.md`. Do not reintroduce WAV or
+  demo-only TTS pipelines.
 - EarStreAM acquires its wakelock only while its feature view is mounted and
   restores the OpenWearables app's desired wakelock state on exit. A wakelock
   error must never prevent a session from starting.

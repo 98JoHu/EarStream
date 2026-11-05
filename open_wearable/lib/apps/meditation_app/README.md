@@ -143,3 +143,8 @@ sessions and post-session mood choices are not included.
 Signal quality and stress estimates depend on fit, motion, skin contact, and
 the connected hardware. Network loss, operating-system suspension, or a cloud
 provider outage can interrupt cloud-enabled sessions.
+
+## Asset licensing
+
+The four bundled ambient recordings are released under CC0. See
+[ASSET_LICENSES.md](ASSET_LICENSES.md) for the exact files and license scope.

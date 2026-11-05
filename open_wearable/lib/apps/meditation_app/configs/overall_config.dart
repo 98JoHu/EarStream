@@ -23,7 +23,7 @@ abstract final class OverallMeditationConfig {
   /// pinned to one: their next request carries the biometrics sampled when the
   /// current segment starts and cannot be made before then.
   static const int narrationPrefetchDepth = 3;
-  static const double backgroundMusicVolume = 0.8;
+  static const double backgroundMusicVolume = 1;
   static const String audioAssetPrefix =
       'lib/apps/meditation_app/assets/audio/';
 
