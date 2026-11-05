@@ -47,7 +47,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _meditationType =
         widget.userAccount.meditationType ?? MeditationType.mindfulness;
     _meditationEnvironment = widget.userAccount.meditationEnvironment ??
-        MeditationEnvironment.nature;
+        MeditationEnvironment.forest;
     _stressThreshold = widget.userAccount.stressThreshold ??
         OverallMeditationConfig.defaultStressSensitivity;
   }

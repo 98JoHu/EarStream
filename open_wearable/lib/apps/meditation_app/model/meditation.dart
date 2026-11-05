@@ -352,7 +352,7 @@ class Meditation {
       await musicPlayer.play(
         AssetSource(
           userAccount.meditationEnvironment?.assetPath ??
-              MeditationEnvironment.nature.assetPath,
+              MeditationEnvironment.forest.assetPath,
         ),
       );
       diagnosticEventSink?.call('audio_started', const {});

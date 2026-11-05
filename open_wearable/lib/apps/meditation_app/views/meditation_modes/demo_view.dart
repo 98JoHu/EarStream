@@ -376,7 +376,7 @@ class _SettingsViewState extends State<SettingsView> {
     _meditationType =
         widget.userAccount.meditationType ?? MeditationType.mindfulness;
     _meditationEnvironment = widget.userAccount.meditationEnvironment ??
-        MeditationEnvironment.nature;
+        MeditationEnvironment.forest;
   }
 
   T _randomEntry<T>(List<DropdownMenuEntry<T>> entries) =>

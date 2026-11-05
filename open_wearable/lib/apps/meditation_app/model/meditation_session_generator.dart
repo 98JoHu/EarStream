@@ -364,7 +364,7 @@ Remember: you're creating a calming, safe space for someone who may be stressed.
     final meditationType =
         _account.meditationType?.label ?? MeditationType.mindfulness.label;
     final environment = _account.meditationEnvironment?.label ??
-        MeditationEnvironment.nature.label;
+        MeditationEnvironment.forest.label;
 
     return '''
 You are a highly empathetic, warm, and professional meditation guide with a naturally calming voice.

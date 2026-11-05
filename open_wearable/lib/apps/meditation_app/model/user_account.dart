@@ -141,11 +141,6 @@ enum TencentTtsRegion {
 }
 
 enum MeditationEnvironment {
-  nature(
-    label: "Peaceful Nature",
-    emoji: AppEmojis.tree,
-    assetPath: "Peaceful_Nature.mp3",
-  ),
   ocean(
     label: "Ocean beach",
     emoji: AppEmojis.wave,

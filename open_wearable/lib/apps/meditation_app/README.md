@@ -89,7 +89,7 @@ cloud-personalized wording. Leaving fields empty is supported.
 ### Meditation Preferences
 
 Choose the preferred voice gender and speed, guidance style, ambience,
-free-text guidance preferences, and stress sensitivity. The five nature
+free-text guidance preferences, and stress sensitivity. The four nature
 ambience tracks are bundled with OpenWearables and play locally.
 
 ### API Keys

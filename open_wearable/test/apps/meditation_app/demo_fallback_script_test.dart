@@ -49,8 +49,8 @@ void main() {
         }
       }
 
-      // 4 types x 5 environments x 3 segments, all distinct.
-      expect(seen, hasLength(60));
+      // 4 types x 4 environments x 3 segments, all distinct.
+      expect(seen, hasLength(48));
     });
 
     test('the narration never counts the breath out', () {
@@ -99,7 +99,6 @@ void main() {
       // particular wording: every environment reads differently, and each
       // session mentions the scenery the attendee asked for somewhere.
       const vocabulary = {
-        MeditationEnvironment.nature: ['nature', 'meadow', 'grass', 'field'],
         MeditationEnvironment.ocean: ['ocean', 'sea', 'wave', 'shore', 'tide'],
         MeditationEnvironment.mountain: ['mountain', 'peak', 'ridge', 'summit'],
         MeditationEnvironment.forest: ['forest', 'tree', 'wood', 'leaf'],

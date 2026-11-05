@@ -26,7 +26,7 @@ import 'user_account.dart';
 /// load, parse, or be left out of a build.
 ///
 /// Coverage is every combination an attendee can select - four meditation
-/// types by five environments - each with its own welcome, completion and
+/// types by four environments - each with its own welcome, completion and
 /// three segments. Speaking speed and voice gender are delivery settings
 /// applied by the voice provider, so they need no separate copy.
 abstract final class DemoFallbackScript {
@@ -79,45 +79,11 @@ abstract final class DemoFallbackScript {
     MeditationEnvironment? environment,
   ) =>
       _scripts[type ?? MeditationType.mindfulness]![
-          environment ?? MeditationEnvironment.nature]!;
+          environment ?? MeditationEnvironment.forest]!;
 
   static const Map<MeditationType, Map<MeditationEnvironment, _DemoScript>>
       _scripts = {
     MeditationType.mindfulness: {
-      MeditationEnvironment.nature: _DemoScript(
-        welcome:
-            'Welcome. Let yourself arrive here... settle into a comfortable '
-            'position... and allow your eyes to gently close if that feels '
-            'right.',
-        completion:
-            'As this meditation closes, carry this calm with you... take a '
-            'gentle breath... and when you are ready, slowly open your '
-            'eyes.',
-        segments: [
-          'Feel the ground beneath you, holding you with quiet support. '
-              'Breathe in slowly... feel the air move through you... and let '
-              'the out-breath flow longer than the in-breath... letting go of '
-              'any weight. If thoughts come, just notice them like leaves '
-              'drifting on a still pond... and return to this breath.',
-          'Let your awareness widen to the space around you... notice the '
-              'quality of the air, as if you are resting in a quiet meadow at '
-              'dawn. Breathe in slowly... drawing in calm with the breath... '
-              'and breathe out even more slowly... letting your shoulders '
-              'soften. If a sound drifts in, let it be part of this peaceful '
-              'scene... like a distant bird or a soft breeze through tall '
-              'grass... and then come back to the gentle rhythm of your '
-              'breathing.',
-          'Now let your awareness rest gently inside your body... notice '
-              'any place that feels tight or heavy... and as you breathe in '
-              'slowly, imagine a soft golden light, like morning sun through '
-              'a forest canopy, reaching that place. Breathe out slowly... '
-              'and feel the light dissolve the tension... softening your jaw, '
-              'your shoulders, your hands. With each breath, sink a little '
-              'deeper into the stillness of this peaceful nature around '
-              'you... no need to change anything... only allowing the breath '
-              'to flow like a clear stream.',
-        ],
-      ),
       MeditationEnvironment.ocean: _DemoScript(
         welcome:
             'Welcome to this mindfulness meditation. We\'ll settle together '
@@ -273,34 +239,6 @@ abstract final class DemoFallbackScript {
       ),
     },
     MeditationType.breathing: {
-      MeditationEnvironment.nature: _DemoScript(
-        welcome: 'Welcome. Let\'s settle in for a few minutes of breathing '
-            'meditation, surrounded by peaceful nature.',
-        completion: 'As this meditation comes to a close, gently bring your '
-            'awareness back to the room. Carry this calm with you.',
-        segments: [
-          'Allow your eyes to close... or soften your gaze... Feel the '
-              'ground beneath you, as if resting on soft forest earth... '
-              'Bring your attention to your breath... Notice the air moving '
-              'in... and out... Let each inhale flow naturally... and each '
-              'exhale release a little more deeply...',
-          'Now imagine a soft forest breeze moving around you... It '
-              'carries the scent of pine and fresh earth... With each inhale, '
-              'draw in that calm, clean air... Let it expand your belly and '
-              'chest naturally... As you exhale, release any tightness... '
-              'like leaves letting go and drifting to the ground... Let your '
-              'out-breath flow a little longer than your in-breath... and '
-              'allow the last of the air to leave softly...',
-          'Let the rhythm of your breath settle into an easy, natural '
-              'pace... Notice how each inhale brings a sense of stillness... '
-              'and each exhale softens your shoulders, your jaw, your brow... '
-              'You might hear a gentle stream nearby, its soft murmur like '
-              'the sound of your own breathing... Let the stream carry away '
-              'any remaining thoughts, like fallen leaves floating on the '
-              'water... And return again to the gentle rise and fall of your '
-              'chest...',
-        ],
-      ),
       MeditationEnvironment.ocean: _DemoScript(
         welcome:
             'Welcome. Let\'s arrive together by the ocean... settle into a '
@@ -446,40 +384,6 @@ abstract final class DemoFallbackScript {
       ),
     },
     MeditationType.bodyScan: {
-      MeditationEnvironment.nature: _DemoScript(
-        welcome: 'Welcome to this body scan meditation... allow yourself to '
-            'settle into a comfortable position... perhaps imagine a '
-            'peaceful natural setting around you... a quiet forest or a '
-            'gentle meadow... take a slow breath in... and let it go...',
-        completion:
-            'As we come to the end... gently bring your awareness back to '
-            'the space around you... notice the support beneath you... take '
-            'one more slow, deep breath... and when you feel ready, open '
-            'your eyes... carrying this sense of peace with you...',
-        segments: [
-          'Allow your eyes to close or soften... bring your attention to '
-              'your breath... breathe in slowly... and let the out-breath run '
-              'just a little longer than the in-breath... feel the air moving '
-              'in and out... and begin to bring awareness down to your '
-              'feet... simply noticing any sensations there... warmth, '
-              'coolness, pressure... without needing to change anything...',
-          'Let your breath continue to flow... soft and unhurried... now '
-              'bring your awareness up from your feet... to your ankles and '
-              'lower legs... feel the aliveness there... perhaps imagine the '
-              'warmth of gentle sunlight on your skin, as if you are resting '
-              'in a peaceful meadow... with each slow inhale, allow the '
-              'breath to reach that area... with each long exhale, let go of '
-              'any tension... just noticing... without judgment...',
-          'Continue to breathe in a relaxed rhythm... now let your '
-              'awareness travel up to your knees and thighs... as you inhale '
-              'slowly, imagine drawing in the clean, fresh air of a quiet '
-              'forest... as you exhale, let the breath release any tightness '
-              'or holding... sense the weight of your legs being fully '
-              'supported... maybe notice a soft, cool breeze moving through '
-              'the trees around you... and allow your legs to feel heavy and '
-              'at ease...',
-        ],
-      ),
       MeditationEnvironment.ocean: _DemoScript(
         welcome: 'Welcome. I\'m glad you\'re here. In this short body scan '
             'meditation, we\'ll use the calming imagery of an ocean beach. '
@@ -630,43 +534,6 @@ abstract final class DemoFallbackScript {
       ),
     },
     MeditationType.visualizationJourney: {
-      MeditationEnvironment.nature: _DemoScript(
-        welcome: 'Welcome to this visualization journey. We will use peaceful '
-            'nature imagery to help you relax and find calm. I will guide '
-            'you step by step, and you can follow along at your own pace. '
-            'There is nothing you need to do right now except allow '
-            'yourself to be here.',
-        completion: 'As our meditation comes to a close, gently bring your '
-            'awareness back to your surroundings. Take a final deep breath, '
-            'and when you feel ready, slowly open your eyes. Thank yourself '
-            'for taking this time to rest and restore.',
-        segments: [
-          'Find a comfortable position, allowing your body to settle... '
-              'Close your eyes softly if that feels right... Take a slow, '
-              'gentle breath in through your nose... and as you exhale, '
-              'release any tension in your face and jaw... Imagine a peaceful '
-              'nature scene beginning to form... perhaps a quiet forest with '
-              'soft light filtering through the leaves... Let the breath '
-              'continue to flow naturally as you arrive here.',
-          'As you settle deeper into this forest... notice the ground '
-              'beneath you, steady and supportive... Breathe in slowly... '
-              'feeling the cool, fresh air fill your lungs... Breathe out '
-              'gently... letting go of any remaining weight from the day... '
-              'In the distance, perhaps you hear the soft rustle of leaves... '
-              'or the gentle trickle of a nearby stream... Allow these sounds '
-              'to soothe you... With each breath, you feel more present and '
-              'more at ease in this peaceful place.',
-          'Begin to walk slowly along a soft, mossy path through the '
-              'trees... Feel the ground yielding gently beneath your feet '
-              'with each step... With your next in-breath, notice the scent '
-              'of pine and damp earth... As you exhale, allow your shoulders '
-              'to soften and drop away from your ears... Sunlight filters '
-              'through the branches and warms your skin in gentle patches... '
-              'You feel completely safe here... Let each breath guide you '
-              'deeper into the quiet of this forest... There is no rush, only '
-              'this peaceful moment.',
-        ],
-      ),
       MeditationEnvironment.ocean: _DemoScript(
         welcome:
             'Welcome... settle into this moment... let your body soften... '

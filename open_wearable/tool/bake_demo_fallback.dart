@@ -27,7 +27,7 @@ const _types = [
 ];
 
 /// Must match the order of `MeditationEnvironment.values`.
-const _environments = ['nature', 'ocean', 'mountain', 'forest', 'garden'];
+const _environments = ['ocean', 'mountain', 'forest', 'garden'];
 
 void main() {
   final file = File(_source);
@@ -37,8 +37,7 @@ void main() {
     return;
   }
 
-  final captured =
-      jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+  final captured = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
 
   final buffer = StringBuffer(_header);
   for (final type in _types) {
@@ -137,7 +136,7 @@ import 'user_account.dart';
 /// load, parse, or be left out of a build.
 ///
 /// Coverage is every combination an attendee can select - four meditation
-/// types by five environments - each with its own welcome, completion and
+/// types by four environments - each with its own welcome, completion and
 /// three segments. Speaking speed and voice gender are delivery settings
 /// applied by the voice provider, so they need no separate copy.
 abstract final class DemoFallbackScript {
@@ -190,7 +189,7 @@ abstract final class DemoFallbackScript {
     MeditationEnvironment? environment,
   ) =>
       _scripts[type ?? MeditationType.mindfulness]![
-          environment ?? MeditationEnvironment.nature]!;
+          environment ?? MeditationEnvironment.forest]!;
 
   static const Map<MeditationType, Map<MeditationEnvironment, _DemoScript>>
       _scripts = {

@@ -9,7 +9,6 @@ abstract class AppEmojis {
   static const String breathing = "\u{1F32C}"; // corresponds to 🌬️
   static const String bodyScan = "\u{1F486}"; // corresponds to 💆
   static const String visualizationJourney = "\u{1F305}"; // corresponds to 🌅
-  static const String tree = "\u{1F333}"; // corresponds to 🌳
   static const String forest = "\u{1F332}"; // corresponds to 🌲
   static const String cherryBlossom = "\u{1F338}"; // corresponds to 🌸
   static const String mountain = "\u{1F3D4}"; // corresponds to 🏔️
