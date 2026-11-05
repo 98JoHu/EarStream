@@ -231,7 +231,6 @@ class _DemoViewState extends State<DemoView> {
                 const SizedBox(height: 16),
                 APIWarning(
                   serviceName: _demoAccount.ttsProvider.label,
-                  isLocalModel: _demoAccount.ttsProvider.isLocal,
                 ),
               ],
             ],

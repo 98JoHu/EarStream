@@ -699,7 +699,9 @@ void main() {
         ),
       );
       expect(find.text('Baseline: 71 BPM'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(
+        BioAdaptiveModeConfig.recordedStressSampleInterval,
+      );
       expect(measurement.latestBiometrics, isNotNull);
 
       measurement.pause();
@@ -1024,6 +1026,24 @@ void main() {
   });
 
   group('meditation environment configuration', () {
+    test('bundles every ambience track as a compressed MP3', () async {
+      for (final environment in MeditationEnvironment.values) {
+        expect(environment.assetPath, endsWith('.mp3'));
+        final audio = await rootBundle.load(
+          '${OverallMeditationConfig.audioAssetPrefix}'
+          '${environment.assetPath}',
+        );
+        expect(audio.lengthInBytes, inInclusiveRange(1, 2 * 1024 * 1024));
+      }
+    });
+
+    test('an unknown TTS provider falls back to ElevenLabs', () {
+      expect(
+        TtsProviderOption.fromConfig('unsupported-provider'),
+        TtsProviderOption.elevenLabs,
+      );
+    });
+
     test('loads Tencent selection, key pair, and China region', () {
       final account = UserAccount.fromEnvironment({
         'DEEPSEEK_API_KEY': 'deepseek-demo',

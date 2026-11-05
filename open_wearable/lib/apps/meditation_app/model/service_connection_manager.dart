@@ -5,8 +5,6 @@ import 'package:http/http.dart' as http;
 
 import '../configs/overall_config.dart';
 import 'elevenlabs_api.dart';
-import 'kokoro_model_installer.dart';
-import 'kokoro_tts_engine.dart';
 import 'tencent_tts_client.dart';
 import 'user_account.dart';
 
@@ -169,87 +167,6 @@ class ElevenLabsManager extends ConnectionManager {
   @override
   void invalidateUserCredentials() {
     userAccount.hasValidElevenLabsKey = false;
-  }
-}
-
-/// Prepares the on-device Kokoro voice and reports whether it is usable.
-///
-/// There are no credentials to check here. "Verifying" means unpacking the
-/// bundled model if it is not already in app storage, loading it, and
-/// synthesizing one short line — which is the only way to find out that the
-/// local voice will actually speak when a session asks it to. The first run
-/// copies roughly 340 MB out of the APK and takes noticeably longer than a
-/// cloud key check; later runs only reload the model.
-class KokoroTtsManager extends ConnectionManager {
-  KokoroTtsManager({required super.userAccount});
-
-  /// Sets [UserAccount.hasValidKokoroModel] from whether this build ships the
-  /// model at all, without unpacking it.
-  ///
-  /// Cheap enough to run when the in-app opens, so the local voice can be
-  /// selected without visiting the API Keys page first.
-  static Future<void> probe(UserAccount userAccount) async {
-    userAccount.hasValidKokoroModel = await KokoroModelInstaller.isBundled();
-  }
-
-  /// Probes as [probe] does, then unpacks and loads the model when it is the
-  /// selected voice.
-  ///
-  /// The first use costs a ~340 MB copy out of the APK plus a model load. Left
-  /// to happen lazily that lands on the session's welcome message, with the
-  /// attendee already wearing the earbuds. Doing it when the in-app opens
-  /// moves the wait to a screen nobody is waiting on. Failures stay silent:
-  /// this is a warm-up, and the session still has its own fallback.
-  static Future<void> prewarm(UserAccount userAccount) async {
-    await probe(userAccount);
-    if (!userAccount.hasValidKokoroModel) return;
-    if (userAccount.ttsProvider != TtsProviderOption.kokoro) return;
-    try {
-      await KokoroTtsEngine.shared();
-    } catch (error) {
-      debugPrint('Kokoro warm-up did not finish: $error');
-    }
-  }
-
-  @override
-  Future<Object?> verifyCredentials() async {
-    if (!KokoroModelInstaller.isSupported) {
-      throw Exception(
-        'The on-device voice is only available in the Android build.',
-      );
-    }
-
-    final engine = await KokoroTtsEngine.shared();
-    if (engine == null) {
-      final platformError = KokoroModelInstaller.lastPlatformError;
-      throw Exception(
-        'No bundled Kokoro model was found. See the in-app README for how to '
-        'add it to android/app/src/main/assets.'
-        '${platformError == null ? '' : ' Platform reported: $platformError'}',
-      );
-    }
-
-    final wav = await engine.synthesize(
-      text: OverallMeditationConfig.kokoroCredentialCheckText,
-      speakerId: userAccount.voiceGender == Gender.male
-          ? OverallMeditationConfig.kokoroMaleSpeakerId
-          : OverallMeditationConfig.kokoroFemaleSpeakerId,
-      speed: OverallMeditationConfig.kokoroMediumSpeechRate,
-    );
-    if (wav.isEmpty) {
-      throw Exception('The local voice produced no audio.');
-    }
-    return wav.length;
-  }
-
-  @override
-  void updateUser(Object? result) {
-    userAccount.hasValidKokoroModel = true;
-  }
-
-  @override
-  void invalidateUserCredentials() {
-    userAccount.hasValidKokoroModel = false;
   }
 }
 

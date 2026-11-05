@@ -74,96 +74,6 @@ abstract final class OverallMeditationConfig {
   static const String tencentCodec = 'mp3';
   static const bool tencentEnableSubtitle = false;
 
-  // Kokoro, run locally through sherpa-onnx. Unlike the two cloud voices this
-  // needs no network and no account, which is what makes it usable where the
-  // cloud endpoints are unreachable. The model is a bundled Android asset that
-  // is copied to app storage once; see the in-app README.
-  //
-  // v1.0 rather than the earlier v0.19: same two voices, but trained on
-  // several hundred hours instead of under a hundred, which is what the
-  // remaining synthetic edge came from.
-  static const String kokoroModelFileName = 'model.onnx';
-  static const String kokoroVoicesFileName = 'voices.bin';
-  static const String kokoroTokensFileName = 'tokens.txt';
-  static const String kokoroEspeakDataDirectoryName = 'espeak-ng-data';
-
-  /// Word-to-phoneme dictionary shipped with the model, consulted before
-  /// espeak-ng's own letter-to-sound rules.
-  ///
-  /// The British list, to match the two British voices. The model also ships
-  /// American and Chinese lists; the narration is English-only by prompt rule,
-  /// so neither is loaded.
-  static const String kokoroLexiconFileName = 'lexicon-gb-en.txt';
-
-  /// Speaker ids within kokoro-multi-lang-v1_0. They are positions in that
-  /// model's own voice list and move if the model is swapped: the same two
-  /// voices were 8 and 10 in the older kokoro-en-v0_19.
-  static const String kokoroFemaleVoiceName = 'bf_isabella';
-  static const int kokoroFemaleSpeakerId = 22;
-  static const String kokoroMaleVoiceName = 'bm_lewis';
-  static const int kokoroMaleSpeakerId = 27;
-  static const int kokoroThreadCount = 4;
-
-  /// Multiplies pauses after synthesis: 1.0 leaves them as the model produced
-  /// them, above that lengthens them. Valid range is 0.01 to 10.
-  ///
-  /// sherpa-onnx defaults this to 0.2, meaning it compresses every silence
-  /// longer than 0.2 s to a fifth of its length. That is reasonable for an
-  /// assistant reading a reply and wrong for guided meditation, where the
-  /// pauses are the point. This is the knob for narration rhythm; Kokoro has
-  /// no pitch or style control to go with it.
-  static const double kokoroSilenceScale = 1.0;
-
-  /// Pauses inserted between the pieces Kokoro is asked to speak.
-  ///
-  /// sherpa-onnx concatenates its own pieces with no gap and scales silence
-  /// only *within* a piece, so commas were being stretched while sentence
-  /// endings ran straight on. Setting the boundary pauses here puts the
-  /// structure back the right way round, which is also why the scale above is
-  /// back at 1.0: within a phrase, natural length is what is wanted.
-  static const Duration kokoroPhrasePause = Duration(milliseconds: 350);
-  static const Duration kokoroSentencePause = Duration(milliseconds: 700);
-
-  /// Ceiling on one synthesis piece. Kokoro's style table has a row per token
-  /// length and sherpa-onnx does not clamp the lookup: a longer piece exits the
-  /// process. Generated segments reach 650 characters in one sentence, so this
-  /// is what keeps that from ever being handed over.
-  static const int kokoroMaxPhraseCharacters = 220;
-
-  /// sherpa-onnx ignores this for Kokoro: its batch size is hard-coded to one,
-  /// and anything other than 1 only earns a warning in the log. Kept at 1 so
-  /// the configuration says what actually happens. It also means every
-  /// sentence already gets the style row matched to its own token length,
-  /// which is the per-sentence prosody this was once expected to buy.
-  static const int kokoroMaxSentencesPerBatch = 1;
-  // Kokoro's own speed factor, where 1.0 is the model's natural pace. It is a
-  // multiplier, not the normalized 0-1 scale flutter_tts uses.
-  //
-  // Meditation pacing is carried by [kokoroSilenceScale], not by dragging the
-  // words out. An earlier pass pushed this scale far below 1.0 while pauses
-  // were still being compressed to a fifth of their length; once the pauses
-  // were restored the two compounded and the delivery crawled. Stretching
-  // Kokoro's duration predictor that far also smears vowels, which reads as
-  // synthetic - the opposite of what the slow rate was for.
-  //
-  // Same shape as the ElevenLabs and Tencent mappings: medium is the voice's
-  // natural pace, slow sits below it, fast above.
-  static const double kokoroVerySlowSpeechRate = 0.75;
-  static const double kokoroSlowSpeechRate = 0.85;
-  static const double kokoroMediumSpeechRate = 1.0;
-  static const double kokoroFastSpeechRate = 1.10;
-  static const Duration kokoroModelInstallTimeout = Duration(minutes: 10);
-  static const Duration kokoroEngineStartTimeout = Duration(minutes: 2);
-
-  /// A demo segment is roughly 15-80 seconds of speech, and Kokoro runs at
-  /// well under real time on the demo phone, so a normal synthesis finishes
-  /// in tens of seconds. This bounds a wedged worker without cutting off
-  /// legitimate work; five minutes only meant a stalled engine took three
-  /// retries' worth of it before the session gave up.
-  static const Duration kokoroSynthesisTimeout = Duration(seconds: 90);
-  static const String kokoroCredentialCheckText =
-      'The local voice is ready for this session.';
-
   // A cloud provider is selected once per meditation. These retries happen
   // before the session stops; it never changes to another voice mid-session.
   static const List<Duration> cloudTtsRetryDelays = [
@@ -203,7 +113,6 @@ abstract final class OverallMeditationConfig {
   static const String ttsProviderEnvironmentKey = 'TTS_PROVIDER';
   static const String elevenLabsProviderEnvironmentValue = 'elevenlabs';
   static const String tencentProviderEnvironmentValue = 'tencent';
-  static const String kokoroProviderEnvironmentValue = 'kokoro';
   static const String tencentSecretIdEnvironmentKey = 'TENCENT_SECRET_ID';
   static const String tencentSecretKeyEnvironmentKey = 'TENCENT_SECRET_KEY';
   static const String tencentLegacySecretKeyEnvironmentKey =

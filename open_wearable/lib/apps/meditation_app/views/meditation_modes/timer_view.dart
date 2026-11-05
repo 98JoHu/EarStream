@@ -106,7 +106,6 @@ class _TimerViewState extends State<TimerView> {
               if (!userAccount.hasValidSelectedTtsProvider) ...[
                 APIWarning(
                   serviceName: userAccount.ttsProvider.label,
-                  isLocalModel: userAccount.ttsProvider.isLocal,
                 ),
                 const SizedBox(height: 16),
               ],

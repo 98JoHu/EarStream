@@ -70,17 +70,12 @@ enum SpeakingSpeed {
 enum FitnessLevel { sedentary, moderate, active, athlete }
 
 enum TtsProviderOption {
-  elevenLabs(label: 'ElevenLabs', isLocal: false),
-  tencent(label: 'Tencent Cloud', isLocal: false),
-  kokoro(label: 'Kokoro (on device)', isLocal: true);
+  elevenLabs(label: 'ElevenLabs'),
+  tencent(label: 'Tencent Cloud');
 
   final String label;
 
-  /// Whether the voice runs on the phone. Local voices need no credentials and
-  /// cannot fail because a service is unreachable.
-  final bool isLocal;
-
-  const TtsProviderOption({required this.label, required this.isLocal});
+  const TtsProviderOption({required this.label});
 
   static TtsProviderOption fromConfig(String? value) {
     // Stray quotes are tolerated. dotenv strips a matched pair, but an
@@ -95,10 +90,6 @@ enum TtsProviderOption {
       'tencentcloud' ||
       'tencent_cloud' =>
         TtsProviderOption.tencent,
-      OverallMeditationConfig.kokoroProviderEnvironmentValue ||
-      'kokoro_tts' ||
-      'local' =>
-        TtsProviderOption.kokoro,
       OverallMeditationConfig.elevenLabsProviderEnvironmentValue =>
         TtsProviderOption.elevenLabs,
       _ => TtsProviderOption.elevenLabs,
@@ -153,22 +144,22 @@ enum MeditationEnvironment {
   nature(
     label: "Peaceful Nature",
     emoji: AppEmojis.tree,
-    assetPath: "Peaceful_Nature.wav",
+    assetPath: "Peaceful_Nature.mp3",
   ),
   ocean(
     label: "Ocean beach",
     emoji: AppEmojis.wave,
-    assetPath: "Ocean_Beach.wav",
+    assetPath: "Ocean_Beach.mp3",
   ),
   mountain(
     label: "Mountain",
     emoji: AppEmojis.mountain,
-    assetPath: "Mountain.wav",
+    assetPath: "Mountain.mp3",
   ),
   forest(
     label: "Forest",
     emoji: AppEmojis.forest,
-    assetPath: "Forest.wav",
+    assetPath: "Forest.mp3",
   ),
   garden(
     label: "Garden",
@@ -238,11 +229,6 @@ class UserAccount {
   bool hasValidTencentKey = false;
   TencentTtsRegion tencentTtsRegion;
 
-  /// Whether the bundled on-device Kokoro model is present and usable. It has
-  /// no credentials, so this stands in for "verified" and is set by probing
-  /// the build rather than by anything the user enters.
-  bool hasValidKokoroModel = false;
-
   // Bio-adaptive meditation settings
   int? baselineHeartRate;
   double? baselineRMSSD;
@@ -271,7 +257,6 @@ class UserAccount {
   bool get hasValidSelectedTtsProvider => switch (ttsProvider) {
         TtsProviderOption.elevenLabs => hasValidElevenLabsKey,
         TtsProviderOption.tencent => hasValidTencentKey,
-        TtsProviderOption.kokoro => hasValidKokoroModel,
       };
 
   factory UserAccount.fromEnvironment(
@@ -351,9 +336,6 @@ class UserAccount {
     account.elevenLabsVoiceId = serviceConfiguration.elevenLabsVoiceId;
     account.hasValidElevenLabsKey = serviceConfiguration.hasValidElevenLabsKey;
     account.hasValidTencentKey = serviceConfiguration.hasValidTencentKey;
-    // The local model belongs to the build, not to the attendee, so the demo
-    // account inherits it like the cloud credentials.
-    account.hasValidKokoroModel = serviceConfiguration.hasValidKokoroModel;
     account.availableElevenLabsVoices =
         serviceConfiguration.availableElevenLabsVoices == null
             ? null

@@ -8,7 +8,6 @@ import 'package:http/http.dart' as http;
 
 import '../configs/overall_config.dart';
 import 'elevenlabs_api.dart';
-import 'kokoro_tts_engine.dart';
 import 'tencent_tts_client.dart';
 import 'user_account.dart';
 
@@ -77,69 +76,6 @@ class TencentTtsProvider implements TtsProvider {
   void dispose() => _client.dispose();
 }
 
-/// Narration synthesized on the phone, with no network and no account.
-///
-/// Unlike the two cloud providers this one cannot fail because a service is
-/// unreachable, which is the reason it exists. It can still be unavailable: a
-/// build without the bundled model, or a platform without the native library,
-/// reports [isAvailable] false and the session falls back to the device voice
-/// exactly as it does for an unverified API key.
-class KokoroTtsProvider implements TtsProvider {
-  final bool _isAvailable;
-  final int _speakerId;
-  final double _speed;
-
-  KokoroTtsProvider(UserAccount account)
-      : _isAvailable = account.hasValidKokoroModel,
-        _speakerId = account.voiceGender == Gender.male
-            ? OverallMeditationConfig.kokoroMaleSpeakerId
-            : OverallMeditationConfig.kokoroFemaleSpeakerId,
-        _speed = _kokoroSpeed(account.speakingSpeed);
-
-  /// The voice name behind the speaker id, for the settings UI.
-  static String voiceNameFor(UserAccount account) =>
-      account.voiceGender == Gender.male
-          ? OverallMeditationConfig.kokoroMaleVoiceName
-          : OverallMeditationConfig.kokoroFemaleVoiceName;
-
-  @override
-  bool get isAvailable => _isAvailable;
-
-  @override
-  Future<List<Source>> synthesize(String text) async {
-    final engine = await KokoroTtsEngine.shared();
-    if (engine == null) {
-      throw const KokoroTtsException('the local voice model is not installed');
-    }
-    final wav = await engine.synthesize(
-      text: text,
-      speakerId: _speakerId,
-      speed: _speed,
-    );
-    _lastAudioDuration = wavDuration(wav);
-    return [BytesSource(wav, mimeType: 'audio/wav')];
-  }
-
-  /// The length of the audio produced by the most recent [synthesize].
-  Duration? get lastAudioDuration => _lastAudioDuration;
-  Duration? _lastAudioDuration;
-
-  static double _kokoroSpeed(SpeakingSpeed? speed) {
-    return switch (speed ?? SpeakingSpeed.slow) {
-      SpeakingSpeed.verySlow =>
-        OverallMeditationConfig.kokoroVerySlowSpeechRate,
-      SpeakingSpeed.slow => OverallMeditationConfig.kokoroSlowSpeechRate,
-      SpeakingSpeed.medium => OverallMeditationConfig.kokoroMediumSpeechRate,
-      SpeakingSpeed.fast => OverallMeditationConfig.kokoroFastSpeechRate,
-    };
-  }
-
-  /// The shared engine outlives any one session, so nothing is released here.
-  /// [KokoroTtsEngine.shutdownShared] does that when the in-app is closed.
-  @override
-  void dispose() {}
-}
-
 class ElevenLabsTtsProvider implements TtsProvider {
   static const maleVoiceId = OverallMeditationConfig.elevenLabsMaleVoiceId;
   static const femaleVoiceId = OverallMeditationConfig.elevenLabsFemaleVoiceId;
@@ -194,9 +130,8 @@ class ElevenLabsTtsProvider implements TtsProvider {
           body: jsonEncode({
             'text': text,
             'model_id': OverallMeditationConfig.elevenLabsModel,
-            // The speaking-speed preference used to reach Tencent and Kokoro
-            // but not ElevenLabs, so it silently did nothing on the default
-            // provider.
+            // Keep the shared speaking-speed preference effective on the
+            // default provider as well as Tencent.
             'voice_settings': {'speed': _speed},
           }),
         )
@@ -234,19 +169,9 @@ class PreparedNarration {
   final String text;
   final List<Source>? sources;
 
-  /// How much audio was synthesized, when the provider can tell.
-  ///
-  /// Only the local voice knows: it hands over raw samples, so the length is
-  /// arithmetic. The cloud providers return encoded audio whose duration is
-  /// not known until it is decoded, and the device fallback never produces a
-  /// buffer at all. Used to tell a narration that was cut short from one whose
-  /// text simply ended abruptly.
-  final Duration? audioDuration;
-
   const PreparedNarration({
     required this.text,
     this.sources,
-    this.audioDuration,
   });
 
   bool get isDeviceSpoken => sources == null;
@@ -273,7 +198,6 @@ class TtsService {
               TtsProviderOption.elevenLabs =>
                 ElevenLabsTtsProvider(userAccount),
               TtsProviderOption.tencent => TencentTtsProvider(userAccount),
-              TtsProviderOption.kokoro => KokoroTtsProvider(userAccount),
             },
         _fallbackTts = FlutterTts() {
     // A cloud outage must not silently change the voice mid-meditation.
@@ -327,12 +251,9 @@ class TtsService {
         if (sources.isEmpty) {
           throw StateError('The voice service returned no audio.');
         }
-        final provider = _provider;
         return PreparedNarration(
           text: text,
           sources: sources,
-          audioDuration:
-              provider is KokoroTtsProvider ? provider.lastAudioDuration : null,
         );
       } catch (error) {
         lastError = error;

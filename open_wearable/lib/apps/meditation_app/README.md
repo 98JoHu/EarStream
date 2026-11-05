@@ -2,8 +2,8 @@
 
 EarStreAM is the meditation in-app integrated into `open_wearable`. It combines
 OpenEarable PPG and motion streams with local HR/RMSSD processing, stress
-detection, DeepSeek-generated guidance, and ElevenLabs, Tencent Cloud, or local
-Kokoro-82M text-to-speech (TTS).
+detection, DeepSeek-generated guidance, and ElevenLabs, Tencent Cloud, or the
+device's built-in text-to-speech (TTS).
 
 This document describes the implementation in this directory. It intentionally
 does not describe the older `lib/apps/meditation` prototype.
@@ -21,7 +21,7 @@ does not describe the older `lib/apps/meditation` prototype.
 - Stress onset based jointly on elevated HR and reduced RMSSD.
 - Meditation recovery based only on HR returning to baseline or below.
 - DeepSeek segment generation with a static local-script fallback.
-- ElevenLabs, Tencent Cloud, local Kokoro-82M, or on-device Flutter TTS.
+- ElevenLabs, Tencent Cloud, or on-device Flutter TTS.
 - Local weekly analytics for regular biosignal-adaptive and timed sessions.
 - Demo isolation from the permanent profile and from analytics.
 
@@ -616,9 +616,9 @@ HR-only.
 Both system prompts require breathing guidance in every segment but forbid
 counting it out: no numerals and no number words for breath timing. The pacing
 is carried by wording and ellipses instead ("let the out-breath run longer than
-the in-breath"). Counted cadence was the earlier instruction, and numerals in
-particular read badly on the local Kokoro voice, which speaks them as digits
-rather than pacing them. Like the English-only rule, it is repeated in every
+the in-breath"). Counted cadence was the earlier instruction, and numerals can
+be read as content rather than pacing by TTS engines. Like the English-only
+rule, it is repeated in every
 segment request, since a constraint stated once in the system prompt drifts as
 the conversation grows.
 
@@ -734,7 +734,7 @@ Voice gender is a meditation preference, not a service setting: it appears at
 the top of **Meditation Preferences** and of the demo attendee preferences, as
 well as on the API Keys page where it is labelled **Default Voice**. All three
 edit the same `UserAccount.voiceGender`, which every provider maps to its own
-voice — an ElevenLabs voice id, a Tencent voice type, or a Kokoro speaker id.
+voice — an ElevenLabs voice id or a Tencent voice type.
 
 ### ElevenLabs
 
@@ -763,116 +763,19 @@ Supported endpoint choices:
 International and Mainland China service activation/credentials are not
 assumed to be interchangeable.
 
-### Kokoro (on-device)
-
-A third provider that synthesizes narration on the phone, selectable exactly
-like the two cloud voices: `TTS_PROVIDER=kokoro` in the environment asset, or
-the TTS Provider dropdown on the **API Keys** page. It needs no API key, no
-account, and no network request, which is what makes it usable where the cloud
-endpoints are unreachable.
-
-- Model: `kokoro-multi-lang-v1_0` (Kokoro v1.0, 82M) run through
-  `sherpa_onnx`. The earlier `kokoro-en-v0_19` was trained on under a hundred
-  hours against v1.0's several hundred, which is where its remaining synthetic
-  edge came from; v1.0 keeps both voices.
-- Voices: `bf_isabella` (speaker 22) and `bm_lewis` (speaker 27), chosen by the
-  **Default Voice** setting. The speaker ids are positions in that model's own
-  voice list and move if the model is swapped - the same two voices were 8 and
-  10 under v0.19.
-- Pronunciation uses the bundled `lexicon-gb-en.txt`, matching the British
-  voices, with espeak-ng as the fallback for anything not in it. The model also
-  ships American and Chinese lexicons, a Chinese dictionary and Chinese
-  normalisation FSTs; the narration is English-only by prompt rule, so none of
-  them are loaded. They can be deleted from the asset directory to save about
-  22 MB, and a re-extract restores them.
-- Speaking speed maps onto Kokoro's own multiplier, where 1.0 is the model's
-  natural pace. This is not the normalized 0.0-1.0 scale `flutter_tts` uses.
-  All four settings sit below 1.0 (0.50/0.60/0.70/0.80): Kokoro's natural pace
-  is a reading pace and is too brisk for guided meditation. Note that
-  ElevenLabs sends no speed parameter at all, so the same setting has no effect
-  there.
-- Synthesis runs in a worker isolate: the native engine handle never leaves it
-  and only finished audio comes back, so a segment that takes tens of seconds
-  does not freeze the UI. The narration pipeline above overlaps that cost with
-  playback of the previous segment.
-- One engine is shared for as long as the in-app is open, because loading the
-  model costs seconds and several hundred MB. It is released in
-  `MeditationView.dispose`.
-- Output is 16-bit PCM WAV played from memory, like the cloud providers' MP3.
-
-Rhythm is tuned with `kokoroSilenceScale`, which multiplies every pause longer
-than 0.2 s after synthesis. sherpa-onnx defaults it to 0.2, compressing pauses
-to a fifth of their length; the in-app sets 1.5 instead, because in guided
-meditation the pauses carry the pacing. Valid range is 0.01 to 10.
-
-Kokoro has no pitch parameter and no style or instruction prompt: its timbre
-comes entirely from the speaker's style vector in `voices.bin`, so the only
-ways to change the delivery are the voice, the speed, the silence scale, and
-the punctuation of the generated text. Ellipses, commas and sentence breaks are
-what produce the pauses that the silence scale then stretches, which makes the
-DeepSeek prompt the closest thing to a style control.
-
-#### Adding the model to a build
-
-The model is not in the repository: it is about 340 MB and is gitignored. A
-build without it simply reports the local voice as unavailable, and sessions
-fall back to the device voice exactly as they do for an unverified API key.
-
-```powershell
-# From the repository root. Requires the tar bundled with Windows 11.
-curl.exe -L -o kokoro.tar.bz2 `
-  https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
-tar -xf kokoro.tar.bz2 -C open_wearable/android/app/src/main/assets/
-```
-
-That leaves `android/app/src/main/assets/kokoro-multi-lang-v1_0/` containing
-`model.onnx`, `voices.bin`, `tokens.txt`, `lexicon-gb-en.txt`, and
-`espeak-ng-data/`. Rebuild the
-APK, then press **Prepare On-Device Voice** on the API Keys page once per
-phone.
-
-It lives under `src/main/assets/` rather than in the Flutter `assets:` list on
-purpose. Flutter's asset declarations do not recurse into sub-directories, and
-espeak-ng's phoneme data is several hundred nested files; `rootBundle.load`
-would also have to hold the 330 MB ONNX graph in memory in one piece. Android's
-`AssetManager` can walk the tree and stream each file, so `KokoroModelInstaller`
-copies it out in constant memory. ONNX Runtime needs real filesystem paths, so
-that one-time copy cannot be avoided: expect roughly 340 MB of app storage on
-top of the APK, and up to a minute the first time.
-
-The copy is resumable. Each file is written under a `.partial` name and renamed
-into place, so a file that exists is complete; a `.installed` marker written at
-the end lets later launches skip the walk entirely.
-
-#### Build size
-
-The debug APK is already around 500 MB before the model, mostly the bundled WAV
-ambience plus native libraries for four ABIs. With the model it approaches
-850 MB, which makes `flutter install` slow. Building only for the demo phones'
-architecture avoids shipping three unused copies of the ONNX Runtime and
-sherpa-onnx libraries:
-
-```powershell
-flutter build apk --release --target-platform android-arm64
-```
-
 ### Provider consistency and device fallback
 
 The TTS route is selected once when a meditation object is created.
 
 - If the selected provider is not marked valid at session start, the whole
-  meditation uses on-device Flutter TTS. For Kokoro "valid" means the model is
-  bundled in this build, which is probed when the in-app opens rather than
-  entered by the user.
-- The speaking-speed preference reaches every provider: Tencent's own scale,
-  Kokoro's multiplier, and ElevenLabs' `voice_settings.speed` (0.7-1.2, where
-  1.0 is the voice's natural pace).
+  meditation uses on-device Flutter TTS.
+- The speaking-speed preference reaches every provider: Tencent's own scale
+  and ElevenLabs' `voice_settings.speed` (0.7-1.2, where 1.0 is the voice's
+  natural pace).
 - If a selected provider is initially available but later fails, the app
   retries it three times (immediately, after one second, and after two seconds).
 - After those failures, the meditation stops and shows a voice-service failure
-  card. It does not switch voices in the middle of a meditation. Kokoro is a
-  selectable provider, not an automatic fallback for a failing cloud voice;
-  swapping the narrator mid-session is what this rule exists to prevent.
+  card. It does not switch voices in the middle of a meditation.
 
 Pausing suspends narration in place rather than stopping it, so resuming
 continues the segment instead of speaking it again from the first word. The
@@ -884,9 +787,8 @@ stop and dispose the session, so resuming brought back nothing and analytics
 recorded an abandoned meditation every time the user paused.
 
 The background player and the voice service are created on first use. A
-scheduled meditation can sit queued for hours, and building them at schedule
-time held a native audio player - and, with Kokoro selected, potentially a
-loaded voice model - for a session that had not started.
+scheduled meditation can sit queued for hours, so it should not hold native
+audio resources for a session that has not started.
 
 Other unexpected playback/session failures also stop both narration and
 ambience and show a dismissible interruption card. Failure handling belongs to
@@ -898,14 +800,11 @@ logged and the session continues without it: the narration is the meditation,
 and rethrowing there used to abort the whole thing with a generic "Meditation
 interrupted" card that named nothing.
 
-The ambience files are not uniform, and the format matters more than the size:
-`Mountain.wav` arrived as a Broadcast WAV carrying `bext` and `JUNK` metadata
-chunks, which is the shape that failed. It has been re-muxed to the canonical
-`fmt `+`data` layout the other files use, with the PCM samples copied
-unchanged. `Ocean_Beach.wav` is still 32-bit float (`fmt` 3) rather than
-integer PCM, which is the next most likely to be refused, so that environment
-is worth checking explicitly on device. Cloud narration requests transient
-audio ducking so the ambience is lowered rather than stopped during speech.
+All five ambience tracks are bundled as compressed MP3 files. Keeping one
+format avoids the device-specific WAV decoding problems seen during the demo
+and keeps the in-app's packaged asset footprint small. Cloud narration
+requests transient audio ducking so the ambience is lowered rather than
+stopped during speech.
 
 ## Environment configuration
 
@@ -1019,8 +918,7 @@ configuration into the same measurement/session pipeline.
 
 The shared session lifecycle and mode-specific meditation subclasses live in
 `model/meditation.dart`; narration routing is isolated in
-`model/tts_service.dart`, with the local Kokoro engine and its model unpacking
-in `model/kokoro_tts_engine.dart` and `model/kokoro_model_installer.dart`. Credential verification is similarly kept in
+`model/tts_service.dart`. Credential verification is similarly kept in
 `model/service_connection_manager.dart`, while `widgets/status_field.dart`
 only renders its state. Sensor-name interpretation is isolated in
 `model/sensor_axis_mapping.dart`, and the translation from an SDK reading to
@@ -1053,8 +951,6 @@ meditation_app/
 |   |-- elevenlabs_api.dart
 |   |-- hr_hrv_diagnostics.dart
 |   |-- hr_hrv_processor.dart
-|   |-- kokoro_model_installer.dart
-|   |-- kokoro_tts_engine.dart
 |   |-- measurement.dart
 |   |-- measurement_phase.dart
 |   |-- meditation.dart
@@ -1103,12 +999,6 @@ audioplayers platform and a fake `TtsProvider`, and covers the narration
 pipeline: overlap of synthesis with playback, the lookahead bound, discarding a
 segment prefetched ahead of an early exit, stopping the producer on stop, and
 voice-outage handling.
-
-`kokoro_tts_test.dart` covers the on-device voice: provider selection from the
-environment, speaker and speed mapping, engine sharing, WAV encoding, and every
-way the local route can be absent. The native library and the model are not
-available to the test VM, so the engine and the platform channel are replaced;
-everything built on top of them runs for real.
 
 ## Current limitations
 

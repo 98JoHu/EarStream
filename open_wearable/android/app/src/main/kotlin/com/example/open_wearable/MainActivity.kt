@@ -21,13 +21,6 @@ class MainActivity : FlutterActivity() {
       flutterEngine.dartExecutor.binaryMessenger,
     )
 
-    // Unpacks the bundled local Kokoro voice model on demand. Registering it
-    // costs nothing; no file is touched until Dart asks.
-    KokoroModelInstaller(
-      applicationContext,
-      flutterEngine.dartExecutor.binaryMessenger,
-    )
-
     MethodChannel(
       flutterEngine.dartExecutor.binaryMessenger,
       SYSTEM_SETTINGS_CHANNEL,
